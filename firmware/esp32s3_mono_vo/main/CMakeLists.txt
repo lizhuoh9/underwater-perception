@@ -15,6 +15,12 @@ idf_component_register(
 # Same floating-point contract as the PC build (uwslam.core.CFLAGS): no fused multiply-add, so results match bit for bit.
 target_compile_options(${COMPONENT_LIB} PRIVATE -ffp-contract=off)
 
+# The core's build configuration (core/mono_vo.h): the P4 has the time for its own, MVO_CONFIG_P4 (on the PC:
+# UWSLAM_CONFIG=p4). The board reports which in its ready line, and the host refuses expectations of another.
+if(CONFIG_IDF_TARGET_ESP32P4)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE MVO_CONFIG_P4)
+endif()
+
 # The board reports which cores it runs (sources and headers), so the host can refuse a stale build. MVO_CORE_SHA256 is
 # the SHA-256 of the odometry's implementation files back to back in this order, the list uwslam.mvo.CORE_FILES gives.
 set(CORE "${CMAKE_CURRENT_LIST_DIR}/../../../core")

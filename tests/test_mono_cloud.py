@@ -252,7 +252,7 @@ class MonoCloudTests(unittest.TestCase):
     def test_c_cloud_invariants(self):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
             program = Path(folder) / "cloud_check.exe"
-            subprocess.run(["gcc", "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-pedantic",
+            subprocess.run(["gcc", "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-pedantic", *mvo.config_defines(),
                             *(["-static"] if sys.platform == "win32" else []), f"-I{ROOT / 'core'}",
                             str(ROOT / "tests/c/mono_cloud_check.c"), str(ROOT / "core/mono_cloud.c"),
                             "-o", str(program)], check=True)

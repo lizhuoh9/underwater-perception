@@ -11,6 +11,7 @@ import tempfile
 import unittest
 
 from uwslam.core import CFLAGS
+from uwslam.mvo import config_defines
 from uwslam.paths import CORE_DIR
 
 
@@ -21,7 +22,7 @@ UNITS = [CORE_DIR / name for name in ("mono_vo.c", "mono_vo_numerics.c", "mono_v
 
 def build(folder: Path) -> Path:
     executable = folder / "mvo_carry_check.exe"
-    subprocess.run(["gcc", *CFLAGS, *(["-static"] if sys.platform == "win32" else []), f"-I{CORE_DIR}",
+    subprocess.run(["gcc", *CFLAGS, *config_defines(), *(["-static"] if sys.platform == "win32" else []), f"-I{CORE_DIR}",
                     str(SOURCE), *map(str, UNITS), "-lm", "-o", str(executable)], check=True)
     return executable
 

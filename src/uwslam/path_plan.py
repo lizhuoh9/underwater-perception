@@ -366,7 +366,7 @@ def write_board_files(output: Path, result: dict, rate: float) -> None:
                 "step_hashes": [mvo.fnv(mvo.FNV_OFFSET, bytes(step)) for step in result["steps"]],
                 "actions": [p["action"] for p in result["plans"]], "directions": [p["direction"] for p in result["plans"]],
                 "turns": [p["turn"] for p in result["plans"]], "plan_hashes": result["plan_hashes"],
-                "plan_hash": result["hash"], **sources_sha256()}
+                "plan_hash": result["hash"], **sources_sha256(), **mvo.build_config()}
     dump_json(output / f"board_expected_plan_{rate:g}hz.json", expected)
 
 
@@ -430,7 +430,7 @@ def run(video: Path, reconstruction: Path, output: Path, time_scale: float) -> d
                        "scored open-loop against the reference reconstruction",
                "sources_sha256": {**mvo.sources_sha256(), **voxel_map.sources_sha256(), **obstacle_dir.sources_sha256(),
                                   **sources_sha256()},
-               "masks": "frames.npz", "time_scale": time_scale, "hfov_deg": HFOV_DEG, "seeds": list(mvo.SEEDS),
+               **mvo.build_config(), "masks": "frames.npz", "time_scale": time_scale, "hfov_deg": HFOV_DEG, "seeds": list(mvo.SEEDS),
                "corridor": {"part": "central half of each direction's rows and columns",
                             "percentile": CORRIDOR_PERCENTILE}, "runs": runs}
     dump_json(output / "summary.json", summary)

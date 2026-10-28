@@ -45,6 +45,17 @@ static int has_id(uint32_t id)
     return 0;
 }
 
+/* Files `total` new points, ids first_id onwards, in steps of at most MVO_MAX_FEATURES features. */
+static void fill(uint32_t first_id, int total)
+{
+    int i, done;
+    for (done = 0; done < total; done += vo.count) {
+        vo.count = total - done < MVO_MAX_FEATURES ? total - done : MVO_MAX_FEATURES;
+        for (i = 0; i < vo.count; ++i) set_feature(i, first_id + (uint32_t)(done + i));
+        assert(mc_update(&map, &vo, &step) == vo.count);
+    }
+}
+
 static void transform_and_update(void)
 {
     setup();
@@ -135,21 +146,17 @@ static void capacity(void)
     int i, batch;
     uint32_t tracked;
     setup();
-    for (batch = 0; batch < 2; ++batch) {
-        vo.count = MVO_MAX_FEATURES;
-        for (i = 0; i < vo.count; ++i) set_feature(i, (uint32_t)(batch * MVO_MAX_FEATURES + i));
-        assert(mc_update(&map, &vo, &step) == MVO_MAX_FEATURES);
-    }
+    fill(0, MC_MAX_POINTS - 12); /* then 14 more: two evictions */
     vo.count = 14;
-    for (i = 0; i < vo.count; ++i) set_feature(i, (uint32_t)(500 + i));
+    for (i = 0; i < vo.count; ++i) set_feature(i, (uint32_t)(MC_MAX_POINTS - 12 + i));
     assert(mc_update(&map, &vo, &step) == 14);
     assert(map.count == MC_MAX_POINTS && map.dropped == 2);
-    for (i = 500; i < 514; ++i) assert(has_id((uint32_t)i));
+    for (i = MC_MAX_POINTS - 12; i < MC_MAX_POINTS + 2; ++i) assert(has_id((uint32_t)i));
     vo.count = 2;
     set_feature(0, 2);
     vo.feature[0].spread = 0.2f;
     vo.feature[0].point[0] = 2.0f;
-    set_feature(1, 514);
+    set_feature(1, MC_MAX_POINTS + 2);
     assert(mc_update(&map, &vo, &step) == 2);
     assert(map.count == MC_MAX_POINTS && map.dropped == 3);
     assert(map.points[2].id == 2 && map.points[2].observations == 2 && map.points[2].xyz[2] == 28.0f);
@@ -189,13 +196,8 @@ static void capacity(void)
 static void frame_order_and_protected_ids(void)
 {
     mvo_feature_t swap;
-    int i, batch;
     setup();
-    for (batch = 0; batch < 3; ++batch) {
-        vo.count = batch < 2 ? MVO_MAX_FEATURES : MC_MAX_POINTS - 2 * MVO_MAX_FEATURES;
-        for (i = 0; i < vo.count; ++i) set_feature(i, (uint32_t)(1000 + batch * MVO_MAX_FEATURES + i));
-        assert(mc_update(&map, &vo, &step) == vo.count);
-    }
+    fill(1000, MC_MAX_POINTS);
     assert(map.count == MC_MAX_POINTS && map.dropped == 0 && map.points[0].id == 1000);
     saved = map;
     vo.count = 3;
@@ -220,13 +222,9 @@ static void frame_order_and_protected_ids(void)
 
 static void keep_recent_points_while_active_slots_are_protected(void)
 {
-    int batch, frame, i;
+    int frame, i;
     setup();
-    for (batch = 0; batch < 3; ++batch) {
-        vo.count = batch < 2 ? MVO_MAX_FEATURES : MC_MAX_POINTS - 2 * MVO_MAX_FEATURES;
-        for (i = 0; i < vo.count; ++i) set_feature(i, (uint32_t)(batch * MVO_MAX_FEATURES + i));
-        assert(mc_update(&map, &vo, &step) == vo.count);
-    }
+    fill(0, MC_MAX_POINTS);
     for (frame = 0; frame < 6; ++frame) {
         vo.count = MVO_MAX_FEATURES;
         for (i = 0; i < MVO_MAX_FEATURES - 1; ++i) {

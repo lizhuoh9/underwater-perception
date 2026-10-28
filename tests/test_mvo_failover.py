@@ -8,6 +8,7 @@ import tempfile
 import unittest
 
 from uwslam.core import CFLAGS
+from uwslam.mvo import config_defines
 from uwslam.paths import CORE_DIR
 
 
@@ -19,8 +20,8 @@ class MvoFailoverTests(unittest.TestCase):
                                                "mono_vo_essential.c")]
         with tempfile.TemporaryDirectory() as folder:
             binary = Path(folder) / "mvo_failover_check.exe"
-            subprocess.run(["gcc", *CFLAGS, *(["-static"] if sys.platform == "win32" else []), f"-I{CORE_DIR}",
-                            str(source), *map(str, units), "-o", str(binary)], check=True)
+            subprocess.run(["gcc", *CFLAGS, *config_defines(), *(["-static"] if sys.platform == "win32" else []),
+                            f"-I{CORE_DIR}", str(source), *map(str, units), "-o", str(binary)], check=True)
             output = subprocess.run([str(binary)], check=True, capture_output=True, text=True).stdout
         values = {key: float(value) for key, value in (part.split("=") for part in output.split())}
         self.assertLess(values["homography"], 15, output)

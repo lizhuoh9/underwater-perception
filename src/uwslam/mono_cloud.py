@@ -246,7 +246,7 @@ def run_video(video: Path, output: Path, camera: mvo.Camera, every: int = 1, boa
                        "continuous": int(cloud.continuous), "first_lost_frame": result["first_lost_frame"],
                        "first_lost_source_frame": (trajectory[result["first_lost_frame"]]["source_frame"]
                                                    if result["first_lost_frame"] is not None else None),
-                       "cloud_hash": result["cloud_hash"], "sources_sha256": before_sources,
+                       "cloud_hash": result["cloud_hash"], "sources_sha256": before_sources, **mvo.build_config(),
                        "limitations": ["Bounded rolling sparse map: older points are evicted as capacity is reached; "
                                        "the result is not a complete global map, dense surface or free-space map.",
                                        "Tracking loss freezes the old cloud; recovery does not relocalize it.",
@@ -271,7 +271,8 @@ def run_video(video: Path, output: Path, camera: mvo.Camera, every: int = 1, boa
                 expected = {"frames": len(trajectory), "every": 1, "rate_hz": fps / every if fps else None,
                             "step_hashes": result["step_hashes"],
                             "camera_bits": mvo.camera_bits(camera), "seed": mvo.SEED,
-                            **{key: before_sources[key] for key in ("core_sha256", "header_sha256")}}
+                            **{key: before_sources[key] for key in ("core_sha256", "header_sha256")},
+                            **mvo.build_config()}
                 expected_cloud = {"frames": len(trajectory), "step_hashes": result["step_hashes"],
                                   "cloud_policy": POLICY, "cloud_sha256": before_sources["cloud_sha256"],
                                   "cloud_header_sha256": before_sources["cloud_header_sha256"],
@@ -280,7 +281,7 @@ def run_video(video: Path, output: Path, camera: mvo.Camera, every: int = 1, boa
                                   "point_units": summary["point_units"],
                                   "cloud_progress": result["cloud_progress"], "cloud_hash": result["cloud_hash"],
                                   "cloud_count": int(cloud.count), "cloud_dropped": int(cloud.dropped),
-                                  "cloud_continuous": int(cloud.continuous)}
+                                  "cloud_continuous": int(cloud.continuous), **mvo.build_config()}
                 _write_json(output / "board_expected.json", expected)
                 _write_json(output / "cloud_expected.json", expected_cloud)
             return summary

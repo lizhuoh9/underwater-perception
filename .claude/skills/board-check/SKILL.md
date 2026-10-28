@@ -13,7 +13,7 @@ Pythons come from `CLAUDE.local.md`. Run from the repository root; `<out>` is `l
 
 ## Steps
 
-1. Tests: `python -m unittest discover -s tests -t .` → `OK`.
+1. Tests: `python -m unittest discover -s tests -t .` → `OK`, and again with `UWSLAM_CONFIG=p4` → `OK`.
 2. PC expectations for the tree being flashed, with the project Python and `PYTHONPATH=src`:
    - `python -m uwslam.mvo compare <video> --reconstruction <folder> --output <out>/mono_vo_c --board-frames <out>/frames_10hz.bin`
    - `python -m uwslam.mono_map <video> --reconstruction <folder> --output <out>/mono_map --board-masks <out>/masks_10hz.bin`
@@ -25,6 +25,8 @@ Pythons come from `CLAUDE.local.md`. Run from the repository root; `<out>` is `l
    first: libmain `.bss` must stay near 94 KB or the pyramids fail to allocate.
    For the ESP32-P4: `idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_p4 -D SDKCONFIG=build_p4/sdkconfig
    -D IDF_TARGET=esp32p4 -p <p4 port> flash`, labels `p4_360mhz[_5hz]`; its UART link is slower (5 Hz about 3 min).
+   The P4 firmware is the `p4` build configuration: make its step-2 expectations with `UWSLAM_CONFIG=p4`, and its
+   accepted results go to `results/lake_clip_p4/`.
 4. Stream, with the ESP-IDF Python and `PYTHONPATH=src`:
    `python -m uwslam.mvo_stream --port <port> --frames <out>/frames_10hz.bin --masks <out>/masks_10hz.bin --expected <out>/mono_vo_c/board_expected_<rate>hz.json --expected-map <out>/mono_map/board_expected_map_<rate>hz.json --expected-voxels <out>/voxel_map/board_expected_voxels_<rate>hz.json --expected-dirs <out>/obstacle_dir/board_expected_dirs_<rate>hz.json --expected-plan <out>/path_plan/board_expected_plan_<rate>hz.json --label <label>`
    → `<out>/mono_vo_c/board/<label>.json` and `<label>_serial.log`. The firmware refuses expectations whose source

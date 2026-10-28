@@ -27,11 +27,14 @@ python -m uwslam.mono_map <video> --reconstruction <folder> --output <fresh fold
 python -m uwslam.voxel_map <video> --reconstruction <folder> --output <fresh folder>    # obstacle_dir, path_plan alike
 ```
 
-Every tool refuses to overwrite its output: give it a fresh folder (scratch runs go under `local/`).
+Every tool refuses to overwrite its output: give it a fresh folder (scratch runs go under `local/`). The core has two
+build configurations (`core/mono_vo.h`): `s3`, the default, and `p4` (`MVO_CONFIG_P4`: 300 features, map points from
+rays at least 1.5° apart). Tools and tests build the one `UWSLAM_CONFIG` names; the `p4` results live in
+`results/lake_clip_p4/`.
 
 ## Verifying a change
 
-- The tests pass.
+- The tests pass, in both configurations (again with `UWSLAM_CONFIG=p4`).
 - Accuracy: the `lake-score` skill. Score against a control run of the last commit with identical settings, over the
   16 seeds in `uwslam.mvo.SEEDS`, on the 10 s clip windows as well as the full clip. One run or one seed proves
   nothing: the seed alone can change a score twofold.
@@ -54,7 +57,9 @@ Every tool refuses to overwrite its output: give it a fresh folder (scratch runs
   allocated before the USB driver, libmain `.bss` must stay near 94 KB, and the voxel map is allocated last. Internal
   RAM is the limit.
 - At real 5 Hz input a step must stay under 200 ms on the board.
-- The ESP32-P4 build tracks with `mvo_pie_p4.S` (the window kernels; the block copy stays C) and gives the same
-  hashes. Its build folder has its own sdkconfig (`-D SDKCONFIG=build_p4/sdkconfig`).
+- The ESP32-P4 firmware builds the `p4` configuration and tracks with `mvo_pie_p4.S` (the window kernels; the block
+  copy stays C). Its build folder has its own sdkconfig (`-D SDKCONFIG=build_p4/sdkconfig`); the board reports its
+  configuration and the host refuses expectations of another.
+- A change that touches both configurations is scored and board-checked in both (`UWSLAM_CONFIG=p4` for the second).
 
 Paths on this machine are in `CLAUDE.local.md`. Repeated procedures are skills in `.claude/skills/`.

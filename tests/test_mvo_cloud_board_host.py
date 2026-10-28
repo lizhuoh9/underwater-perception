@@ -184,7 +184,7 @@ class MonoCloudBoardHostTests(unittest.TestCase):
         header = cls.folder / "hashes.h"
         header.write_text("".join(f'#define {key} "{value}"\n' for key, value in definitions.items()), encoding="ascii")
         cls.program = cls.folder / ("mvo_real_replay.exe" if sys.platform == "win32" else "mvo_real_replay")
-        command = ["gcc", *CFLAGS, "-Wno-unused-function", "-ffunction-sections", "-fdata-sections",
+        command = ["gcc", *CFLAGS, *mvo.config_defines(), "-Wno-unused-function", "-ffunction-sections", "-fdata-sections",
                    "-Wl,--gc-sections", *(["-static"] if sys.platform == "win32" else []),
                    f"-I{include}", f"-I{ROOT / 'core'}", "-include", str(header),
                    str(ROOT / "tests/c/mvo_real_replay.c"), *map(str, mvo.SOURCES),
@@ -211,14 +211,14 @@ class MonoCloudBoardHostTests(unittest.TestCase):
                        for name in ("fx", "fy", "cx", "cy")]
         expected = {"frames": len(frames), "every": 1, "rate_hz": None,
                     "step_hashes": result["step_hashes"], "camera_bits": camera_bits, "seed": mvo.SEED,
-                    **{key: self.fingerprints[key] for key in ("core_sha256", "header_sha256")}}
+                    **{key: self.fingerprints[key] for key in ("core_sha256", "header_sha256")}, **mvo.build_config()}
         expected_cloud = {"frames": len(frames), "step_hashes": result["step_hashes"], "cloud_policy": 1,
                           **{key: self.fingerprints[key] for key in ("cloud_sha256", "cloud_header_sha256")},
                           "frames_sha256": hashlib.sha256(b"".join(frame_data)).hexdigest(),
                           "frame_sha256": [hashlib.sha256(frame).hexdigest() for frame in frame_data],
                           "cloud_progress": result["cloud_progress"], "cloud_hash": result["cloud_hash"],
                           "cloud_count": int(cloud.count), "cloud_dropped": int(cloud.dropped),
-                          "cloud_continuous": int(cloud.continuous)}
+                          "cloud_continuous": int(cloud.continuous), **mvo.build_config()}
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp:
             folder = Path(temp)
             path = folder / "frames.bin"
@@ -283,7 +283,7 @@ class MonoCloudBoardHostTests(unittest.TestCase):
         step_hashes = [mvo.fnv(mvo.FNV_OFFSET, bytes(step)) for step in voxels["steps"]]
         expected = {"frames": len(frames), "every": 1, "rate_hz": 10.0, "step_hashes": step_hashes,
                     "camera_bits": camera_bits, "seed": mvo.SEED,
-                    **{key: self.fingerprints[key] for key in ("core_sha256", "header_sha256")}}
+                    **{key: self.fingerprints[key] for key in ("core_sha256", "header_sha256")}, **mvo.build_config()}
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp:
             folder = Path(temp)
             frames_path, vo_path, masks_path = folder / "frames.bin", folder / "vo.json", folder / "masks.bin"

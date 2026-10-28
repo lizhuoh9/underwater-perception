@@ -20,6 +20,16 @@
 
 #define MVO_RANSAC_MAX 500
 
+/* 2 ln(4 n) for n = MVO_MAX_FEATURES, to three decimals (no libm on the board): the size term of the translation
+ * evidence's penalty (mono_vo_essential.c). */
+#if MVO_MAX_FEATURES == 250
+#define MVO_EVIDENCE_LOG 13.816f
+#elif MVO_MAX_FEATURES == 300
+#define MVO_EVIDENCE_LOG 14.180f
+#else
+#error "MVO_EVIDENCE_LOG needs 2 ln(4 n) for this MVO_MAX_FEATURES"
+#endif
+
 /* Scratch the units share (defined in mono_vo.c), not thread-safe (see mono_vo.h). */
 extern float mvo_pa[MVO_MAX_FEATURES][2], mvo_pb[MVO_MAX_FEATURES][2]; /* pixels in the previous / current frame */
 extern float mvo_ra[MVO_MAX_FEATURES][2], mvo_rb[MVO_MAX_FEATURES][2]; /* the same as calibrated rays (x, y, 1) */

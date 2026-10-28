@@ -281,7 +281,7 @@ def write_board_files(output: Path, result: dict, masks: list[np.ndarray | None]
     expected = {"rate_hz": rate, "every": BOARD_RATES[rate], "frames": len(masks),
                 "with_mask": [mask is not None for mask in masks], "choices": result["choices"].tolist(),
                 "blocked_bits": result["blocked_bits"], "dir_frames": result["frames"], "dir_hash": result["hash"],
-                **sources_sha256()}
+                **sources_sha256(), **mvo.build_config()}
     dump_json(output / f"board_expected_dirs_{rate:g}hz.json", expected)
 
 
@@ -324,7 +324,8 @@ def run(video: Path, reconstruction: Path, output: Path, time_scale: float) -> d
                   f"(straight ahead {percent(level['ahead_free'])}); reference-blocked directions the mask blocks: "
                   f"{percent(level['bands']['all']['recall'])}", flush=True)
     summary = {"task": "Obstacle directions from the segmentation's water masks on the lake clip, scored against the "
-                       "reference reconstruction's depth", "sources_sha256": sources_sha256(), "masks": "frames.npz",
+                       "reference reconstruction's depth", "sources_sha256": sources_sha256(), **mvo.build_config(),
+               "masks": "frames.npz",
                "time_scale": time_scale, "hfov_deg": HFOV_DEG, "ranges_m": list(RANGES),
                "reference_cell": {"min_points": MIN_POINTS, "depth_percentile": DEPTH_PERCENTILE}, "runs": runs}
     dump_json(output / "summary.json", summary)

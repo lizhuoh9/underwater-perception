@@ -67,14 +67,7 @@ int main(void)
     (void)setvbuf(stdout, NULL, _IONBF, 0);
     s_pyramid[0] = pyramids[0]; s_pyramid[1] = pyramids[1];
     s_state = &state; s_map = &obstacle_map; s_cloud = &cloud_map; s_voxels = &voxel_map;
-    printf("ready mono_vo cpu_mhz=%d state_bytes=%" PRIu32 " core_sha256=%s header_sha256=%s map_sha256=%s "
-           "map_header_sha256=%s map_policy=1 cloud_sha256=%s cloud_header_sha256=%s cloud_policy=1 "
-           "cloud_bytes=%" PRIu32 " cloud_capacity=%d voxel_sha256=%s voxel_header_sha256=%s voxel_bytes=%" PRIu32
-           " dir_sha256=%s dir_header_sha256=%s plan_sha256=%s plan_header_sha256=%s\n", CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ,
-           mvo_state_size(),
-           MVO_CORE_SHA256, MVO_HEADER_SHA256, MM_CORE_SHA256, MM_HEADER_SHA256, MC_CORE_SHA256, MC_HEADER_SHA256,
-           mc_map_size(), MC_MAX_POINTS, VM_CORE_SHA256, VM_HEADER_SHA256, vm_map_size(), OD_CORE_SHA256,
-           OD_HEADER_SHA256, PP_CORE_SHA256, PP_HEADER_SHA256);
+    print_ready(); /* the firmware's own */
     while (fgets(line, sizeof line, stdin)) {
         size_t length = strlen(line);
         while (length && (line[length - 1] == '\n' || line[length - 1] == '\r')) line[--length] = '\0';

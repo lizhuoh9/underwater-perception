@@ -9,6 +9,7 @@ import tempfile
 import unittest
 
 from uwslam.core import CFLAGS
+from uwslam.mvo import config_defines
 from uwslam.paths import CORE_DIR
 
 
@@ -19,7 +20,7 @@ UNITS = [CORE_DIR / name for name in ("mono_vo.c", "mono_vo_numerics.c", "mono_v
 
 def build(folder: Path) -> Path:
     executable = folder / "mvo_motion_selection_check.exe"
-    subprocess.run(["gcc", *CFLAGS, *(["-static"] if sys.platform == "win32" else []), f"-I{CORE_DIR}",
+    subprocess.run(["gcc", *CFLAGS, *config_defines(), *(["-static"] if sys.platform == "win32" else []), f"-I{CORE_DIR}",
                     str(SOURCE), *map(str, UNITS), "-lm", "-o", str(executable)], check=True)
     return executable
 
@@ -131,8 +132,8 @@ class MvoMotionSelectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             binary = Path(folder) / "narrow_field_check.exe"
             source = SOURCE.with_name("mvo_narrow_field_check.c")
-            subprocess.run(["gcc", *CFLAGS, *(["-static"] if sys.platform == "win32" else []), f"-I{CORE_DIR}",
-                            str(source), *map(str, UNITS), "-o", str(binary)], check=True)
+            subprocess.run(["gcc", *CFLAGS, *config_defines(), *(["-static"] if sys.platform == "win32" else []),
+                            f"-I{CORE_DIR}", str(source), *map(str, UNITS), "-o", str(binary)], check=True)
             output = subprocess.run([str(binary)], check=True, capture_output=True, text=True).stdout
         values = {key: float(value) for key, value in (part.split("=") for part in output.split())}
         self.assertLess(values["h"], 15, output)
@@ -146,8 +147,8 @@ class MvoMotionSelectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             binary = Path(folder) / "narrow_noise_check.exe"
             source = SOURCE.with_name("mvo_narrow_noise_check.c")
-            subprocess.run(["gcc", *CFLAGS, *(["-static"] if sys.platform == "win32" else []), f"-I{CORE_DIR}",
-                            str(source), *map(str, UNITS), "-o", str(binary)], check=True)
+            subprocess.run(["gcc", *CFLAGS, *config_defines(), *(["-static"] if sys.platform == "win32" else []),
+                            f"-I{CORE_DIR}", str(source), *map(str, UNITS), "-o", str(binary)], check=True)
             for noise, outliers in ((0.5, 0.0), (1.0, 0.2)):
                 output = subprocess.run([str(binary), str(noise), str(outliers), "1", "200"],
                                         check=True, capture_output=True, text=True).stdout
@@ -159,8 +160,8 @@ class MvoMotionSelectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             binary = Path(folder) / "rotation_points_check.exe"
             source = SOURCE.with_name("mvo_rotation_points_check.c")
-            subprocess.run(["gcc", *CFLAGS, *(["-static"] if sys.platform == "win32" else []), f"-I{CORE_DIR}",
-                            str(source), *map(str, UNITS), "-o", str(binary)], check=True)
+            subprocess.run(["gcc", *CFLAGS, *config_defines(), *(["-static"] if sys.platform == "win32" else []),
+                            f"-I{CORE_DIR}", str(source), *map(str, UNITS), "-o", str(binary)], check=True)
             output = subprocess.run([str(binary)], check=True, capture_output=True, text=True).stdout
         lines = [{key: float(value) for key, value in (part.split("=") for part in line.split())}
                  for line in output.splitlines()]

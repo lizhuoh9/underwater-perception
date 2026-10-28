@@ -44,7 +44,7 @@
 #define VM_MIN_POINTS 20 /* observations that measure the scene's depth */
 #define VM_CELLS_PER_DEPTH 8.0f
 #define VM_RESCALE 2.0f  /* the side is reset when the scene says it should be this many times larger or smaller */
-#define VM_MIN_SPREAD 3.0e-4f /* squared sine of 1 degree, as in mono_map.h */
+#define VM_MIN_SPREAD MVO_MAP_MIN_SPREAD /* the build configuration's (mono_vo.h): 1 degree, 1.5 on a P4 */
 #define VM_CONFIRM 2     /* frames that make a voxel an obstacle */
 #define VM_MAX_KEY 32767 /* voxel indices stay within int16_t */
 

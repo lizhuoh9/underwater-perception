@@ -69,7 +69,8 @@
 │   ├── mvo_stream.py           把帧和掩码送到板子上，逐步对照电脑的结果
 │   └── experiments/            OpenCV 原型（mono_vo）、参照位姿和掩码（mask_motion）、分割模型运行器（segmenter）
 ├── tests/                      unittest 测试；tests/c/ 放 C 契约检查和固件主机测试
-└── results/lake_clip/          参考结果，每个工具一个文件夹，各有 RESULTS.md
+├── results/lake_clip/          参考结果，每个工具一个文件夹，各有 RESULTS.md
+└── results/lake_clip_p4/       编译核心的那些工具在 p4 配置下的结果（UWSLAM_CONFIG=p4）
 ```
 
 ## 开始使用
@@ -93,12 +94,16 @@ python -m uwslam.path_plan <视频> --reconstruction <文件夹> --output result
 python -m uwslam.mono_map <视频> --reconstruction <文件夹> --output results/lake_clip/mono_map_2 --board-masks <掩码文件>
 ```
 
+核心有两种编译配置（[core/mono_vo.h](core/mono_vo.h)）：默认的 `s3`，和给 ESP32-P4 的 `p4`（300 个特征点，建图只收视线
+夹角至少 1.5° 的点；见下文 ESP32-P4）。工具和测试按环境变量 `UWSLAM_CONFIG` 编译对应的配置，不设时为 `s3`，并把配置记在
+输出里。
+
 水体掩码由 [mask_motion](src/uwslam/experiments/mask_motion.py) 生成，它在视频上运行导出的 ESP-DL int8 分割模型
 （模型文件夹的格式见 [segmenter.py](src/uwslam/experiments/segmenter.py)）。
 
 ## 单目视觉里程计
 
-[core/mono_vo.h](core/mono_vo.h) 用定点金字塔 Lucas-Kanade 和前后向检查跟踪最多 250 个 Shi-Tomasi 角点。如果跟踪符合
+[core/mono_vo.h](core/mono_vo.h) 用定点金字塔 Lucas-Kanade 和前后向检查跟踪最多 250 个 Shi-Tomasi 角点（p4 配置下 300 个）。如果跟踪符合
 纯转动（单应在 1 像素内），这一步就是这个转动；否则由八点 MSAC 本质矩阵、平移方向搜索和稳健的 Levenberg-Marquardt
 给出运动，除非单独拟合的转动同样能解释这些跟踪。快速转弯时会把结果往单应的转角拉。只有证据支持平移时才接受平移。
 步长来自相邻两步共有点的深度比，并限制在近期速度的三倍以内。内点太少的一步记为 LOST：位置不变，只取能测到的转动；若它的深度与之前的点一致，就把尺度接下去。
@@ -252,8 +257,8 @@ idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_p4 -D SDKCO
 python -m uwslam.mvo_stream --port <端口> ...   # 参数与 S3 相同
 ```
 
-在 ESP32-P4（芯片版本 v1.3）上测得，360 MHz，双核，不用 PSRAM
-（[results/lake_clip/mono_vo_c/board](results/lake_clip/mono_vo_c/board)：记录 `p4_360mhz*`；`p4_c_*` 是跟踪改用可移植
+在 ESP32-P4（芯片版本 v1.3）上测得，360 MHz，双核，不用 PSRAM，用的是默认配置，那时 P4 固件还没有自己的配置（见下文；
+[results/lake_clip/mono_vo_c/board](results/lake_clip/mono_vo_c/board)：记录 `p4_360mhz*`；`p4_c_*` 是跟踪改用可移植
 C 内核的同样运行）：
 
 | | 5 Hz（169 步） | 10 Hz（338 步） |
@@ -273,6 +278,31 @@ C 内核的同样运行）：
 微秒），P4 上没有写向量版。与 S3 相比，跟踪快 1.9 倍，运动估计快 2.6 倍，角点检测快 2.2 倍，5 Hz 每步 74 毫秒而不是 161 毫秒，剩余内部 RAM
 是 S3 的 18 倍。10 Hz 下每一步（包括最慢的）的计算都在两帧间隔 100 毫秒以内。这些是板上的计算时间：经 UART 回放时大约每秒送一帧，
 也不含分割模型。
+
+#### p4 配置
+
+P4 多出来的时间，用在它自己的核心编译配置 `p4` 上（[core/mono_vo.h](core/mono_vo.h) 里的 `MVO_CONFIG_P4`；电脑上用
+`UWSLAM_CONFIG=p4`，结果在 [results/lake_clip_p4](results/lake_clip_p4)）。它跟踪 300 个特征点而不是 250 个，建图只收两条
+视线夹角至少 1.5° 的点，而不是 1°。试过的几种用 P4 算力换精度的办法里，加特征点有效，而且只在 5 Hz 有效（640×480 画面、
+10 Hz 输入、更多 RANSAC 采样、更多次优化或跟踪迭代、更大的体素地图都没有用）：
+
+| 湖中片段，16 个种子 | 默认（250 个特征点） | p4（300 个） |
+|---|---:|---:|
+| 5 Hz，10 秒窗口（192 对配对运行）：位置 RMSE 中位数 | 0.079 m | 0.067 m（68% 更低） |
+| 5 Hz，10 秒窗口：航向 RMSE 中位数 | 8.6° | 8.3°（47% 更低） |
+| 5 Hz，整段：位置 RMSE | 0.33 m [0.24–0.45] | 0.26 m [0.21–0.31] |
+| 5 Hz，整段：尺度跨度 | 2.6× | 2.1× |
+| 10 Hz，10 秒窗口：位置 / 航向 RMSE 中位数 | 0.078 m / 11.2° | 0.083 m / 13.4° |
+| 5 Hz 体素地图：局部 / 整体距离中位数，保留的障碍 | 0.061 / 0.16 m，717 | 0.061 / 0.15 m，687 |
+
+在 300 个特征点之上再把跟踪窗口从 15×15 加大到 19×19，5 Hz 窗口上的航向更好（7.8° 对 8.3°，57% 更低），整段位置也
+更好（0.21 m 对 0.26 m），但窗口上的位置和整段航向没有变好。它需要给 P4 写新的向量内核，留待以后。
+
+多出来的特征点三角化得没那么准：按 1° 建图时，体素地图的局部误差从 6.1 cm 涨到 7.1 cm，1.5° 的门槛把它拉回来。这个
+门槛丢掉的是视差最小的点，而向前运动时这些点正落在行进方向上。和按 1° 建图的 300 个特征点相比，5 Hz 地图保留的障碍从
+大约 790 个降到 687 个（16 个种子的中位数）。合成测试里径直开向一堵墙时，默认配置在 11 步里有 6 步知道正前方的距离，
+这个配置一步也没有，只把默认配置的门槛改成 1.5° 也一样；这个测试在该配置下跳过。掩码给出的障碍方向会挡住这样的墙，
+两种配置下完全一样。
 
 ## 局限
 

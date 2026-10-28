@@ -1704,5 +1704,7 @@
   ],
   "plan_hash": 2712177463,
   "plan_sha256": "9e0f7bbd301b6d2f554c43ec3887ab47492495bddc1fd300c9152de5327a2e3f",
-  "plan_header_sha256": "effff9720424edc2041c5838d903e7ebc3e53c81e117edf22426e921b890307d"
+  "plan_header_sha256": "effff9720424edc2041c5838d903e7ebc3e53c81e117edf22426e921b890307d",
+  "config": "s3",
+  "max_features": 250
 }

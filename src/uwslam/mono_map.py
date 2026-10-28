@@ -1,7 +1,7 @@
 """A top-view obstacle map from the C monocular odometry and the segmentation's water masks (core/mono_vo*.c and
 core/mono_map.c, camera only), built on the lake clip and scored against the reconstruction's point cloud.
 
-Before an explicit tracking loss, the tracked features with a well-triangulated point (rays at least 1 degree apart) whose
+Before an explicit tracking loss, the tracked features with a well-triangulated point (rays at least 1 degree apart, 1.5 in the p4 configuration) whose
 pixel the frame's 60x80 mask marks as not water are obstacle observations; core/mono_map.c files them in a 128x128
 obstacle-evidence grid seen from above. Unobserved cells remain unknown; the cell size is one eighth of the scene's
 median depth since one camera fixes no scale. The old grid freezes after the first LOST step: later tracking does
@@ -343,7 +343,7 @@ def write_board_files(output: Path, board_masks: Path, result: dict, masks: list
                 "map_continuous": int(result["map_continuous"]),
                 "map_hash": result["map_hash"], "map_observations": result["hits"], "map_frames": result["updates"],
                 "map_cell": result["cell"], "map_origin": list(result["origin"]), "map_slice_y": result["slice_y"],
-                "map_height_resets": result["height_resets"], **sources_sha256()}
+                "map_height_resets": result["height_resets"], **sources_sha256(), **mvo.build_config()}
     dump_json(output / f"board_expected_map_{rate:g}hz.json", expected)
 
 
@@ -396,7 +396,7 @@ def run(video: Path, reconstruction: Path, output: Path, time_scale: float, boar
                   f"{number(median['median'] if median else None, '.2f', ' m')}", flush=True)
     summary = {"task": "Top-view obstacle map from the C monocular odometry and the segmentation's water masks on the "
                        "lake clip, scored against the reconstruction's cloud after aligning the camera path",
-               "sources_sha256": sources_sha256(), "masks": MASKS.name, "time_scale": time_scale, "hfov_deg": HFOV_DEG, "cloud_voxel_m": CLOUD_VOXEL,
+               "sources_sha256": sources_sha256(), **mvo.build_config(), "masks": MASKS.name, "time_scale": time_scale, "hfov_deg": HFOV_DEG, "cloud_voxel_m": CLOUD_VOXEL,
                "runs": runs}
     dump_json(output / "summary.json", summary)
     write_report(output, summary)

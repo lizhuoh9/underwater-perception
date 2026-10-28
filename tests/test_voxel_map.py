@@ -12,6 +12,8 @@ import unittest
 
 import numpy as np
 
+from uwslam.mvo import config_defines
+
 HAS_DEPENDENCIES = shutil.which("gcc") is not None and find_spec("cv2") is not None
 if HAS_DEPENDENCIES:
     from tests.test_mvo import FLOOR_Y, WALL_Z, render, texture
@@ -28,7 +30,7 @@ class VoxelMapContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
             program = Path(folder) / "voxel_map_check.exe"
             subprocess.run(["gcc", "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-pedantic", "-ffp-contract=off",
-                            *STATIC, f"-I{ROOT / 'core'}", str(ROOT / "tests/c/voxel_map_check.c"),
+                            *config_defines(), *STATIC, f"-I{ROOT / 'core'}", str(ROOT / "tests/c/voxel_map_check.c"),
                             str(ROOT / "core/voxel_map.c"), "-o", str(program)], check=True)
             output = subprocess.run([str(program)], check=True, capture_output=True, text=True).stdout
         self.assertIn("voxel_map_check ok", output)

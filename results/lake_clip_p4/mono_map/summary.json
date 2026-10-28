@@ -1,0 +1,149 @@
+{
+  "task": "Top-view obstacle map from the C monocular odometry and the segmentation's water masks on the lake clip, scored against the reconstruction's cloud after aligning the camera path",
+  "sources_sha256": {
+    "core_sha256": "b7b36567dd5de3e9171494186afdc8406cf6dc4e5a5c7b5b9eb0447bfa68390b",
+    "header_sha256": "dec7c320ab39e3054018ddac0efa3213815e10e9029a391f92bc185de56f23ea",
+    "map_sha256": "af787363388c606fa0c2a17521cbe5ccd35e90584eca4c89b5ed6c7eb9d7ac75",
+    "map_header_sha256": "1a2774e47ee9a99610a187f31135572f5cec7c60a842f42d62314d237ff548fa"
+  },
+  "config": "p4",
+  "max_features": 300,
+  "masks": "frames.npz",
+  "time_scale": 3.0,
+  "hfov_deg": 110.0,
+  "cloud_voxel_m": 0.03,
+  "runs": [
+    {
+      "rate_hz": 10.0,
+      "alignment_scale_m_per_unit": 0.07046708965793991,
+      "alignment_spread_ratio": 0.013895979488999252,
+      "ate_rmse_m": 0.13364808846571816,
+      "first_lost_frame": 44,
+      "map_continuous": false,
+      "continuous_frames": 44,
+      "scored_frames": 44,
+      "total_frames": 339,
+      "alignment_reason": null,
+      "observations": 3229,
+      "frames_with_observations": 40,
+      "distance_to_cloud_m": {
+        "median": 0.2305498719215393,
+        "within_0.1": 0.13905233818519666,
+        "within_0.2": 0.4066274388355528,
+        "within_0.3": 0.742954475069681
+      },
+      "grid": {
+        "cell_units": 1.3674139976501465,
+        "origin_cells": [
+          -65,
+          -64
+        ],
+        "occupied_cells": 47,
+        "unknown_cells": 16337,
+        "slice_y_units": -2.7444663047790527,
+        "height_resets": 2,
+        "hits": 1847,
+        "updates": 38,
+        "hash": 302559665
+      },
+      "over_seeds": {
+        "seeds": [
+          12345,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "distance_median_m": {
+          "median": 0.20002340897917747,
+          "min": 0.11830087751150131,
+          "max": 0.24298486858606339
+        },
+        "distance_valid_seeds": 16,
+        "ate_rmse_m": {
+          "median": 0.09997785359201965,
+          "min": 0.08581300419747123,
+          "max": 0.317384973425552
+        },
+        "ate_valid_seeds": 16
+      }
+    },
+    {
+      "rate_hz": 5.0,
+      "alignment_scale_m_per_unit": 0.13877996207790635,
+      "alignment_spread_ratio": 0.018656751851232986,
+      "ate_rmse_m": 0.07717024513203327,
+      "first_lost_frame": 21,
+      "map_continuous": false,
+      "continuous_frames": 21,
+      "scored_frames": 21,
+      "total_frames": 170,
+      "alignment_reason": null,
+      "observations": 1591,
+      "frames_with_observations": 20,
+      "distance_to_cloud_m": {
+        "median": 0.1945359855890274,
+        "within_0.1": 0.13010685103708358,
+        "within_0.2": 0.5317410433689503,
+        "within_0.3": 0.8573224387177876
+      },
+      "grid": {
+        "cell_units": 1.0064188241958618,
+        "origin_cells": [
+          -65,
+          -64
+        ],
+        "occupied_cells": 148,
+        "unknown_cells": 16236,
+        "slice_y_units": -0.9247844815254211,
+        "height_resets": 1,
+        "hits": 1292,
+        "updates": 20,
+        "hash": 812966022
+      },
+      "over_seeds": {
+        "seeds": [
+          12345,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "distance_median_m": {
+          "median": 0.19319022446870804,
+          "min": 0.14687077701091766,
+          "max": 0.26044633984565735
+        },
+        "distance_valid_seeds": 16,
+        "ate_rmse_m": {
+          "median": 0.07711200706940084,
+          "min": 0.0394685023890879,
+          "max": 0.0984657930919448
+        },
+        "ate_valid_seeds": 16
+      }
+    }
+  ]
+}

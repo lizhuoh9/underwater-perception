@@ -1,5 +1,5 @@
 """Python binding of the C monocular visual odometry (core/mono_vo*.c), its check on the lake clip, and the files the
-ESP32-S3 stream test needs.
+board stream test needs.
 
 `compare` runs the C odometry on the lake clip's 320x240 robot frames at 10, 5 and 3 Hz and scores it against the
 reference exactly as uwslam.experiments.mono_vo scores the OpenCV prototype (whose summary it reads for the side by
@@ -12,6 +12,7 @@ import argparse
 import ctypes
 import hashlib
 import json
+import os
 import struct
 import subprocess
 import tempfile
@@ -37,7 +38,13 @@ VOXEL_SOURCE = CORE_DIR / "voxel_map.c"
 DIRECTION_SOURCE = CORE_DIR / "obstacle_dir.c"
 PLAN_SOURCE = CORE_DIR / "path_plan.c"
 WIDTH, HEIGHT = 320, 240
-MAX_FEATURES = 250  # MVO_MAX_FEATURES
+# The build configuration (core/mono_vo.h): "s3", the default, or "p4" (MVO_CONFIG_P4: 300 features, maps from rays 1.5
+# degrees apart), chosen with the UWSLAM_CONFIG environment variable for every tool that builds the core.
+CONFIGS = {"s3": {"defines": [], "max_features": 250}, "p4": {"defines": ["-DMVO_CONFIG_P4"], "max_features": 300}}
+CONFIG = os.environ.get("UWSLAM_CONFIG", "s3")
+if CONFIG not in CONFIGS:
+    raise ValueError(f"UWSLAM_CONFIG must be one of {', '.join(CONFIGS)}, got {CONFIG!r}")
+MAX_FEATURES = CONFIGS[CONFIG]["max_features"]  # MVO_MAX_FEATURES of that configuration
 KINDS = {0: "lost", 1: "rotation", 2: "essential"}
 SEED = 12345
 SEEDS = (SEED, *range(1, 16))  # the seed alone can change the scores twofold: their median and range over 16 runs
@@ -75,15 +82,32 @@ def sources_sha256() -> dict:
             "header_sha256": hashlib.sha256(HEADER.read_bytes()).hexdigest()}
 
 
+def build_config() -> dict:
+    """The build configuration, as the board reports it: expectations carry it, so the host can refuse a board built
+    another way."""
+    return {"config": CONFIG, "max_features": MAX_FEATURES}
+
+
+def config_defines() -> list[str]:
+    """The compiler definitions of the build configuration (CONFIG): every gcc command that compiles the core passes
+    them."""
+    return list(CONFIGS[CONFIG]["defines"])
+
+
 def build(output: Path) -> ctypes.CDLL:
-    """Compile the VO, obstacle grid, sparse cloud, voxel map, obstacle directions and planner with the board's
-    floating-point flags and bind them."""
+    """Compile the VO, obstacle grid, sparse cloud, voxel map, obstacle directions and planner in the build
+    configuration (CONFIG) with the board's floating-point flags and bind them."""
     output.mkdir(parents=True, exist_ok=True)
     library = output / f"mono_vo{LIBRARY_SUFFIX}"
-    subprocess.run(["gcc", *CFLAGS, "-shared", *LINK_FLAGS, f"-I{CORE_DIR}", *map(str, SOURCES), str(MAP_SOURCE),
-                    str(CLOUD_SOURCE), str(VOXEL_SOURCE), str(DIRECTION_SOURCE), str(PLAN_SOURCE), "-o", str(library)],
-                   check=True)
+    subprocess.run(["gcc", *CFLAGS, *config_defines(), "-shared", *LINK_FLAGS, f"-I{CORE_DIR}",
+                    *map(str, SOURCES), str(MAP_SOURCE), str(CLOUD_SOURCE), str(VOXEL_SOURCE), str(DIRECTION_SOURCE),
+                    str(PLAN_SOURCE), "-o", str(library)], check=True)
     vo = ctypes.CDLL(str(library))
+    vo.mvo_config_name.restype = ctypes.c_char_p
+    vo.mvo_max_features.restype = ctypes.c_uint32
+    if vo.mvo_config_name().decode() != CONFIG or vo.mvo_max_features() != MAX_FEATURES:
+        raise RuntimeError(f"The core built as {vo.mvo_config_name().decode()} with {vo.mvo_max_features()} features, "
+                           f"not as {CONFIG} with {MAX_FEATURES}")
     vo.vm_map_size.restype = ctypes.c_uint32
     vo.vm_init.argtypes = [ctypes.c_void_p]
     vo.vm_update.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(StepC), ctypes.c_void_p, ctypes.c_int,
@@ -279,7 +303,7 @@ def write_report(output: Path, summary: dict) -> None:
                      f"{s['heading_rmse_deg']['max']:.0f}] | {s['scale_spread']['median']:.1f}× [{s['scale_spread']['min']:.1f}–"
                      f"{s['scale_spread']['max']:.1f}] | {s['lost']['median']:g} [{s['lost']['min']:g}–{s['lost']['max']:g}] |")
     lines += ["", f"`board_expected_10hz.json` holds the FNV-1a hash of every 10 Hz step ({summary['board']['steps']} steps) for "
-              "the ESP32-S3 stream test.", "",
+              "the board stream test (uwslam.mvo_stream).", "",
               "Re-run (the output folder must not exist or be empty):", "", "```bash",
               "python -m uwslam.mvo compare <video> --reconstruction <folder with images.txt> --output results/lake_clip/mono_vo_c_2 "
               "--board-frames <file for the board's frames>", "```", ""]
@@ -332,7 +356,8 @@ def compare(video: Path, reconstruction: Path, output: Path, board_frames: Path 
                                 "steps": len(steps), "camera": [getattr(camera, name) for name in CAMERA_FIELDS],
                                 "seed": SEED, "camera_bits": camera_bits(camera),
                                 "step_hashes": hashes, "kinds": [KINDS[s.kind] for s in steps],
-                                "final_world_centre": list(steps[-1].world_centre), **sources_sha256()}
+                                "final_world_centre": list(steps[-1].world_centre), **sources_sha256(),
+                                **build_config()}
                 if board_frames is not None and BOARD_RATES[rate] == 1:
                     board_frames.parent.mkdir(parents=True, exist_ok=True)
                     board_frames.write_bytes(b"".join(np.ascontiguousarray(grey[i]).tobytes() for i in indices))
@@ -342,7 +367,8 @@ def compare(video: Path, reconstruction: Path, output: Path, board_frames: Path 
     board = boards[10.0]
     summary = {"task": "C monocular visual odometry (pairwise method) on the lake clip's 320x240 robot frames, scored "
                        "against the reference poses and set beside the OpenCV prototype",
-               "core_sha256": board["core_sha256"], "state_bytes": state_bytes, "pyramid_bytes_each": pyramid_bytes,
+               "core_sha256": board["core_sha256"], **build_config(), "state_bytes": state_bytes,
+               "pyramid_bytes_each": pyramid_bytes,
                "time_scale": time_scale, "hfov_deg": HFOV_DEG, "runs": runs,
                "board": {key: board[key] for key in ("rate_hz", "frames", "steps", "seed", "core_sha256", "header_sha256")}}
     dump_json(output / "pc_summary.json", summary)

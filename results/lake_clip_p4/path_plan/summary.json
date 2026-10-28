@@ -1,0 +1,440 @@
+{
+  "task": "Local avoidance and 3D path choice from the voxel map and the water masks on the lake clip, scored open-loop against the reference reconstruction",
+  "sources_sha256": {
+    "core_sha256": "b7b36567dd5de3e9171494186afdc8406cf6dc4e5a5c7b5b9eb0447bfa68390b",
+    "header_sha256": "dec7c320ab39e3054018ddac0efa3213815e10e9029a391f92bc185de56f23ea",
+    "voxel_sha256": "b803ea6bf97c0334f71e65c3df31b06c2430e628b34f67a1c02d99f82a8eb0c5",
+    "voxel_header_sha256": "c12b409d6c5526968fa9c350a7e75b1b94fa7d5115545f616986da070c58cc47",
+    "dir_sha256": "ed8b510cdc05db181f41d5b8426ee2c7ee8d03d5ae04caa295ab71b7b3d12aa6",
+    "dir_header_sha256": "4ec7b465dba1fc9b51670029a93c806a4c9def2895b00a6bacbe8050b274813d",
+    "plan_sha256": "9e0f7bbd301b6d2f554c43ec3887ab47492495bddc1fd300c9152de5327a2e3f",
+    "plan_header_sha256": "effff9720424edc2041c5838d903e7ebc3e53c81e117edf22426e921b890307d"
+  },
+  "config": "p4",
+  "max_features": 300,
+  "masks": "frames.npz",
+  "time_scale": 3.0,
+  "hfov_deg": 110.0,
+  "seeds": [
+    12345,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+  ],
+  "corridor": {
+    "part": "central half of each direction's rows and columns",
+    "percentile": 0.1
+  },
+  "runs": [
+    {
+      "rate_hz": 10.0,
+      "steps": 338,
+      "default_seed": {
+        "steps": 338,
+        "actions": {
+          "stop": 0.0,
+          "go": 0.9674556213017751,
+          "creep": 0.03254437869822485,
+          "turn": 0.0
+        },
+        "water_bound": {
+          "water_directions": 866,
+          "with_a_reference_surface_within_safe": 0,
+          "bounded_share": 0.8937644341801386,
+          "median_steps": 14.365179045074196,
+          "nearer_than_the_bound": 0.0,
+          "clear_beyond_safe": 0.9689922480620154
+        },
+        "water_vetoes": {
+          "steps": 0,
+          "on_the_mask_choice": 0,
+          "right": 0,
+          "wrong": 0
+        },
+        "plan": {
+          "within_0.25_m_free": 1.0,
+          "within_0.5_m_free": 0.9694189602446484,
+          "within_1_m_free": 0.926605504587156,
+          "danger_go_below_0.25_m": 0.0
+        },
+        "plan_creeping": {
+          "within_0.25_m_free": 1.0,
+          "within_0.5_m_free": 0.9090909090909091,
+          "within_1_m_free": 0.6363636363636364,
+          "steps": 11
+        },
+        "straight_ahead": {
+          "within_0.25_m_free": 0.9230769230769231,
+          "within_0.5_m_free": 0.8431952662721893,
+          "within_1_m_free": 0.5118343195266272
+        },
+        "mask_choice": {
+          "within_0.25_m_free": 1.0,
+          "within_0.5_m_free": 0.9694189602446484,
+          "within_1_m_free": 0.926605504587156,
+          "steps_with_a_choice": 327
+        },
+        "best_direction": {
+          "within_0.25_m_free": 1.0,
+          "within_0.5_m_free": 1.0,
+          "within_1_m_free": 1.0
+        },
+        "steps_in_steps": {
+          "all_known": {
+            "directions": 2521,
+            "median_log2_ratio": -0.2638006834658156,
+            "within_2x": 0.8222927409758033
+          },
+          "chosen": {
+            "directions": 19,
+            "median_log2_ratio": -1.5944068144603123,
+            "within_2x": 0.2631578947368421
+          }
+        }
+      },
+      "over_seeds": {
+        "danger": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "bounded_share": {
+          "median": 0.8891454965357968,
+          "min": 0.8799076212471132,
+          "max": 0.9064665127020786
+        },
+        "clear_steps": {
+          "median": 14.211830165135675,
+          "min": 13.998603452043858,
+          "max": 14.50005507463745
+        },
+        "clear_beyond_safe": {
+          "median": 0.9714651970284238,
+          "min": 0.958005249343832,
+          "max": 0.9817945383615084
+        },
+        "nearer_than_clear": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "known_within_2x": {
+          "median": 0.8389496099103229,
+          "min": 0.8092664092664092,
+          "max": 0.8546768366118025
+        },
+        "chosen_within_2x": {
+          "median": 0.3875,
+          "min": 0.23529411764705882,
+          "max": 0.4583333333333333
+        },
+        "action_stop": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "action_go": {
+          "median": 0.9674556213017751,
+          "min": 0.9674556213017751,
+          "max": 0.9674556213017751
+        },
+        "action_creep": {
+          "median": 0.03254437869822485,
+          "min": 0.03254437869822485,
+          "max": 0.03254437869822485
+        },
+        "action_turn": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "plan_within_0.25_m_free": {
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "plan_within_0.5_m_free": {
+          "median": 0.9694189602446484,
+          "min": 0.9694189602446484,
+          "max": 0.9694189602446484
+        },
+        "plan_within_1_m_free": {
+          "median": 0.926605504587156,
+          "min": 0.926605504587156,
+          "max": 0.926605504587156
+        },
+        "plan_creeping_within_0.25_m_free": {
+          "median": 0.9545454545454546,
+          "min": 0.7272727272727273,
+          "max": 1.0
+        },
+        "plan_creeping_within_0.5_m_free": {
+          "median": 0.5454545454545454,
+          "min": 0.36363636363636365,
+          "max": 0.9090909090909091
+        },
+        "plan_creeping_within_1_m_free": {
+          "median": 0.2727272727272727,
+          "min": 0.0,
+          "max": 0.6363636363636364
+        },
+        "mask_choice_within_0.25_m_free": {
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "mask_choice_within_0.5_m_free": {
+          "median": 0.9694189602446484,
+          "min": 0.9694189602446484,
+          "max": 0.9694189602446484
+        },
+        "mask_choice_within_1_m_free": {
+          "median": 0.926605504587156,
+          "min": 0.926605504587156,
+          "max": 0.926605504587156
+        },
+        "straight_ahead_within_0.25_m_free": {
+          "median": 0.9230769230769231,
+          "min": 0.9230769230769231,
+          "max": 0.9230769230769231
+        },
+        "straight_ahead_within_0.5_m_free": {
+          "median": 0.8431952662721893,
+          "min": 0.8431952662721893,
+          "max": 0.8431952662721893
+        },
+        "straight_ahead_within_1_m_free": {
+          "median": 0.5118343195266272,
+          "min": 0.5118343195266272,
+          "max": 0.5118343195266272
+        },
+        "best_direction_within_0.25_m_free": {
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "best_direction_within_0.5_m_free": {
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "best_direction_within_1_m_free": {
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        }
+      }
+    },
+    {
+      "rate_hz": 5.0,
+      "steps": 169,
+      "default_seed": {
+        "steps": 169,
+        "actions": {
+          "stop": 0.0,
+          "go": 0.9644970414201184,
+          "creep": 0.03550295857988166,
+          "turn": 0.0
+        },
+        "water_bound": {
+          "water_directions": 418,
+          "with_a_reference_surface_within_safe": 0,
+          "bounded_share": 0.8277511961722488,
+          "median_steps": 8.532354873832283,
+          "nearer_than_the_bound": 0.002890173410404624,
+          "clear_beyond_safe": 0.5520231213872833
+        },
+        "water_vetoes": {
+          "steps": 1,
+          "on_the_mask_choice": 0,
+          "right": 0,
+          "wrong": 1
+        },
+        "plan": {
+          "within_0.25_m_free": 1.0,
+          "within_0.5_m_free": 0.9693251533742331,
+          "within_1_m_free": 0.9325153374233128,
+          "danger_go_below_0.25_m": 0.0
+        },
+        "plan_creeping": {
+          "within_0.25_m_free": 1.0,
+          "within_0.5_m_free": 0.8333333333333334,
+          "within_1_m_free": 0.8333333333333334,
+          "steps": 6
+        },
+        "straight_ahead": {
+          "within_0.25_m_free": 0.9230769230769231,
+          "within_0.5_m_free": 0.8461538461538461,
+          "within_1_m_free": 0.514792899408284
+        },
+        "mask_choice": {
+          "within_0.25_m_free": 1.0,
+          "within_0.5_m_free": 0.9693251533742331,
+          "within_1_m_free": 0.9325153374233128,
+          "steps_with_a_choice": 163
+        },
+        "best_direction": {
+          "within_0.25_m_free": 1.0,
+          "within_0.5_m_free": 1.0,
+          "within_1_m_free": 1.0
+        },
+        "steps_in_steps": {
+          "all_known": {
+            "directions": 1420,
+            "median_log2_ratio": -0.11191313920207238,
+            "within_2x": 0.8887323943661972
+          },
+          "chosen": {
+            "directions": 8,
+            "median_log2_ratio": 0.029594908448386553,
+            "within_2x": 0.875
+          }
+        }
+      },
+      "over_seeds": {
+        "danger": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "bounded_share": {
+          "median": 0.8373205741626795,
+          "min": 0.7966507177033493,
+          "max": 0.8708133971291866
+        },
+        "clear_steps": {
+          "median": 8.767625641939462,
+          "min": 8.532354873832283,
+          "max": 8.927988069097506
+        },
+        "clear_beyond_safe": {
+          "median": 0.5760789859627069,
+          "min": 0.5,
+          "max": 0.6242774566473989
+        },
+        "nearer_than_clear": {
+          "median": 0.002886008895404041,
+          "min": 0.0,
+          "max": 0.005865102639296188
+        },
+        "known_within_2x": {
+          "median": 0.89968047430734,
+          "min": 0.8793584379358438,
+          "max": 0.9237958303378864
+        },
+        "chosen_within_2x": {
+          "median": 0.7738095238095238,
+          "min": 0.5,
+          "max": 1.0
+        },
+        "action_stop": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "action_go": {
+          "median": 0.9644970414201184,
+          "min": 0.9644970414201184,
+          "max": 0.9644970414201184
+        },
+        "action_creep": {
+          "median": 0.03550295857988166,
+          "min": 0.03550295857988166,
+          "max": 0.03550295857988166
+        },
+        "action_turn": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "plan_within_0.25_m_free": {
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "plan_within_0.5_m_free": {
+          "median": 0.9693251533742331,
+          "min": 0.9693251533742331,
+          "max": 0.9693251533742331
+        },
+        "plan_within_1_m_free": {
+          "median": 0.9325153374233128,
+          "min": 0.9325153374233128,
+          "max": 0.9386503067484663
+        },
+        "plan_creeping_within_0.25_m_free": {
+          "median": 1.0,
+          "min": 0.8333333333333334,
+          "max": 1.0
+        },
+        "plan_creeping_within_0.5_m_free": {
+          "median": 0.8333333333333334,
+          "min": 0.6666666666666666,
+          "max": 1.0
+        },
+        "plan_creeping_within_1_m_free": {
+          "median": 0.5,
+          "min": 0.16666666666666666,
+          "max": 1.0
+        },
+        "mask_choice_within_0.25_m_free": {
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "mask_choice_within_0.5_m_free": {
+          "median": 0.9693251533742331,
+          "min": 0.9693251533742331,
+          "max": 0.9693251533742331
+        },
+        "mask_choice_within_1_m_free": {
+          "median": 0.9325153374233128,
+          "min": 0.9325153374233128,
+          "max": 0.9325153374233128
+        },
+        "straight_ahead_within_0.25_m_free": {
+          "median": 0.9230769230769231,
+          "min": 0.9230769230769231,
+          "max": 0.9230769230769231
+        },
+        "straight_ahead_within_0.5_m_free": {
+          "median": 0.8461538461538461,
+          "min": 0.8461538461538461,
+          "max": 0.8461538461538461
+        },
+        "straight_ahead_within_1_m_free": {
+          "median": 0.514792899408284,
+          "min": 0.514792899408284,
+          "max": 0.514792899408284
+        },
+        "best_direction_within_0.25_m_free": {
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "best_direction_within_0.5_m_free": {
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "best_direction_within_1_m_free": {
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        }
+      }
+    }
+  ]
+}

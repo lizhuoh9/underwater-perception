@@ -14,13 +14,14 @@ import unittest
 from unittest import mock
 
 from uwslam import mvo_stream
+from uwslam.mvo import config_defines
 
 
 def record(cores: int, mismatched: list[int], with_map: bool, simd: bool) -> dict:
     timing = {f"{stage}_ms": {"mean": 10.0 * k, "median": 9.0 * k, "p90": 12.0 * k, "max": 15.0 * k}
               for k, stage in enumerate(("total", "track", "motion", "detect"), start=1)}
     entry = {"cores": cores, "simd": simd, "frames": 5, "steps": 4, "mismatched_steps": mismatched, "timing": timing,
-             "cpu_mhz": 240 if simd else 360}
+             "cpu_mhz": 240 if simd else 360, **({} if simd else {"config": "p4"})}
     if with_map:
         entry["timing"]["map_ms"] = {"mean": 0.25, "median": 0.2, "p90": 0.3, "max": 0.4}
         entry["map"] = {"observations": 42, "match": True}
@@ -49,9 +50,9 @@ class MvoStreamTests(unittest.TestCase):
             text = (results / "RESULTS.md").read_text(encoding="utf-8")
         self.assertTrue(text.startswith("# Report\n\nBody.\n"))
         self.assertEqual(text.count(mvo_stream.BOARD_HEADING), 1)
-        self.assertIn("| `a` | 240 MHz | 10 Hz | 2 | vector | 5 | 4 of 4 | 42 observations, hash equal to the PC's |",
-                      text)
-        self.assertIn("| `b` | 360 MHz | 10 Hz | 1 | C | 5 | 3 of 4 | — |", text)
+        self.assertIn("| `a` | 240 MHz | s3 | 10 Hz | 2 | vector | 5 | 4 of 4 | 42 observations, hash equal to the "
+                      "PC's |", text)  # a record from before configurations: the default build's
+        self.assertIn("| `b` | 360 MHz | p4 | 10 Hz | 1 | C | 5 | 3 of 4 | — |", text)
 
     def test_board_section_does_not_invent_an_unknown_frame_rate(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -62,7 +63,7 @@ class MvoStreamTests(unittest.TestCase):
             (results / "board" / "unknown.json").write_text(json.dumps(item), encoding="utf-8")
             mvo_stream.write_board_section(results)
             text = (results / "RESULTS.md").read_text(encoding="utf-8")
-        self.assertIn("| `unknown` | 240 MHz | unknown |", text)
+        self.assertIn("| `unknown` | 240 MHz | s3 | unknown |", text)
 
     def test_board_section_preserves_other_sections_after_it(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -109,8 +110,9 @@ class MvoStreamTests(unittest.TestCase):
 class FakeBoard:
     """Serial protocol without a port; loss happens on frame 2, which has no mask."""
 
-    def __init__(self, ready_policy=1, bad_reply=None, include_continuity=True):
+    def __init__(self, ready_policy=1, bad_reply=None, include_continuity=True, config="s3", max_features=250):
         self.ready_policy, self.bad_reply, self.include_continuity = ready_policy, bad_reply, include_continuity
+        self.config, self.max_features = config, max_features
         self.lines, self.sent, self.pending = [], [], []
         self.frame_index = 0
         self.closed = False
@@ -152,7 +154,9 @@ class FakeBoard:
 
     def reply(self, prefixes, timeout):
         if not self.lines:
-            line = "ready cpu_mhz=240 core_sha256=core header_sha256=header map_sha256=map map_header_sha256=mapheader"
+            built = "" if self.config is None else f"config={self.config} max_features={self.max_features} "
+            line = (f"ready cpu_mhz=240 {built}core_sha256=core "
+                    "header_sha256=header map_sha256=map map_header_sha256=mapheader")
             if self.ready_policy is not None:
                 line += f" map_policy={self.ready_policy}"
         else:
@@ -205,6 +209,61 @@ class MapProtocolTests(unittest.TestCase):
                 self.write_expectations()
                 with self.assertRaisesRegex(RuntimeError, "camera_bits"):
                     self.replay(FakeBoard())
+
+    def test_board_of_another_configuration_is_refused(self):
+        for board_config, expected_config in (("p4", "s3"), ("s3", "p4")):
+            with self.subTest(board=board_config, expected=expected_config):
+                for expectation in (self.vo, self.map):
+                    if expected_config == "p4":
+                        expectation.update(config="p4", max_features=300)
+                    else:
+                        expectation.pop("config", None)  # an expectation without one is the default build's
+                        expectation.pop("max_features", None)
+                self.write_expectations()
+                board = FakeBoard(config=board_config, max_features=mvo_stream.CONFIG_FEATURES[board_config])
+                with self.assertRaisesRegex(RuntimeError, "build configuration"):
+                    self.replay(board)
+                self.assertFalse(any(item.startswith(b"frame ") for item in board.sent))
+        record, _ = self.replay(FakeBoard(config="p4", max_features=300))  # the matching board
+        self.assertTrue(record["all_match"])
+        self.assertEqual(record["config"], "p4")
+
+    def test_board_reporting_another_feature_count_or_none_is_refused(self):
+        self.vo.update(config="p4", max_features=300)
+        self.map.update(config="p4", max_features=300)
+        self.write_expectations()
+        for board in (FakeBoard(config="p4", max_features=250), FakeBoard(config=None)):
+            with self.subTest(config=board.config, max_features=board.max_features):
+                with self.assertRaisesRegex(RuntimeError, "build configuration"):
+                    self.replay(board)
+                self.assertFalse(any(item.startswith(b"frame ") for item in board.sent))
+
+    def test_map_expectation_of_another_configuration_is_refused(self):
+        self.vo.update(config="p4", max_features=300)  # the map expectation stays the default build's
+        self.write_expectations()
+        board = FakeBoard(config="p4", max_features=300)
+        with self.assertRaisesRegex(ValueError, "map expectation was made in the 's3' build configuration"):
+            self.replay(board)
+        self.assertEqual(board.sent, [])  # refused before the board is opened
+
+    def test_configuration_must_be_a_known_name(self):
+        for bad in ({"config": ["p4"]}, {"config": None}, {"config": "P4"}, {"max_features": 300}):
+            with self.subTest(expected=bad), self.assertRaisesRegex(ValueError, "Unknown build configuration"):
+                mvo_stream.expectation_config(bad)
+        self.assertEqual(mvo_stream.expectation_config({}), "s3")
+
+    def test_caps_follow_the_configuration(self):
+        voxels = dict(step_hashes=self.vo["step_hashes"], frames=self.vo["frames"], voxel_hash=1,
+                      voxel_progress=[{"count": 1, "filed": 300}] * 3, voxel_sha256="a" * 64, voxel_header_sha256="b" * 64)
+        with self.assertRaisesRegex(ValueError, "voxel count and filed"):
+            mvo_stream.validate_expected_voxels(voxels, self.vo)  # the default build files at most 250
+        mvo_stream.validate_expected_voxels(voxels, {**self.vo, "config": "p4", "max_features": 300})
+        with self.assertRaisesRegex(ValueError, "Unknown build configuration"):
+            mvo_stream.max_features({**self.vo, "config": "p4", "max_features": 250})
+
+    def test_config_features_follow_the_binding(self):
+        from uwslam import mvo
+        self.assertEqual(mvo_stream.CONFIG_FEATURES, {name: c["max_features"] for name, c in mvo.CONFIGS.items()})
 
     def test_full_replay_checks_states_independent_of_equal_map_hash(self):
         board = FakeBoard()
@@ -292,7 +351,7 @@ class MapProtocolTests(unittest.TestCase):
             header.write_text("", encoding="ascii")
         program = self.folder / "firmware_check.exe"
         env = dict(os.environ, TMP=str(self.folder), TEMP=str(self.folder))
-        subprocess.run(["gcc", "-std=c99", "-O1", "-Wall", "-Wextra", "-Werror", "-Wno-unused-function",
+        subprocess.run(["gcc", "-std=c99", "-O1", "-Wall", "-Wextra", "-Werror", "-Wno-unused-function", *config_defines(),
                         "-ffunction-sections", "-fdata-sections", "-Wl,--gc-sections",
                         *(["-static"] if sys.platform == "win32" else []), f"-I{include}", f"-I{project / 'core'}",
                         str(project / "tests/c/mvo_map_continuity_check.c"),

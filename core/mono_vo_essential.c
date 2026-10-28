@@ -261,8 +261,7 @@ static int translation_evidence_baseline(const mvo_t *s, int n, const float rota
         }
     }
     if (used < MVO_MIN_INLIERS) return 0;
-    /* 13.816 >= 2 ln(4*n) for n <= MVO_MAX_FEATURES, avoiding libm on the board. */
-    penalty = 1.38629436f * (float)used + 13.816f + 9.21f;
+    penalty = 1.38629436f * (float)used + MVO_EVIDENCE_LOG + 9.21f; /* the log term: mono_vo_internal.h */
     for (j = 0; j < 4; ++j) if (difference[j] <= penalty) return 0;
     return 1;
 }
@@ -276,7 +275,7 @@ static float small_match_score(int n, const float *rotation_errors, const float 
     if (variance < 0.25f) variance = 0.25f;
     for (j = 0; j < 4; ++j) {
         float inv_variance = 4.0f + (1.0f / variance - 4.0f) * (float)j / 3.0f;
-        float score = -(1.38629436f * (float)used + 13.816f + 9.21f);
+        float score = -(1.38629436f * (float)used + MVO_EVIDENCE_LOG + 9.21f);
         for (k = 0; k < n; ++k) if (mvo_epipolar[k]) {
             float a = 0.5f * rotation_errors[k] * inv_variance, b = essential_errors[k] * inv_variance;
             score += (a < 4.0f ? a : 4.0f) - (b < 2.0f ? b : 2.0f);

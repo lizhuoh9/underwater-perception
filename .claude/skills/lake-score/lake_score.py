@@ -67,7 +67,9 @@ def windows(video: Path, reconstruction: Path, output: Path, rates: list[float],
                     runs.append({"rate_hz": rate, "start_s": round(float(start), 3), "seed": seed,
                                  **{key: result[key] for key in METRICS}})
             print_rate(rate, [run for run in runs if run["rate_hz"] == rate])
-    summary = {**mvo.sources_sha256(), "length_s": length_s, "every_s": every_s, "time_scale": time_scale,
+    config = mvo.build_config() if hasattr(mvo, "build_config") else {"config": "s3"}  # a control from before them
+    summary = {**mvo.sources_sha256(), **config, "length_s": length_s, "every_s": every_s,
+               "time_scale": time_scale,
                "seeds": list(mvo.SEEDS), "windows": len(starts), "runs": runs}
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(summary, indent=1), encoding="utf-8", newline="\n")
@@ -84,7 +86,8 @@ def compare(control_path: Path, candidate_path: Path) -> None:
     if differing:
         raise ValueError(f"The scorings differ in {', '.join(differing)}; score both with the same settings")
     base = {run_key(run): run for run in control["runs"]}
-    print(f"control core {control['core_sha256'][:8]}, candidate core {candidate['core_sha256'][:8]}")
+    print(f"control core {control['core_sha256'][:8]} ({control.get('config', 's3')}), candidate core "
+          f"{candidate['core_sha256'][:8]} ({candidate.get('config', 's3')})")  # a configuration is a fair candidate
     for rate in sorted({run["rate_hz"] for run in candidate["runs"]}):
         pairs = [(base[run_key(run)], run) for run in candidate["runs"]
                  if run["rate_hz"] == rate and run_key(run) in base]

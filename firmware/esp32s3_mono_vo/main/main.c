@@ -47,6 +47,7 @@
  *   board: cloud count=<n> dropped=<n> continuous=<0 or 1> hash=<fnv of the mc_map_t>
  *          point index=<i> id=<id> x_bits=<bits> y_bits=<bits> z_bits=<bits> spread_bits=<bits> observations=<n>
  *          cloud_end count=<n>                    floats are sent as IEEE-754 uint32 bits
+ *   board: ready ... config=<s3 or p4> max_features=<n>   the core's build configuration (core/mono_vo.h)
  *   board: ready ... map_policy=1 cloud_policy=1 freeze the obstacle map and the cloud after the first LOST until
  *                    the next start; the voxel map goes on through LOST steps
  *
@@ -506,6 +507,21 @@ static void cloud(void)
     printf("cloud_end count=%" PRIu32 "\n", s_cloud->count);
 }
 
+/* The line the host waits for: the clock, the build configuration and the fingerprints of every source, which
+ * uwslam.mvo_stream checks against its expectations. The host harnesses print it too. */
+static void print_ready(void)
+{
+    printf("ready mono_vo cpu_mhz=%d config=%s max_features=%" PRIu32 " state_bytes=%" PRIu32
+           " core_sha256=%s header_sha256=%s map_sha256=%s "
+           "map_header_sha256=%s map_policy=1 cloud_sha256=%s cloud_header_sha256=%s cloud_policy=1"
+           " cloud_bytes=%" PRIu32 " cloud_capacity=%d voxel_sha256=%s voxel_header_sha256=%s"
+           " voxel_bytes=%" PRIu32 " dir_sha256=%s dir_header_sha256=%s plan_sha256=%s plan_header_sha256=%s\n",
+           CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ, mvo_config_name(), mvo_max_features(), mvo_state_size(), MVO_CORE_SHA256,
+           MVO_HEADER_SHA256, MM_CORE_SHA256,
+           MM_HEADER_SHA256, MC_CORE_SHA256, MC_HEADER_SHA256, mc_map_size(), MC_MAX_POINTS, VM_CORE_SHA256,
+           VM_HEADER_SHA256, vm_map_size(), OD_CORE_SHA256, OD_HEADER_SHA256, PP_CORE_SHA256, PP_HEADER_SHA256);
+}
+
 void app_main(void)
 {
     char line[LINE_BYTES];
@@ -540,13 +556,7 @@ void app_main(void)
     }
     for (;;) {
         if (!read_line(line, sizeof line, IDLE_MS)) {
-            printf("ready mono_vo cpu_mhz=%d state_bytes=%" PRIu32 " core_sha256=%s header_sha256=%s map_sha256=%s "
-                   "map_header_sha256=%s map_policy=1 cloud_sha256=%s cloud_header_sha256=%s cloud_policy=1"
-                   " cloud_bytes=%" PRIu32 " cloud_capacity=%d voxel_sha256=%s voxel_header_sha256=%s"
-                   " voxel_bytes=%" PRIu32 " dir_sha256=%s dir_header_sha256=%s plan_sha256=%s plan_header_sha256=%s\n",
-                   CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ, mvo_state_size(), MVO_CORE_SHA256, MVO_HEADER_SHA256, MM_CORE_SHA256,
-                   MM_HEADER_SHA256, MC_CORE_SHA256, MC_HEADER_SHA256, mc_map_size(), MC_MAX_POINTS, VM_CORE_SHA256,
-                   VM_HEADER_SHA256, vm_map_size(), OD_CORE_SHA256, OD_HEADER_SHA256, PP_CORE_SHA256, PP_HEADER_SHA256);
+            print_ready();
         } else if (strncmp(line, "selftest ", 9) == 0) {
             selftest(line);
         } else if (strncmp(line, "start ", 6) == 0) {

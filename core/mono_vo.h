@@ -64,7 +64,23 @@
 #define MVO_WIDTH 320
 #define MVO_HEIGHT 240
 #define MVO_LEVELS 4 /* pyramid levels: 320x240, 160x120, 80x60, 40x30 */
+
+/* Build configurations. The default suits an ESP32-S3 at 5 Hz. MVO_CONFIG_P4 suits an ESP32-P4, where a step takes
+ * about half as long: it tracks 300 features, which on the lake clip at 5 Hz brought the path after one alignment from
+ * 0.33 to 0.26 m in the median of 16 seeds and from 0.079 to 0.067 m on 10 s windows (lower in 68% of 192 paired
+ * runs), the heading unchanged; at 10 Hz it is worse, so it is a 5 Hz configuration. The extra features triangulate
+ * less well, so its maps file only points from rays at least 1.5 degrees apart (MVO_MAP_MIN_SPREAD, 1 degree by
+ * default), which keeps the voxel map's local accuracy where it was (6.1 cm) for the same share of the seen surface. */
+#if defined(MVO_CONFIG_P4)
+#define MVO_CONFIG_NAME "p4"
+#define MVO_MAX_FEATURES 300
+#define MVO_MAP_MIN_SPREAD 6.8523e-4f /* squared sine of 1.5 degrees */
+#else
+#define MVO_CONFIG_NAME "s3"
 #define MVO_MAX_FEATURES 250
+#define MVO_MAP_MIN_SPREAD 3.0e-4f /* squared sine of 1 degree */
+#endif
+
 #define MVO_REFILL 0.6f
 #define MVO_MIN_DISTANCE 8.0f
 #define MVO_QUALITY 0.01f
@@ -193,6 +209,9 @@ void mvo_step(mvo_t *s, mvo_step_t *out);
 float mvo_step_length(mvo_t *s, float *ratios, int count);
 uint32_t mvo_state_size(void);
 uint32_t mvo_pyramid_bytes(void);
+/* The build configuration (see above): its name ("s3" or "p4") and MVO_MAX_FEATURES. */
+const char *mvo_config_name(void);
+uint32_t mvo_max_features(void);
 float mvo_sqrt(float v);
 /* Where a pinhole with the camera's fx, fy, cx, cy would see the ray its lens shows at pixel `in` of the 320x240 frame:
  * OpenCV's distortion model inverted by MVO_UNDISTORT_STEPS Newton steps from `in` (in and out may be the same).

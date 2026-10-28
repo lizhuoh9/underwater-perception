@@ -275,7 +275,8 @@ def write_board_files(output: Path, result: dict, rate: float) -> None:
     expected = {"rate_hz": rate, "every": BOARD_RATES[rate], "frames": len(result["steps"]) + 1,
                 "step_hashes": [mvo.fnv(mvo.FNV_OFFSET, bytes(step)) for step in result["steps"]],
                 "voxel_progress": result["progress"], "voxel_hash": result["hash"], "voxel_side_bits": result["side_bits"],
-                **{f"voxel_{name}": value for name, value in result["stats"].items()}, **sources_sha256()}
+                **{f"voxel_{name}": value for name, value in result["stats"].items()}, **sources_sha256(),
+                **mvo.build_config()}
     dump_json(output / f"board_expected_voxels_{rate:g}hz.json", expected)
 
 
@@ -331,6 +332,7 @@ def run(video: Path, reconstruction: Path, output: Path, time_scale: float) -> d
                   f"{over['lost']['median']:.0f} LOST steps gone through", flush=True)
     summary = {"task": "Continuing voxel map from the C monocular odometry and the water masks on the lake clip, "
                        "scored against the reference cloud", "sources_sha256": {**mvo.sources_sha256(), **sources_sha256()},
+               **mvo.build_config(),
                "masks": "frames.npz", "time_scale": time_scale, "hfov_deg": HFOV_DEG, "seeds": list(mvo.SEEDS),
                "window_s": WINDOW_S, "runs": runs}
     dump_json(output / "summary.json", summary)

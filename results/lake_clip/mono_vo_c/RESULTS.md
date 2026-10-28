@@ -6,11 +6,11 @@ Each row of the first table is one run with one RANSAC seed. On this clip the se
 
 | Rate | Version | Steps (lost / rotation only) | Position RMSE after alignment | Heading RMSE / max | Direction of travel, median | Scale ratio over 5 s windows | ms per step (PC) |
 |---:|---|---:|---:|---:|---:|---:|---:|
-| 10 Hz | C | 338 (1 / 12) | 0.37 m | 26.0° / 48° | 12.6° | 0.14–1.41 | 7.1 |
+| 10 Hz | C | 338 (1 / 12) | 0.37 m | 26.0° / 48° | 12.6° | 0.14–1.41 | 8.3 |
 | 10 Hz | OpenCV prototype | 338 (0 / 1) | 0.41 m | 27.4° / 46° | 14.4° | 0.73–1.69 | 5.8 |
-| 5 Hz | C | 169 (12 / 6) | 0.25 m | 8.5° / 32° | 11.5° | 0.74–1.33 | 9.1 |
+| 5 Hz | C | 169 (12 / 6) | 0.25 m | 8.5° / 32° | 11.5° | 0.74–1.33 | 11.8 |
 | 5 Hz | OpenCV prototype | 169 (3 / 0) | 0.44 m | 25.7° / 49° | 12.7° | 0.48–1.61 | 7.9 |
-| 3 Hz | C | 101 (20 / 0) | 0.43 m | 9.8° / 48° | 9.4° | 0.28–2.30 | 11.5 |
+| 3 Hz | C | 101 (20 / 0) | 0.43 m | 9.8° / 48° | 9.4° | 0.28–2.30 | 12.9 |
 | 3 Hz | OpenCV prototype | 101 (7 / 0) | 0.33 m | 18.5° / 47° | 11.2° | 0.35–2.12 | 9.1 |
 
 C port over 16 RANSAC seeds, median [smallest–largest]:
@@ -21,7 +21,7 @@ C port over 16 RANSAC seeds, median [smallest–largest]:
 | 5 Hz | 0.33 m [0.24–0.45] | 18.3° [9–25] | 2.6× [1.4–7.4] | 11 [9–14] |
 | 3 Hz | 0.42 m [0.38–0.54] | 27.1° [8–43] | 9.1× [6.6–11.1] | 21 [19–23] |
 
-`board_expected_10hz.json` holds the FNV-1a hash of every 10 Hz step (338 steps) for the ESP32-S3 stream test.
+`board_expected_10hz.json` holds the FNV-1a hash of every 10 Hz step (338 steps) for the board stream test (uwslam.mvo_stream).
 
 Re-run (the output folder must not exist or be empty):
 
@@ -31,21 +31,21 @@ python -m uwslam.mvo compare <video> --reconstruction <folder with images.txt> -
 
 ## ESP32 boards
 
-The host streams grayscale frames and optional masks over the board's serial link (`python -m uwslam.mvo_stream`): the ESP32-S3's USB-Serial-JTAG port, or an ESP32-P4 board's USB-UART bridge. The board reports each step's hash and stage times. These timings exclude capture and transfer. Each record provides its own clock, rate, core count and kernel choice (the vector kernels are mvo_pie.S on the S3 and mvo_pie_p4.S on the P4). Before streaming, the board checks its vector dispatch against C on random windows. Records and raw serial lines are in `board/`.
+The host streams grayscale frames and optional masks over the board's serial link (`python -m uwslam.mvo_stream`): the ESP32-S3's USB-Serial-JTAG port, or an ESP32-P4 board's USB-UART bridge. The board reports each step's hash and stage times. These timings exclude capture and transfer. Each record provides its own clock, build configuration (core/mono_vo.h: s3, the default, or p4), rate, core count and kernel choice (the vector kernels are mvo_pie.S on the S3 and mvo_pie_p4.S on the P4). Before streaming, the board checks its vector dispatch against C on random windows. Records and raw serial lines are in `board/`.
 
-| Record | Clock | Rate | Cores | Kernels | Frames | Steps equal to the PC | Map | Per step, mean / median / max | Tracking | Motion | Detection | Map update | Voxel map / directions / plan (update) |
-|---|---:|---:|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---|
-| `240mhz` | 240 MHz | 10 Hz | 2 | vector | 339 | 338 of 338 | 2108 observations, hash equal to the PC's | 135 / 136 / 192 ms | 55 ms | 64 ms | 16 ms | 0.0 ms | 947 voxels, hash equal to the PC's (1.1 ms); directions equal to the PC's (0.26 ms); plans equal to the PC's (1.27 ms) |
-| `240mhz_5hz` | 240 MHz | 5 Hz | 2 | vector | 170 | 169 of 169 | 1348 observations, hash equal to the PC's | 161 / 169 / 207 ms | 71 ms | 57 ms | 32 ms | 0.0 ms | 913 voxels, hash equal to the PC's (1.0 ms); directions equal to the PC's (0.25 ms); plans equal to the PC's (1.15 ms) |
-| `p4_360mhz` | 360 MHz | 10 Hz | 2 | vector | 339 | 338 of 338 | 2108 observations, hash equal to the PC's | 61 / 61 / 92 ms | 29 ms | 24 ms | 7 ms | 0.0 ms | 947 voxels, hash equal to the PC's (0.4 ms); directions equal to the PC's (0.17 ms); plans equal to the PC's (0.53 ms) |
-| `p4_360mhz_5hz` | 360 MHz | 5 Hz | 2 | vector | 170 | 169 of 169 | 1348 observations, hash equal to the PC's | 74 / 78 / 96 ms | 38 ms | 22 ms | 15 ms | 0.0 ms | 913 voxels, hash equal to the PC's (0.4 ms); directions equal to the PC's (0.17 ms); plans equal to the PC's (0.49 ms) |
-| `p4_c_360mhz` | 360 MHz | 10 Hz | 2 | C | 339 | 338 of 338 | 2108 observations, hash equal to the PC's | 173 / 160 / 289 ms | 142 ms | 24 ms | 7 ms | 0.0 ms | 947 voxels, hash equal to the PC's (0.4 ms); directions equal to the PC's (0.18 ms); plans equal to the PC's (0.54 ms) |
-| `p4_c_360mhz_5hz` | 360 MHz | 5 Hz | 2 | C | 170 | 169 of 169 | 1348 observations, hash equal to the PC's | 220 / 226 / 308 ms | 184 ms | 22 ms | 14 ms | 0.0 ms | 913 voxels, hash equal to the PC's (0.4 ms); directions equal to the PC's (0.18 ms); plans equal to the PC's (0.50 ms) |
+| Record | Clock | Config | Rate | Cores | Kernels | Frames | Steps equal to the PC | Map | Per step, mean / median / max | Tracking | Motion | Detection | Map update | Voxel map / directions / plan (update) |
+|---|---:|---|---:|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---|
+| `240mhz` | 240 MHz | s3 | 10 Hz | 2 | vector | 339 | 338 of 338 | 2108 observations, hash equal to the PC's | 135 / 136 / 192 ms | 55 ms | 64 ms | 16 ms | 0.0 ms | 947 voxels, hash equal to the PC's (1.1 ms); directions equal to the PC's (0.26 ms); plans equal to the PC's (1.27 ms) |
+| `240mhz_5hz` | 240 MHz | s3 | 5 Hz | 2 | vector | 170 | 169 of 169 | 1348 observations, hash equal to the PC's | 161 / 169 / 207 ms | 71 ms | 57 ms | 32 ms | 0.0 ms | 913 voxels, hash equal to the PC's (1.0 ms); directions equal to the PC's (0.25 ms); plans equal to the PC's (1.15 ms) |
+| `p4_360mhz` | 360 MHz | s3 | 10 Hz | 2 | vector | 339 | 338 of 338 | 2108 observations, hash equal to the PC's | 61 / 61 / 92 ms | 29 ms | 24 ms | 7 ms | 0.0 ms | 947 voxels, hash equal to the PC's (0.4 ms); directions equal to the PC's (0.17 ms); plans equal to the PC's (0.53 ms) |
+| `p4_360mhz_5hz` | 360 MHz | s3 | 5 Hz | 2 | vector | 170 | 169 of 169 | 1348 observations, hash equal to the PC's | 74 / 78 / 96 ms | 38 ms | 22 ms | 15 ms | 0.0 ms | 913 voxels, hash equal to the PC's (0.4 ms); directions equal to the PC's (0.17 ms); plans equal to the PC's (0.49 ms) |
+| `p4_c_360mhz` | 360 MHz | s3 | 10 Hz | 2 | C | 339 | 338 of 338 | 2108 observations, hash equal to the PC's | 173 / 160 / 289 ms | 142 ms | 24 ms | 7 ms | 0.0 ms | 947 voxels, hash equal to the PC's (0.4 ms); directions equal to the PC's (0.18 ms); plans equal to the PC's (0.54 ms) |
+| `p4_c_360mhz_5hz` | 360 MHz | s3 | 5 Hz | 2 | C | 170 | 169 of 169 | 1348 observations, hash equal to the PC's | 220 / 226 / 308 ms | 184 ms | 22 ms | 14 ms | 0.0 ms | 913 voxels, hash equal to the PC's (0.4 ms); directions equal to the PC's (0.18 ms); plans equal to the PC's (0.50 ms) |
 
 Re-run (after `uwslam.mvo compare --board-frames` and `uwslam.mono_map --board-masks`):
 
 ```bash
 idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_240 -p <port> flash
-idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_p4 -D SDKCONFIG=build_p4/sdkconfig -D IDF_TARGET=esp32p4 -p <port> flash   # an ESP32-P4
+idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_p4 -D SDKCONFIG=build_p4/sdkconfig -D IDF_TARGET=esp32p4 -p <port> flash   # an ESP32-P4: the p4 configuration (UWSLAM_CONFIG=p4 on the PC)
 python -m uwslam.mvo_stream --port <port> --frames <frames file> --masks <masks file> --label <name>
 ```

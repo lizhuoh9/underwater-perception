@@ -12,6 +12,8 @@ import unittest
 
 import numpy as np
 
+from uwslam.mvo import config_defines
+
 HAS_DEPENDENCIES = shutil.which("gcc") is not None and find_spec("cv2") is not None
 if HAS_DEPENDENCIES:
     from tests.test_mvo import WALL_Z, render, texture
@@ -31,7 +33,8 @@ class PathPlanContractTests(unittest.TestCase):
             sources = [ROOT / "tests/c/path_plan_check.c", ROOT / "core/path_plan.c", ROOT / "core/obstacle_dir.c",
                        ROOT / "core/voxel_map.c", *(ROOT / "core" / name for name in units)]
             subprocess.run(["gcc", "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-pedantic", "-ffp-contract=off",
-                            *STATIC, f"-I{ROOT / 'core'}", *map(str, sources), "-o", str(program)], check=True)
+                            *config_defines(), *STATIC, f"-I{ROOT / 'core'}", *map(str, sources), "-o", str(program)],
+                           check=True)
             output = subprocess.run([str(program)], check=True, capture_output=True, text=True).stdout
         self.assertIn("path_plan_check ok", output)
 
@@ -58,6 +61,13 @@ class PathPlanTests(unittest.TestCase):
     def test_ranges_in_steps_follow_the_wall(self):
         result = path_plan.run_planning(self.lib, self.frames, [None] * len(self.frames), self.camera)
         self.assertTrue(all(step.kind == 2 for step in result["steps"]))
+        if mvo.CONFIG == "p4":
+            # A known limit of that configuration (README, ESP32-P4): its maps file only points from rays 1.5 degrees
+            # apart, and driving straight at the wall the points ahead never get there, so no range is known straight
+            # ahead while the directions around it have one. Pinned so that a change to it shows.
+            self.assertFalse(any((plan["known"] >> path_plan.CENTRE) & 1 for plan in result["plans"]))
+            self.assertTrue(all(plan["known"] for plan in result["plans"][1:]))
+            return
         checked = 0
         for k, plan in enumerate(result["plans"]):
             if not (plan["known"] >> path_plan.CENTRE) & 1:

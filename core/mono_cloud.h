@@ -22,7 +22,7 @@
 #include "mono_vo.h"
 
 #define MC_MAX_POINTS 512
-#define MC_MIN_SPREAD 3.0e-4f /* squared sine of 1 degree, as in mono_map.h */
+#define MC_MIN_SPREAD MVO_MAP_MIN_SPREAD /* the build configuration's (mono_vo.h): 1 degree, 1.5 on a P4 */
 
 typedef struct {
     float xyz[3];          /* world coordinates in odometry units */

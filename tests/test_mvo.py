@@ -195,8 +195,8 @@ class MonoVoCTests(unittest.TestCase):
         # of the residuals, whose own error shrinks as h^2: to about a quarter when h halves.
         program = self.folder / "mvo_jacobian_check.exe"
         units = [str(mvo.CORE_DIR / name) for name in mvo.CORE_FILES if name.endswith(".c") and name != "mono_vo_essential.c"]
-        subprocess.run(["gcc", *CFLAGS, *STATIC, f"-I{mvo.CORE_DIR}", str(C_CHECKS / "mvo_jacobian_check.c"), *units,
-                        "-o", str(program)], check=True)
+        subprocess.run(["gcc", *CFLAGS, *mvo.config_defines(), *STATIC, f"-I{mvo.CORE_DIR}",
+                        str(C_CHECKS / "mvo_jacobian_check.c"), *units, "-o", str(program)], check=True)
         printed = subprocess.run([str(program)], capture_output=True, text=True, check=True).stdout
         values = {key: float(value) for key, value in (pair.split("=") for pair in printed.split())}
         self.assertGreater(values["largest"], 10.0)
@@ -212,8 +212,8 @@ class MonoVoCTests(unittest.TestCase):
         # pairs must leave no pull at all while a fast turn's get one.
         program = self.folder / "mvo_turn_pull_check.exe"
         units = [str(mvo.CORE_DIR / name) for name in mvo.CORE_FILES if name.endswith(".c") and name != "mono_vo_essential.c"]
-        subprocess.run(["gcc", *CFLAGS, *STATIC, f"-I{mvo.CORE_DIR}", str(C_CHECKS / "mvo_turn_pull_check.c"), *units,
-                        "-o", str(program)], check=True)
+        subprocess.run(["gcc", *CFLAGS, *mvo.config_defines(), *STATIC, f"-I{mvo.CORE_DIR}",
+                        str(C_CHECKS / "mvo_turn_pull_check.c"), *units, "-o", str(program)], check=True)
         printed = subprocess.run([str(program)], capture_output=True, text=True, check=True).stdout
         values = {key: float(value) for key, value in (pair.split("=") for pair in printed.split())}
         self.assertGreater(values["gradient_largest"], 10.0)

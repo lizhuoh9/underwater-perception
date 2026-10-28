@@ -14,6 +14,10 @@ uint32_t mvo_state_size(void) { return (uint32_t)sizeof(mvo_t); }
 
 uint32_t mvo_pyramid_bytes(void) { return (uint32_t)MVO_PYRAMID_BYTES; }
 
+const char *mvo_config_name(void) { return MVO_CONFIG_NAME; }
+
+uint32_t mvo_max_features(void) { return (uint32_t)MVO_MAX_FEATURES; }
+
 float mvo_sqrt(float v) { return mvo_root(v); }
 
 int mvo_tracks(const mvo_t *s, float *xy, uint32_t *ids, int capacity)

@@ -33,7 +33,12 @@ typedef struct { /* one half of the detector: the two may run at the same time *
     float best;                               /* strongest response of the half's rows */
 } mvo_detector_t;
 static mvo_detector_t s_detector[2];
-static uint8_t s_grid[MVO_GRID_H][MVO_GRID_W][MVO_CELL_CAPACITY]; /* feature indices: MVO_MAX_FEATURES is below 256 */
+#if MVO_MAX_FEATURES < 256
+typedef uint8_t mvo_grid_index_t; /* a feature's place in mvo_t.feature, a byte while it fits (the S3's RAM) */
+#else
+typedef uint16_t mvo_grid_index_t;
+#endif
+static mvo_grid_index_t s_grid[MVO_GRID_H][MVO_GRID_W][MVO_CELL_CAPACITY]; /* feature indices */
 static uint8_t s_grid_count[MVO_GRID_H][MVO_GRID_W];
 typedef struct { /* one tracker's scratch: the two halves of the features may run at the same time */
     mvo_window_t window;
@@ -323,7 +328,7 @@ static void grid_add(int index, float x, float y)
     if (gx < 0 || gy < 0 || gx >= MVO_GRID_W || gy >= MVO_GRID_H || s_grid_count[gy][gx] >= MVO_CELL_CAPACITY) {
         return;
     }
-    s_grid[gy][gx][s_grid_count[gy][gx]++] = (uint8_t)index;
+    s_grid[gy][gx][s_grid_count[gy][gx]++] = (mvo_grid_index_t)index;
 }
 
 /* Half `part` of the corner search: the responses of its rows, their strongest local maxima (into its heap) and the

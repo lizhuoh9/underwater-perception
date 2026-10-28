@@ -9,7 +9,9 @@ argument-hint: "<label> [rates, default 5,10]"
 Shows whether the working tree is more accurate than the last commit on the lake clip, under identical settings.
 
 Arguments: $ARGUMENTS (a label for the output folder; the rates, default `5,10`). The Python, video and
-reconstruction come from `CLAUDE.local.md`. Run from the repository root; `<out>` is `local/lake-score/<label>`.
+reconstruction come from `CLAUDE.local.md`. Run from the repository root; `<out>` is `local/lake-score/<label>`. Every
+run builds the core in the configuration `UWSLAM_CONFIG` names (`s3` by default, or `p4`); set it the same for both trees
+unless the configuration is what is being compared (the scorings record it and `compare` prints it).
 
 ## Steps
 

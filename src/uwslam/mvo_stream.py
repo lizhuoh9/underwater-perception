@@ -43,6 +43,7 @@ READY_TIMEOUT_S = 20.0
 REPLY_TIMEOUT_S = 30.0
 LINK_BAUD = 921_600  # a UART link's rate (the firmware's LINK_BAUD); a USB-Serial-JTAG port ignores it. A CH340
 # bridge's link at 2 Mbaud lost single bytes of the board's replies in two of three lake runs.
+CONFIG_FEATURES = {"s3": 250, "p4": 300}  # uwslam.mvo.CONFIGS: MVO_MAX_FEATURES of each build configuration
 STEP_FIELDS = ("index", "kind", "tracks", "inliers", "scale_points", "hash", "detect_us", "track_us",
                "motion_us", "total_us")  # every step line carries these
 SELFTEST_CASES, SELFTEST_SEED = 2000, 12345
@@ -115,6 +116,29 @@ def check_continuity(reply: dict, expected: int, where: str) -> None:
         raise RuntimeError(f"Board {where} map_continuous={actual!r}; expected {expected}")
 
 
+def expectation_config(expected: dict) -> str:
+    """The build configuration an expectation was made with: "s3" (the default) or "p4" (uwslam.mvo.CONFIGS);
+    expectations from before configurations existed are "s3"."""
+    config = expected.get("config", "s3")
+    if (not isinstance(config, str) or config not in CONFIG_FEATURES
+            or expected.get("max_features", CONFIG_FEATURES[config]) != CONFIG_FEATURES[config]):
+        raise ValueError(f"Unknown build configuration {config!r} with {expected.get('max_features')} features")
+    return config
+
+
+def max_features(expected: dict) -> int:
+    """MVO_MAX_FEATURES of the expectation's build configuration: no step tracks, maps or files more points."""
+    return CONFIG_FEATURES[expectation_config(expected)]
+
+
+def check_same_config(name: str, auxiliary: dict, expected: dict) -> None:
+    """Refuse a map, cloud, voxel or plan expectation made in another build configuration than the odometry's (the
+    obstacle directions come from the masks alone and are the same in both)."""
+    if expectation_config(auxiliary) != expectation_config(expected):
+        raise ValueError(f"The {name} expectation was made in the {expectation_config(auxiliary)!r} build "
+                         f"configuration, the odometry's in {expectation_config(expected)!r}")
+
+
 def validate_expected_cloud(cloud: dict, expected: dict) -> None:
     """Check the complete PC cloud run before opening a serial port."""
     if not isinstance(cloud, dict) or type(cloud.get("cloud_policy")) is not int or cloud["cloud_policy"] != CLOUD_POLICY:
@@ -139,7 +163,7 @@ def validate_expected_cloud(cloud: dict, expected: dict) -> None:
     for item in progress:
         if not isinstance(item, dict) or any(type(item.get(key)) is not int for key in ("count", "accepted", "dropped", "continuous")):
             raise ValueError("Invalid cloud progress")
-        if (not previous["count"] <= item["count"] <= CLOUD_CAPACITY or not 0 <= item["accepted"] <= 250
+        if (not previous["count"] <= item["count"] <= CLOUD_CAPACITY or not 0 <= item["accepted"] <= max_features(expected)
                 or not previous["dropped"] <= item["dropped"] <= 0xffffffff
                 or item["continuous"] not in (0, 1) or item["continuous"] > previous["continuous"]
                 or item["count"] - previous["count"] > item["accepted"]
@@ -162,7 +186,8 @@ def validate_expected_voxels(voxels: dict, expected: dict) -> None:
     if (voxels.get("frames") != expected.get("frames") or not isinstance(progress, list)
             or len(progress) != len(expected["step_hashes"])
             or any(not isinstance(item, dict) or type(item.get("count")) is not int or type(item.get("filed")) is not int
-                   or not 0 <= item["count"] <= VOXEL_CAPACITY or not 0 <= item["filed"] <= 250 for item in progress)):
+                   or not 0 <= item["count"] <= VOXEL_CAPACITY or not 0 <= item["filed"] <= max_features(expected)
+                   for item in progress)):
         raise ValueError("The voxel expectation needs one voxel count and filed number per step")
     if type(voxels.get("voxel_hash")) is not int or not all(is_sha256(voxels.get(key)) for key in VOXEL_SOURCES):
         raise ValueError("The voxel expectation needs the map's hash and its sources' SHA-256")
@@ -309,16 +334,20 @@ def stream(port_name: str, frames_path: Path, expected_path: Path, limit: int | 
     vector kernels or (simd False) the portable ones and, with masks, building the map; the record and the board's
     lines."""
     expected = json.loads(expected_path.read_text(encoding="utf-8"))
+    expectation_config(expected)  # refuse an unknown configuration before opening the board
     if masks_path is not None and expected_map_path is None:
         raise ValueError("A map expectation is required when streaming masks")
     expected_map = json.loads(expected_map_path.read_text(encoding="utf-8")) if masks_path is not None else None
     if expected_map is not None:
+        check_same_config("map", expected_map, expected)
         validate_expected_map(expected_map, expected)
     expected_cloud = json.loads(expected_cloud_path.read_text(encoding="utf-8")) if expected_cloud_path is not None else None
     if expected_cloud is not None:
+        check_same_config("cloud", expected_cloud, expected)
         validate_expected_cloud(expected_cloud, expected)
     expected_voxels = json.loads(expected_voxels_path.read_text(encoding="utf-8")) if expected_voxels_path else None
     if expected_voxels is not None:
+        check_same_config("voxel", expected_voxels, expected)
         validate_expected_voxels(expected_voxels, expected)
     expected_dirs = json.loads(expected_dirs_path.read_text(encoding="utf-8")) if expected_dirs_path else None
     if expected_dirs is not None:
@@ -327,6 +356,7 @@ def stream(port_name: str, frames_path: Path, expected_path: Path, limit: int | 
         validate_expected_dirs(expected_dirs, expected)
     expected_plan = json.loads(expected_plan_path.read_text(encoding="utf-8")) if expected_plan_path else None
     if expected_plan is not None:
+        check_same_config("plan", expected_plan, expected)
         validate_expected_plan(expected_plan, expected)
     if limit is not None and limit < 1:
         raise ValueError("The frame limit must be at least 1")
@@ -379,6 +409,10 @@ def stream(port_name: str, frames_path: Path, expected_path: Path, limit: int | 
             if key not in ready or key not in source or ready[key] != source[key]:
                 raise RuntimeError(f"The board's {key} differs from the PC run's: rebuild and flash the firmware, or "
                                    "re-run the PC side on the current sources")
+        if ready.get("config") != expectation_config(expected) or ready.get("max_features") != max_features(expected):
+            raise RuntimeError(f"The board runs the {ready.get('config')!r} build configuration with "
+                               f"{ready.get('max_features')} features, the PC run {expectation_config(expected)!r}: flash the "
+                               "matching firmware, or re-run the PC side with UWSLAM_CONFIG set to the board's")
         camera = expected["camera_bits"]  # fx fy cx cy, then the lens's k1 k2 p1 p2 k3 (none: a pinhole)
         if len(camera) not in (4, 9) or not all(type(bits) is int and 0 <= bits <= 0xffffffff for bits in camera):
             raise RuntimeError("The expectation's camera_bits must be 4 or 9 float bit patterns")
@@ -508,7 +542,7 @@ def stream(port_name: str, frames_path: Path, expected_path: Path, limit: int | 
                       + (" and sparse cloud" if expected_cloud is not None else "")
                       + " on an ESP32 board, replayed over its serial link against the PC build",
               "frames_file": frames_path.name, "expected_file": expected_path.name, "rate_hz": expected.get("rate_hz", 10.0),
-              "cpu_mhz": ready["cpu_mhz"],
+              "cpu_mhz": ready["cpu_mhz"], "config": ready["config"],
               **{key: ready[key] for key in SOURCES + (MAP_SOURCES if expected_map is not None else ())},
               "state_bytes": started["state_bytes"], "cores": started["cores"], "simd": bool(started["simd"]),
               "kernel_selftest": selftest, "frames": count,
@@ -585,7 +619,7 @@ def write_board_section(results: Path) -> None:
         rate = record.get("rate_hz", 10.0)
         rate_text = f"{rate:g} Hz" if isinstance(rate, (int, float)) and math.isfinite(rate) and rate > 0 else "unknown"
         clock = f"{record['cpu_mhz']} MHz" if "cpu_mhz" in record else "—"
-        rows.append(f"| `{path.stem}` | {clock} | {rate_text} | {record['cores']} | {kernels} | "
+        rows.append(f"| `{path.stem}` | {clock} | {record.get('config', 's3')} | {rate_text} | {record['cores']} | {kernels} | "
                     f"{record['frames']} | "
                     f"{record['steps'] - len(record['mismatched_steps'])} of {record['steps']} | {map_cell} | "
                     f"{step_time} | {' | '.join(stage_times)} | {map_time} | {extra_cell} |")
@@ -593,18 +627,19 @@ def write_board_section(results: Path) -> None:
                "The host streams grayscale frames and optional masks over the board's serial link (`python -m "
                "uwslam.mvo_stream`): the ESP32-S3's USB-Serial-JTAG port, or an ESP32-P4 board's USB-UART bridge. The "
                "board reports each step's hash and stage times. These timings exclude capture and transfer. Each record "
-               "provides its own clock, rate, core count and kernel choice (the vector kernels are mvo_pie.S on the S3 "
-               "and mvo_pie_p4.S on the P4). Before streaming, the board checks its vector dispatch against C on random "
-               "windows. "
-               "Records and raw serial lines are in `board/`.", "",
-               "| Record | Clock | Rate | Cores | Kernels | Frames | Steps equal to the PC | Map | Per step, mean / "
-               "median / max | Tracking | Motion | Detection | Map update | Voxel map / directions / plan (update) |",
-               "|---|---:|---:|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---|",
+               "provides its own clock, build configuration (core/mono_vo.h: s3, the default, or p4), rate, core count "
+               "and kernel choice (the vector kernels are mvo_pie.S on the S3 and mvo_pie_p4.S on the P4). Before "
+               "streaming, the board checks its vector dispatch against C on random windows. Records and raw serial "
+               "lines are in `board/`.", "",
+               "| Record | Clock | Config | Rate | Cores | Kernels | Frames | Steps equal to the PC | Map | Per step, "
+               "mean / median / max | Tracking | Motion | Detection | Map update | Voxel map / directions / plan "
+               "(update) |",
+               "|---|---:|---|---:|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---|",
                *rows, "",
                "Re-run (after `uwslam.mvo compare --board-frames` and `uwslam.mono_map --board-masks`):", "", "```bash",
                "idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_240 -p <port> flash",
                "idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_p4 -D SDKCONFIG=build_p4/sdkconfig "
-               "-D IDF_TARGET=esp32p4 -p <port> flash   # an ESP32-P4",
+               "-D IDF_TARGET=esp32p4 -p <port> flash   # an ESP32-P4: the p4 configuration (UWSLAM_CONFIG=p4 on the PC)",
                "python -m uwslam.mvo_stream --port <port> --frames <frames file> --masks <masks file> --label <name>",
                "```", ""]
     report = results / "RESULTS.md"

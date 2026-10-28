@@ -80,7 +80,8 @@ clip the seed alone can change an error twofold.
 │   └── experiments/            the OpenCV prototype (mono_vo), the reference poses and masks (mask_motion), the
 │                               segmentation model runner (segmenter)
 ├── tests/                      unittest suite; tests/c/ holds the C contract checks and firmware host harnesses
-└── results/lake_clip/          reference results, one folder per tool, each with RESULTS.md
+├── results/lake_clip/          reference results, one folder per tool, each with RESULTS.md
+└── results/lake_clip_p4/       the results of the tools that build the core, in the p4 configuration (UWSLAM_CONFIG=p4)
 ```
 
 ## Getting started
@@ -105,13 +106,17 @@ python -m uwslam.path_plan <video> --reconstruction <folder> --output results/la
 python -m uwslam.mono_map <video> --reconstruction <folder> --output results/lake_clip/mono_map_2 --board-masks <masks file>
 ```
 
+The core has two build configurations ([core/mono_vo.h](core/mono_vo.h)): `s3`, the default, and `p4` for the
+ESP32-P4 (300 features, map points from rays at least 1.5° apart; see ESP32-P4 below). The tools and tests build the one
+the `UWSLAM_CONFIG` environment variable names, `s3` when it is unset, and record it in their outputs.
+
 The water masks come from [mask_motion](src/uwslam/experiments/mask_motion.py), which runs an exported ESP-DL int8
 segmentation model on the clip ([segmenter.py](src/uwslam/experiments/segmenter.py) describes the model folder).
 
 ## Monocular odometry
 
-[core/mono_vo.h](core/mono_vo.h) tracks up to 250 Shi-Tomasi corners with a fixed-point pyramidal Lucas-Kanade and a
-forward-backward check. When the tracks fit a pure turn (a homography within 1 px), the step is that rotation.
+[core/mono_vo.h](core/mono_vo.h) tracks up to 250 Shi-Tomasi corners (300 in the p4 configuration) with a fixed-point
+pyramidal Lucas-Kanade and a forward-backward check. When the tracks fit a pure turn (a homography within 1 px), the step is that rotation.
 Otherwise an eight-point MSAC essential matrix, a search over travel directions and a robust Levenberg-Marquardt
 give the motion, unless a separately fitted rotation explains the tracks as well. A fast turn adds a pull towards the
 homography's turn. Translation is accepted only when the evidence favours it. The step length comes from the depth
@@ -298,9 +303,9 @@ idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_p4 -D SDKCO
 python -m uwslam.mvo_stream --port <PORT> ...   # the same arguments as for the S3
 ```
 
-Measured on an ESP32-P4 (chip revision v1.3) at 360 MHz, two cores, no PSRAM
-([results/lake_clip/mono_vo_c/board](results/lake_clip/mono_vo_c/board): records `p4_360mhz*`, and `p4_c_*` for the
-same runs tracking with the portable C kernels):
+Measured on an ESP32-P4 (chip revision v1.3) at 360 MHz, two cores, no PSRAM, in the default configuration, before
+the P4 firmware got its own (below; [results/lake_clip/mono_vo_c/board](results/lake_clip/mono_vo_c/board): records
+`p4_360mhz*`, and `p4_c_*` for the same runs tracking with the portable C kernels):
 
 | | 5 Hz (169 steps) | 10 Hz (338 steps) |
 |---|---:|---:|
@@ -321,6 +326,35 @@ version was written for the P4. Against the S3, tracking runs 1.9 times faster, 
 step takes 74 ms instead of 161, and 18 times as much internal RAM stays free. At 10 Hz every step, the slowest
 included, computes within the 100 ms between frames. These are the board's compute times: the replay over the UART
 feeds about a frame a second, and the segmentation model is not in them.
+
+#### The p4 configuration
+
+With the time the P4 leaves over, its firmware builds the `p4` configuration of the core (`MVO_CONFIG_P4` in
+[core/mono_vo.h](core/mono_vo.h); on the PC `UWSLAM_CONFIG=p4`, results in [results/lake_clip_p4](results/lake_clip_p4)).
+It tracks 300 features instead of 250, and its maps file only points from rays at least 1.5° apart instead of 1°. Of
+the ways tried to spend the P4's time on accuracy, more features helped, and only at 5 Hz (640×480 frames, 10 Hz input,
+more RANSAC samples, refinement or tracking iterations and a larger voxel map did not):
+
+| Lake clip, 16 seeds | default (250 features) | p4 (300) |
+|---|---:|---:|
+| 5 Hz, 10 s windows (192 paired runs): position RMSE, median | 0.079 m | 0.067 m (lower in 68%) |
+| 5 Hz, 10 s windows: heading RMSE, median | 8.6° | 8.3° (lower in 47%) |
+| 5 Hz, full clip: position RMSE | 0.33 m [0.24–0.45] | 0.26 m [0.21–0.31] |
+| 5 Hz, full clip: scale spread | 2.6× | 2.1× |
+| 10 Hz, 10 s windows: position / heading RMSE, median | 0.078 m / 11.2° | 0.083 m / 13.4° |
+| 5 Hz voxel map: local / global median distance, obstacles held | 0.061 / 0.16 m, 717 | 0.061 / 0.15 m, 687 |
+
+A 19×19 tracking window instead of 15×15, on top of the 300 features, improved the heading over the 5 Hz windows (7.8°
+against 8.3°, lower in 57%) and the full-clip position (0.21 m against 0.26 m), but not the position over the windows
+or the full-clip heading. It needs new P4 vector kernels and is left for later.
+
+The extra features triangulate less well: filed from 1°, the voxel map's local error grew from 6.1 to 7.1 cm, which the
+1.5° admission takes back. The admission drops the points with the least parallax, and forward motion leaves those in
+the direction of travel. Against 300 features filed from 1°, the 5 Hz map holds 687 obstacles instead of about 790
+(medians of 16 seeds). Driving straight at a wall in the synthetic test, the default configuration knows the range
+straight ahead in 6 of 11 steps and this one in none, as does the default with only the 1.5° admission; that test is
+skipped in this configuration. The obstacle directions from the mask, which block such a wall, are the same in both
+configurations.
 
 ## Limitations
 

@@ -85,6 +85,8 @@ void mvo_start(mvo_t *s)
 void mvo_step(mvo_t *s, mvo_step_t *out)
 { (void)s; memset(out, 0, sizeof *out); out->kind = fake_kind; }
 uint32_t mvo_state_size(void) { return sizeof(mvo_t); }
+const char *mvo_config_name(void) { return MVO_CONFIG_NAME; }
+uint32_t mvo_max_features(void) { return MVO_MAX_FEATURES; }
 float mvo_sqrt(float v) { return v > 0.0f ? v : 0.0f; } /* the planner's ranges are not checked here */
 void mm_init(mm_map_t *map) { memset(map, 0, sizeof *map); }
 int mm_observe(const mvo_t *vo, const uint8_t *mask, int w, int h, float (*out)[3], int capacity)

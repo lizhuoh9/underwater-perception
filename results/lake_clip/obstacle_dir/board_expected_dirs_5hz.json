@@ -521,5 +521,7 @@
   "dir_frames": 169,
   "dir_hash": 958248937,
   "dir_sha256": "ed8b510cdc05db181f41d5b8426ee2c7ee8d03d5ae04caa295ab71b7b3d12aa6",
-  "dir_header_sha256": "4ec7b465dba1fc9b51670029a93c806a4c9def2895b00a6bacbe8050b274813d"
+  "dir_header_sha256": "4ec7b465dba1fc9b51670029a93c806a4c9def2895b00a6bacbe8050b274813d",
+  "config": "s3",
+  "max_features": 250
 }
