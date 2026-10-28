@@ -1,0 +1,3 @@
+# LF everywhere, on every platform: tools record SHA-256 hashes of source files (the C core above all), and those must
+# not change with a checkout's line endings.
+* text=auto eol=lf

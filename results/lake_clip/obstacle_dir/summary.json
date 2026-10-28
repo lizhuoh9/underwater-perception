@@ -1,0 +1,257 @@
+{
+  "task": "Obstacle directions from the segmentation's water masks on the lake clip, scored against the reference reconstruction's depth",
+  "sources_sha256": {
+    "dir_sha256": "b268c26414344dfab7e7d339093cf0265381efb295c108101bde23ee03526993",
+    "dir_header_sha256": "86c4e58d0c0540613d46fbb78a847d8ee3e0aac4d49ded54d0c4f20e737fb943"
+  },
+  "masks": "frames.npz",
+  "time_scale": 3.0,
+  "hfov_deg": 110.0,
+  "ranges_m": [
+    0.5,
+    1.0,
+    2.0
+  ],
+  "reference_cell": {
+    "min_points": 2,
+    "depth_percentile": 0.05
+  },
+  "runs": [
+    {
+      "rate_hz": 10.0,
+      "frames": 339,
+      "no_free_direction": 0.032448377581120944,
+      "blocked_rate": {
+        "up hard left": 0.6873156342182891,
+        "up left": 0.8407079646017699,
+        "up ahead": 0.9587020648967551,
+        "up right": 0.976401179941003,
+        "up hard right": 0.9705014749262537,
+        "level hard left": 0.032448377581120944,
+        "level left": 0.19469026548672566,
+        "level ahead": 0.8849557522123894,
+        "level right": 0.9351032448377581,
+        "level hard right": 0.9616519174041298,
+        "down hard left": 1.0,
+        "down left": 1.0,
+        "down ahead": 1.0,
+        "down right": 1.0,
+        "down hard right": 1.0
+      },
+      "within_0.5_m": {
+        "bands": {
+          "up": {
+            "reference_blocked": 0.24660766961651917,
+            "mask_blocked": 0.8867256637168142,
+            "recall": 0.9976076555023924,
+            "precision": 0.2774451097804391
+          },
+          "level": {
+            "reference_blocked": 0.26489675516224187,
+            "mask_blocked": 0.6017699115044248,
+            "recall": 1.0,
+            "precision": 0.44019607843137254
+          },
+          "down": {
+            "reference_blocked": 0.6058997050147492,
+            "mask_blocked": 1.0,
+            "recall": 1.0,
+            "precision": 0.6058997050147492
+          },
+          "all": {
+            "reference_blocked": 0.37246804326450345,
+            "mask_blocked": 0.8294985250737463,
+            "recall": 0.9994720168954594,
+            "precision": 0.4487908961593172
+          }
+        },
+        "choice_free": 1.0,
+        "ahead_free": 0.8702064896755162,
+        "random_free": 0.6519174041297935,
+        "share_correlation": 0.5434399805212814
+      },
+      "within_1_m": {
+        "bands": {
+          "up": {
+            "reference_blocked": 0.35693215339233036,
+            "mask_blocked": 0.8867256637168142,
+            "recall": 0.9983471074380166,
+            "precision": 0.4018629407850965
+          },
+          "level": {
+            "reference_blocked": 0.44896755162241886,
+            "mask_blocked": 0.6017699115044248,
+            "recall": 0.9986859395532195,
+            "precision": 0.7450980392156863
+          },
+          "down": {
+            "reference_blocked": 0.8289085545722714,
+            "mask_blocked": 1.0,
+            "recall": 1.0,
+            "precision": 0.8289085545722714
+          },
+          "all": {
+            "reference_blocked": 0.5449360865290069,
+            "mask_blocked": 0.8294985250737463,
+            "recall": 0.9992782389029231,
+            "precision": 0.6564722617354196
+          }
+        },
+        "choice_free": 1.0,
+        "ahead_free": 0.6106194690265486,
+        "random_free": 0.45132743362831856,
+        "share_correlation": 0.6874171665499008
+      },
+      "within_2_m": {
+        "bands": {
+          "up": {
+            "reference_blocked": 0.35929203539823007,
+            "mask_blocked": 0.8867256637168142,
+            "recall": 0.9983579638752053,
+            "precision": 0.4045242847638057
+          },
+          "level": {
+            "reference_blocked": 0.5421828908554572,
+            "mask_blocked": 0.6017699115044248,
+            "recall": 0.9945593035908596,
+            "precision": 0.8960784313725491
+          },
+          "down": {
+            "reference_blocked": 0.8507374631268436,
+            "mask_blocked": 1.0,
+            "recall": 1.0,
+            "precision": 0.8507374631268436
+          },
+          "all": {
+            "reference_blocked": 0.584070796460177,
+            "mask_blocked": 0.8294985250737463,
+            "recall": 0.997979797979798,
+            "precision": 0.7027027027027027
+          }
+        },
+        "choice_free": 0.9878048780487805,
+        "ahead_free": 0.19469026548672566,
+        "random_free": 0.40412979351032446,
+        "share_correlation": 0.7154163579831659
+      }
+    },
+    {
+      "rate_hz": 5.0,
+      "frames": 170,
+      "no_free_direction": 0.03529411764705882,
+      "blocked_rate": {
+        "up hard left": 0.7176470588235294,
+        "up left": 0.8117647058823529,
+        "up ahead": 0.9941176470588236,
+        "up right": 0.9823529411764705,
+        "up hard right": 0.9823529411764705,
+        "level hard left": 0.03529411764705882,
+        "level left": 0.21176470588235294,
+        "level ahead": 0.8941176470588236,
+        "level right": 0.9411764705882353,
+        "level hard right": 0.9647058823529412,
+        "down hard left": 1.0,
+        "down left": 1.0,
+        "down ahead": 1.0,
+        "down right": 1.0,
+        "down hard right": 1.0
+      },
+      "within_0.5_m": {
+        "bands": {
+          "up": {
+            "reference_blocked": 0.24823529411764705,
+            "mask_blocked": 0.8976470588235295,
+            "recall": 1.0,
+            "precision": 0.2765399737876802
+          },
+          "level": {
+            "reference_blocked": 0.2647058823529412,
+            "mask_blocked": 0.6094117647058823,
+            "recall": 1.0,
+            "precision": 0.4343629343629344
+          },
+          "down": {
+            "reference_blocked": 0.6058823529411764,
+            "mask_blocked": 1.0,
+            "recall": 1.0,
+            "precision": 0.6058823529411764
+          },
+          "all": {
+            "reference_blocked": 0.3729411764705882,
+            "mask_blocked": 0.8356862745098039,
+            "recall": 1.0,
+            "precision": 0.44626935710933835
+          }
+        },
+        "choice_free": 1.0,
+        "ahead_free": 0.8705882352941177,
+        "random_free": 0.6470588235294118,
+        "share_correlation": 0.5430984820266064
+      },
+      "within_1_m": {
+        "bands": {
+          "up": {
+            "reference_blocked": 0.35764705882352943,
+            "mask_blocked": 0.8976470588235295,
+            "recall": 1.0,
+            "precision": 0.3984272608125819
+          },
+          "level": {
+            "reference_blocked": 0.4505882352941176,
+            "mask_blocked": 0.6094117647058823,
+            "recall": 0.9973890339425587,
+            "precision": 0.7374517374517374
+          },
+          "down": {
+            "reference_blocked": 0.8270588235294117,
+            "mask_blocked": 1.0,
+            "recall": 1.0,
+            "precision": 0.8270588235294117
+          },
+          "all": {
+            "reference_blocked": 0.5450980392156862,
+            "mask_blocked": 0.8356862745098039,
+            "recall": 0.9992805755395684,
+            "precision": 0.6518066635382449
+          }
+        },
+        "choice_free": 1.0,
+        "ahead_free": 0.611764705882353,
+        "random_free": 0.4117647058823529,
+        "share_correlation": 0.6868421369490209
+      },
+      "within_2_m": {
+        "bands": {
+          "up": {
+            "reference_blocked": 0.36,
+            "mask_blocked": 0.8976470588235295,
+            "recall": 1.0,
+            "precision": 0.40104849279161203
+          },
+          "level": {
+            "reference_blocked": 0.5423529411764706,
+            "mask_blocked": 0.6094117647058823,
+            "recall": 0.9956616052060737,
+            "precision": 0.8861003861003861
+          },
+          "down": {
+            "reference_blocked": 0.8494117647058823,
+            "mask_blocked": 1.0,
+            "recall": 1.0,
+            "precision": 0.8494117647058823
+          },
+          "all": {
+            "reference_blocked": 0.5839215686274509,
+            "mask_blocked": 0.8356862745098039,
+            "recall": 0.9986568166554735,
+            "precision": 0.697794462693571
+          }
+        },
+        "choice_free": 0.9939024390243902,
+        "ahead_free": 0.19411764705882353,
+        "random_free": 0.36470588235294116,
+        "share_correlation": 0.715827725258762
+      }
+    }
+  ]
+}

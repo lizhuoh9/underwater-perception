@@ -1,0 +1,147 @@
+{
+  "task": "Top-view obstacle map from the C monocular odometry and the segmentation's water masks on the lake clip, scored against the reconstruction's cloud after aligning the camera path",
+  "sources_sha256": {
+    "core_sha256": "a44e738e43c985cf0b70cfcb829b25934148bcc1b391ffd3b4c2893b9e38f4ea",
+    "header_sha256": "42529c08c9f9a790fcda254c067e1eb0deff7923e1e50be43f5eec716bb4e96e",
+    "map_sha256": "af787363388c606fa0c2a17521cbe5ccd35e90584eca4c89b5ed6c7eb9d7ac75",
+    "map_header_sha256": "008c1503644d44d81ede11bb065f1113eb3cc0a5f676296296a390acc875aea1"
+  },
+  "masks": "frames.npz",
+  "time_scale": 3.0,
+  "hfov_deg": 110.0,
+  "cloud_voxel_m": 0.03,
+  "runs": [
+    {
+      "rate_hz": 10.0,
+      "alignment_scale_m_per_unit": 0.07022781819935922,
+      "alignment_spread_ratio": 0.014607616650694493,
+      "ate_rmse_m": 0.1342618771817886,
+      "first_lost_frame": 44,
+      "map_continuous": false,
+      "continuous_frames": 44,
+      "scored_frames": 44,
+      "total_frames": 339,
+      "alignment_reason": null,
+      "observations": 3683,
+      "frames_with_observations": 38,
+      "distance_to_cloud_m": {
+        "median": 0.23941367864608765,
+        "within_0.1": 0.1341297855009503,
+        "within_0.2": 0.39125712734184087,
+        "within_0.3": 0.716806950855281
+      },
+      "grid": {
+        "cell_units": 1.4220058917999268,
+        "origin_cells": [
+          -65,
+          -64
+        ],
+        "occupied_cells": 232,
+        "unknown_cells": 16152,
+        "slice_y_units": -1.2059794664382935,
+        "height_resets": 1,
+        "hits": 2108,
+        "updates": 38,
+        "hash": 2352888977
+      },
+      "over_seeds": {
+        "seeds": [
+          12345,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "distance_median_m": {
+          "median": 0.23587963357567787,
+          "min": 0.188371941447258,
+          "max": 0.2403418868780136
+        },
+        "distance_valid_seeds": 16,
+        "ate_rmse_m": {
+          "median": 0.11910079860721129,
+          "min": 0.06777628120432176,
+          "max": 0.1342618771817886
+        },
+        "ate_valid_seeds": 16
+      }
+    },
+    {
+      "rate_hz": 5.0,
+      "alignment_scale_m_per_unit": 0.13731373361777047,
+      "alignment_spread_ratio": 0.018700485462141803,
+      "ate_rmse_m": 0.0769752985895947,
+      "first_lost_frame": 21,
+      "map_continuous": false,
+      "continuous_frames": 21,
+      "scored_frames": 21,
+      "total_frames": 170,
+      "alignment_reason": null,
+      "observations": 1692,
+      "frames_with_observations": 20,
+      "distance_to_cloud_m": {
+        "median": 0.17905476689338684,
+        "within_0.1": 0.16843971631205673,
+        "within_0.2": 0.5981087470449172,
+        "within_0.3": 0.8433806146572104
+      },
+      "grid": {
+        "cell_units": 1.0118441581726074,
+        "origin_cells": [
+          -65,
+          -64
+        ],
+        "occupied_cells": 179,
+        "unknown_cells": 16205,
+        "slice_y_units": -0.9603002667427063,
+        "height_resets": 1,
+        "hits": 1348,
+        "updates": 20,
+        "hash": 859110563
+      },
+      "over_seeds": {
+        "seeds": [
+          12345,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "distance_median_m": {
+          "median": 0.19181787222623825,
+          "min": 0.1780756711959839,
+          "max": 0.21474986523389816
+        },
+        "distance_valid_seeds": 16,
+        "ate_rmse_m": {
+          "median": 0.08741649653996805,
+          "min": 0.0762460084956558,
+          "max": 0.09983999941887149
+        },
+        "ate_valid_seeds": 16
+      }
+    }
+  ]
+}

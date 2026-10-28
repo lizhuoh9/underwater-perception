@@ -1,0 +1,308 @@
+{
+  "task": "C monocular visual odometry (pairwise method) on the lake clip's 320x240 robot frames, scored against the reference poses and set beside the OpenCV prototype",
+  "core_sha256": "a44e738e43c985cf0b70cfcb829b25934148bcc1b391ffd3b4c2893b9e38f4ea",
+  "state_bytes": 8200,
+  "pyramid_bytes_each": 102464,
+  "time_scale": 3.0,
+  "hfov_deg": 110.0,
+  "runs": [
+    {
+      "rate_hz": 10.0,
+      "c": {
+        "steps": 338,
+        "lost": 1,
+        "rotation_only": 12,
+        "kinds": {
+          "essential": 325,
+          "lost": 1,
+          "rotation": 12
+        },
+        "median_tracks": 159.0,
+        "ate_rmse": 0.35623462395011013,
+        "ate_max": 1.280972619126222,
+        "final_error": 0.3745154986823145,
+        "path_length_reference": 8.932997424309496,
+        "alignment_scale": 0.014665743074938913,
+        "pair_rotation_median_deg": 1.0828225908000326,
+        "pair_rotation_p90_deg": 2.6438166017562987,
+        "zero_rotation_median_deg": 0.9340647366841479,
+        "direction_median_deg": 12.626926947754997,
+        "direction_pairs": 197,
+        "heading_rmse_deg": 26.02564894615015,
+        "heading_max_deg": 48.170910895047136,
+        "scale_drift_window_ratio_min": 0.2107595946324551,
+        "scale_drift_window_ratio_max": 1.4108297201349032,
+        "ms_per_frame": 9.163342307792899
+      },
+      "c_over_seeds": {
+        "seeds": [
+          12345,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "ate_rmse": {
+          "median": 0.30673866299897545,
+          "min": 0.25028417091169075,
+          "max": 0.36827083665195826
+        },
+        "heading_rmse_deg": {
+          "median": 34.221636086791634,
+          "min": 26.02564894615015,
+          "max": 39.006516477835476
+        },
+        "scale_spread": {
+          "median": 3.4343879199988447,
+          "min": 1.6262014207453321,
+          "max": 12.497306706305114
+        },
+        "lost": {
+          "median": 2.0,
+          "min": 1.0,
+          "max": 5.0
+        }
+      },
+      "prototype": {
+        "method": "pairwise",
+        "resolution": "320x240",
+        "rate_hz": 10.0,
+        "ms_per_frame": 5.806599704055501,
+        "steps": 338,
+        "lost": 0,
+        "rotation_only": 1,
+        "kinds": {
+          "essential": 337,
+          "rotation": 1
+        },
+        "median_tracks": 144.0,
+        "ate_rmse": 0.4054972209567523,
+        "ate_max": 1.0231051636771915,
+        "final_error": 0.4086363965780453,
+        "path_length_reference": 8.932997424309496,
+        "alignment_scale": 0.040514697639329696,
+        "pair_rotation_median_deg": 1.2883558015574317,
+        "pair_rotation_p90_deg": 2.8190009298899854,
+        "zero_rotation_median_deg": 0.9340647366841479,
+        "direction_median_deg": 14.38983353698522,
+        "direction_pairs": 206,
+        "heading_rmse_deg": 27.433549395004857,
+        "heading_max_deg": 45.659115643489,
+        "scale_drift_window_ratio_min": 0.73121275741699,
+        "scale_drift_window_ratio_max": 1.6928850801014805
+      }
+    },
+    {
+      "rate_hz": 5.0,
+      "c": {
+        "steps": 169,
+        "lost": 12,
+        "rotation_only": 6,
+        "kinds": {
+          "essential": 151,
+          "lost": 12,
+          "rotation": 6
+        },
+        "median_tracks": 125.0,
+        "ate_rmse": 0.31912634179073635,
+        "ate_max": 1.1517681458852111,
+        "final_error": 0.3301914620754992,
+        "path_length_reference": 8.881177235471185,
+        "alignment_scale": 0.047982558418242595,
+        "pair_rotation_median_deg": 1.932341582294074,
+        "pair_rotation_p90_deg": 4.177444738362639,
+        "zero_rotation_median_deg": 1.7379290340112632,
+        "direction_median_deg": 11.466063062360028,
+        "direction_pairs": 145,
+        "heading_rmse_deg": 8.534725307579404,
+        "heading_max_deg": 32.49975042581958,
+        "scale_drift_window_ratio_min": 0.3076488295097558,
+        "scale_drift_window_ratio_max": 1.3474710331861328,
+        "ms_per_frame": 9.641845562128823
+      },
+      "c_over_seeds": {
+        "seeds": [
+          12345,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "ate_rmse": {
+          "median": 0.4035151149322657,
+          "min": 0.2938662455819192,
+          "max": 0.5140612442607725
+        },
+        "heading_rmse_deg": {
+          "median": 18.25753716109465,
+          "min": 8.534725307579404,
+          "max": 25.37070454700252
+        },
+        "scale_spread": {
+          "median": 5.821658781681551,
+          "min": 2.574869639046591,
+          "max": 8.001634815209794
+        },
+        "lost": {
+          "median": 11.0,
+          "min": 9.0,
+          "max": 14.0
+        }
+      },
+      "prototype": {
+        "method": "pairwise",
+        "resolution": "320x240",
+        "rate_hz": 5.0,
+        "ms_per_frame": 7.908765680209001,
+        "steps": 169,
+        "lost": 3,
+        "rotation_only": 0,
+        "kinds": {
+          "essential": 166,
+          "lost": 3
+        },
+        "median_tracks": 117.0,
+        "ate_rmse": 0.4383690818529417,
+        "ate_max": 1.1961591163214462,
+        "final_error": 0.4989637321991644,
+        "path_length_reference": 8.881177235471185,
+        "alignment_scale": 0.03943441633888266,
+        "pair_rotation_median_deg": 2.2422863624316816,
+        "pair_rotation_p90_deg": 4.574785573886561,
+        "zero_rotation_median_deg": 1.7379290340112632,
+        "direction_median_deg": 12.710320465553108,
+        "direction_pairs": 160,
+        "heading_rmse_deg": 25.68388943268506,
+        "heading_max_deg": 49.439786902061996,
+        "scale_drift_window_ratio_min": 0.477849473802234,
+        "scale_drift_window_ratio_max": 1.6119537630244025
+      }
+    },
+    {
+      "rate_hz": 3.0,
+      "c": {
+        "steps": 101,
+        "lost": 20,
+        "rotation_only": 0,
+        "kinds": {
+          "essential": 81,
+          "lost": 20
+        },
+        "median_tracks": 83.0,
+        "ate_rmse": 0.431115190919279,
+        "ate_max": 1.2611916797697218,
+        "final_error": 0.8301266555111174,
+        "path_length_reference": 8.755011057619953,
+        "alignment_scale": 0.07386266687732919,
+        "pair_rotation_median_deg": 3.1144249152109715,
+        "pair_rotation_p90_deg": 11.964377882521871,
+        "zero_rotation_median_deg": 2.426079879772317,
+        "direction_median_deg": 9.444972005139213,
+        "direction_pairs": 81,
+        "heading_rmse_deg": 9.770840812864064,
+        "heading_max_deg": 48.27489671606369,
+        "scale_drift_window_ratio_min": 0.27839585140471307,
+        "scale_drift_window_ratio_max": 2.4015834420053044,
+        "ms_per_frame": 10.497589108630978
+      },
+      "c_over_seeds": {
+        "seeds": [
+          12345,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "ate_rmse": {
+          "median": 0.4289229282020689,
+          "min": 0.382509615713051,
+          "max": 0.5240579835717167
+        },
+        "heading_rmse_deg": {
+          "median": 27.07887902693262,
+          "min": 7.8650702996360975,
+          "max": 43.28420096770403
+        },
+        "scale_spread": {
+          "median": 8.993460914777454,
+          "min": 6.9149671762321745,
+          "max": 11.710037415542649
+        },
+        "lost": {
+          "median": 21.0,
+          "min": 19.0,
+          "max": 23.0
+        }
+      },
+      "prototype": {
+        "method": "pairwise",
+        "resolution": "320x240",
+        "rate_hz": 3.0,
+        "ms_per_frame": 9.09011188138387,
+        "steps": 101,
+        "lost": 7,
+        "rotation_only": 0,
+        "kinds": {
+          "essential": 94,
+          "lost": 7
+        },
+        "median_tracks": 70.0,
+        "ate_rmse": 0.32683622565947273,
+        "ate_max": 0.8630193601244047,
+        "final_error": 0.5539716475378565,
+        "path_length_reference": 8.755011057619953,
+        "alignment_scale": 0.4975088061244449,
+        "pair_rotation_median_deg": 3.2231823457585547,
+        "pair_rotation_p90_deg": 11.263262357755607,
+        "zero_rotation_median_deg": 2.426079879772317,
+        "direction_median_deg": 11.213741541563701,
+        "direction_pairs": 93,
+        "heading_rmse_deg": 18.45431585161301,
+        "heading_max_deg": 47.16130316250271,
+        "scale_drift_window_ratio_min": 0.3538576398963151,
+        "scale_drift_window_ratio_max": 2.1213923294658636
+      }
+    }
+  ],
+  "board": {
+    "rate_hz": 10.0,
+    "frames": 339,
+    "steps": 338,
+    "seed": 12345,
+    "core_sha256": "a44e738e43c985cf0b70cfcb829b25934148bcc1b391ffd3b4c2893b9e38f4ea",
+    "header_sha256": "42529c08c9f9a790fcda254c067e1eb0deff7923e1e50be43f5eec716bb4e96e"
+  }
+}

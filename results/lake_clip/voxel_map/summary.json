@@ -1,0 +1,259 @@
+{
+  "task": "Continuing voxel map from the C monocular odometry and the water masks on the lake clip, scored against the reference cloud",
+  "sources_sha256": {
+    "core_sha256": "a44e738e43c985cf0b70cfcb829b25934148bcc1b391ffd3b4c2893b9e38f4ea",
+    "header_sha256": "42529c08c9f9a790fcda254c067e1eb0deff7923e1e50be43f5eec716bb4e96e",
+    "voxel_sha256": "b803ea6bf97c0334f71e65c3df31b06c2430e628b34f67a1c02d99f82a8eb0c5",
+    "voxel_header_sha256": "048b6d5c2124e0cea4a4cd97b1b2a2e7cfb80dcbb3cf056060d69372fef70dd8"
+  },
+  "masks": "frames.npz",
+  "time_scale": 3.0,
+  "hfov_deg": 110.0,
+  "seeds": [
+    12345,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+  ],
+  "window_s": 5.0,
+  "runs": [
+    {
+      "rate_hz": 10.0,
+      "clip_s": 33.800000000000004,
+      "default_seed": {
+        "ate_rmse_m": 0.35623462395011013,
+        "global": {
+          "median_m": 0.1312285140156746,
+          "within_0.1": 0.2299771167048055,
+          "within_0.2": 0.8832951945080092,
+          "within_0.3": 1.0
+        },
+        "local": {
+          "median_m": 0.057964012026786804,
+          "within_0.1": 0.6685185185185185,
+          "within_0.2": 0.8374074074074074,
+          "within_0.3": 0.9094444444444445
+        },
+        "local_snapshots": 7,
+        "obstacles_held": 874,
+        "voxels_held": 1006,
+        "held_age_s": {
+          "median": 3.1,
+          "p90": 5.6000000000000005
+        },
+        "side_m": 0.012279183522181457,
+        "frozen_map_would_cover_s": 4.4,
+        "clip_s": 33.800000000000004,
+        "count": 1006,
+        "frames": 338,
+        "observations": 32408,
+        "evicted": 12788,
+        "merged": 817,
+        "rescales": 6,
+        "lost": 1
+      },
+      "over_seeds": {
+        "local_median_m": {
+          "median": 0.05595899187028408,
+          "min": 0.048980966210365295,
+          "max": 0.06300317496061325
+        },
+        "global_median_m": {
+          "median": 0.09192658960819244,
+          "min": 0.04604783654212952,
+          "max": 0.16403542459011078
+        },
+        "obstacles_held": {
+          "median": 857.0,
+          "min": 782.0,
+          "max": 910.0
+        },
+        "held_age_median_s": {
+          "median": 3.1,
+          "min": 2.8000000000000003,
+          "max": 3.5
+        },
+        "held_age_p90_s": {
+          "median": 5.8500000000000005,
+          "min": 5.4,
+          "max": 6.6000000000000005
+        },
+        "side_m": {
+          "median": 0.016961059258300992,
+          "min": 0.009118247620786878,
+          "max": 0.02978113893413308
+        },
+        "rescales": {
+          "median": 6.0,
+          "min": 3.0,
+          "max": 8.0
+        },
+        "lost": {
+          "median": 2.0,
+          "min": 1.0,
+          "max": 5.0
+        },
+        "frozen_s": {
+          "median": 4.4,
+          "min": 4.0,
+          "max": 4.4
+        },
+        "local_within_0.1": {
+          "median": 0.6754763468255003,
+          "min": 0.6258831638807514,
+          "max": 0.7231572838073128
+        },
+        "local_within_0.2": {
+          "median": 0.8372789967605117,
+          "min": 0.78526863084922,
+          "max": 0.8823757012961888
+        },
+        "local_within_0.3": {
+          "median": 0.9046581039435799,
+          "min": 0.8556325823223571,
+          "max": 0.9367382472431804
+        },
+        "global_within_0.1": {
+          "median": 0.532205961092272,
+          "min": 0.022962112514351322,
+          "max": 0.8405627198124267
+        },
+        "global_within_0.2": {
+          "median": 0.8685617503862552,
+          "min": 0.7588978185993112,
+          "max": 0.9883313885647608
+        },
+        "global_within_0.3": {
+          "median": 0.9971569791200452,
+          "min": 0.8849104859335039,
+          "max": 1.0
+        }
+      }
+    },
+    {
+      "rate_hz": 5.0,
+      "clip_s": 33.800000000000004,
+      "default_seed": {
+        "ate_rmse_m": 0.31912634179073635,
+        "global": {
+          "median_m": 0.08090568333864212,
+          "within_0.1": 0.5783633841886269,
+          "within_0.2": 0.768377253814147,
+          "within_0.3": 0.8945908460471568
+        },
+        "local": {
+          "median_m": 0.0564282163977623,
+          "within_0.1": 0.650257328261356,
+          "within_0.2": 0.8028641754307452,
+          "within_0.3": 0.889684493175207
+        },
+        "local_snapshots": 7,
+        "obstacles_held": 721,
+        "voxels_held": 918,
+        "held_age_s": {
+          "median": 4.800000000000001,
+          "p90": 7.800000000000001
+        },
+        "side_m": 0.03081325469338534,
+        "frozen_map_would_cover_s": 4.2,
+        "clip_s": 33.800000000000004,
+        "count": 918,
+        "frames": 169,
+        "observations": 14682,
+        "evicted": 4955,
+        "merged": 607,
+        "rescales": 6,
+        "lost": 12
+      },
+      "over_seeds": {
+        "local_median_m": {
+          "median": 0.05708334967494011,
+          "min": 0.04561056010425091,
+          "max": 0.08818158507347107
+        },
+        "global_median_m": {
+          "median": 0.18772819638252258,
+          "min": 0.08090568333864212,
+          "max": 0.27174490690231323
+        },
+        "obstacles_held": {
+          "median": 719.5,
+          "min": 635.0,
+          "max": 791.0
+        },
+        "held_age_median_s": {
+          "median": 4.0,
+          "min": 3.6,
+          "max": 5.0
+        },
+        "held_age_p90_s": {
+          "median": 8.200000000000001,
+          "min": 7.800000000000001,
+          "max": 12.200000000000001
+        },
+        "side_m": {
+          "median": 0.024062682904103034,
+          "min": 0.018329451594413262,
+          "max": 0.036814586563538206
+        },
+        "rescales": {
+          "median": 4.0,
+          "min": 4.0,
+          "max": 8.0
+        },
+        "lost": {
+          "median": 11.0,
+          "min": 9.0,
+          "max": 14.0
+        },
+        "frozen_s": {
+          "median": 4.300000000000001,
+          "min": 4.2,
+          "max": 4.4
+        },
+        "local_within_0.1": {
+          "median": 0.6547075084010012,
+          "min": 0.5311611633500984,
+          "max": 0.7298822374877331
+        },
+        "local_within_0.2": {
+          "median": 0.8195738282887779,
+          "min": 0.7139733216706757,
+          "max": 0.8684985279685966
+        },
+        "local_within_0.3": {
+          "median": 0.9082565268791644,
+          "min": 0.8316203804942052,
+          "max": 0.9347939488784559
+        },
+        "global_within_0.1": {
+          "median": 0.2779013237653225,
+          "min": 0.15607734806629833,
+          "max": 0.5783633841886269
+        },
+        "global_within_0.2": {
+          "median": 0.5216250168244425,
+          "min": 0.36923076923076925,
+          "max": 0.768377253814147
+        },
+        "global_within_0.3": {
+          "median": 0.7150883812852871,
+          "min": 0.5496503496503496,
+          "max": 0.8945908460471568
+        }
+      }
+    }
+  ]
+}

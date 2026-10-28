@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv*/
+/build/
+/dist/
+
+# The C core compiled for the PC, and test programs
+*.dll
+*.so
+*.dylib
+*.exe
+
+# ESP-IDF build output and generated configuration
+firmware/*/build*/
+firmware/*/sdkconfig
+firmware/*/sdkconfig.old
+firmware/*/managed_components/
+firmware/*/dependencies.lock
+
+# Local notes kept out of the repository
+/local/
