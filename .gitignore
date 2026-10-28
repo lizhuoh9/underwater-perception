@@ -21,3 +21,8 @@ firmware/*/dependencies.lock
 
 # Local notes kept out of the repository
 /local/
+
+# Claude Code: notes and settings for this machine only
+CLAUDE.local.md
+.claude/settings.local.json
+.claude/progress.md
