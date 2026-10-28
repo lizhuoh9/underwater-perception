@@ -23,6 +23,8 @@ Pythons come from `CLAUDE.local.md`. Run from the repository root; `<out>` is `l
    `idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_240 -p <port> flash` → the flash is verified.
    If the change adds static data, check `idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_240 size`
    first: libmain `.bss` must stay near 94 KB or the pyramids fail to allocate.
+   For the ESP32-P4: `idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_p4 -D SDKCONFIG=build_p4/sdkconfig
+   -D IDF_TARGET=esp32p4 -p <p4 port> flash`, labels `p4_360mhz[_5hz]`; its UART link is slower (5 Hz about 3 min).
 4. Stream, with the ESP-IDF Python and `PYTHONPATH=src`:
    `python -m uwslam.mvo_stream --port <port> --frames <out>/frames_10hz.bin --masks <out>/masks_10hz.bin --expected <out>/mono_vo_c/board_expected_<rate>hz.json --expected-map <out>/mono_map/board_expected_map_<rate>hz.json --expected-voxels <out>/voxel_map/board_expected_voxels_<rate>hz.json --expected-dirs <out>/obstacle_dir/board_expected_dirs_<rate>hz.json --expected-plan <out>/path_plan/board_expected_plan_<rate>hz.json --label <label>`
    → `<out>/mono_vo_c/board/<label>.json` and `<label>_serial.log`. The firmware refuses expectations whose source

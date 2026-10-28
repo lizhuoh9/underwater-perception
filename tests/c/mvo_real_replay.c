@@ -17,6 +17,8 @@ typedef struct { int tx_buffer_size, rx_buffer_size; } usb_serial_jtag_driver_co
 #define MALLOC_CAP_INTERNAL 1
 #define MALLOC_CAP_8BIT 2
 #define CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ 240
+#define CONFIG_IDF_TARGET_ESP32S3 1 /* the S3's build: its vector kernels (forwarded to C below), the USB link */
+#define CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG 1
 #define ESP_ERROR_CHECK(x) (x)
 
 int usb_serial_jtag_read_bytes(void *out, uint32_t size, int timeout)

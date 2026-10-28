@@ -54,14 +54,26 @@ int od_layout(od_layout_t *layout, const mvo_camera_t *camera, int mask_w, int m
             || mask_w < 1 || mask_h < 1 || mask_w > OD_MAX_SIDE || mask_h > OD_MAX_SIDE) {
         return 0;
     }
-    for (i = 0; i < mask_w; ++i) { /* the ray through the cell's centre on the 320x240 image */
-        const float u = ((float)i + 0.5f) * (float)MVO_WIDTH / (float)mask_w;
-        layout->sector[i] = sector_of((u - camera->cx) / camera->fx);
+    for (i = 0; i < mask_w; ++i) { /* the ray through the cell's centre on the 320x240 image, on the principal row */
+        float p[2];
+        p[0] = ((float)i + 0.5f) * (float)MVO_WIDTH / (float)mask_w;
+        p[1] = camera->cy;
+        if (!mvo_undistort(camera, p, p)) {
+            memset(layout, 0, sizeof *layout);
+            return 0;
+        }
+        layout->sector[i] = sector_of((p[0] - camera->cx) / camera->fx);
         ++columns[layout->sector[i]];
     }
-    for (i = 0; i < mask_h; ++i) {
-        const float v = ((float)i + 0.5f) * (float)MVO_HEIGHT / (float)mask_h;
-        layout->band[i] = band_of((v - camera->cy) / camera->fy);
+    for (i = 0; i < mask_h; ++i) { /* on the principal column */
+        float p[2];
+        p[0] = camera->cx;
+        p[1] = ((float)i + 0.5f) * (float)MVO_HEIGHT / (float)mask_h;
+        if (!mvo_undistort(camera, p, p)) {
+            memset(layout, 0, sizeof *layout);
+            return 0;
+        }
+        layout->band[i] = band_of((p[1] - camera->cy) / camera->fy);
         ++rows[layout->band[i]];
     }
     for (i = 0; i < OD_ROWS; ++i) {

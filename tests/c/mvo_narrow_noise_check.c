@@ -22,7 +22,7 @@ int mvo_track_features(mvo_t *s, const uint8_t *a, const uint8_t *b)
 int main(int argc, char **argv)
 {
     static mvo_t state;
-    const mvo_camera_t camera={4000,4000,160,120};
+    const mvo_camera_t camera={4000,4000,160,120,0,0,0,0,0};
     int trial,k, false_count=0, lost=0, rotations=0;
     float sigma, outliers;
     int start, trials;

@@ -19,7 +19,6 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
-import struct
 import tempfile
 from typing import BinaryIO, Iterable
 
@@ -238,9 +237,10 @@ def run_video(video: Path, output: Path, camera: mvo.Camera, every: int = 1, boa
                        "source_read_termination": read_stats["stop_reason"],
                        "source_frame_count_consistent": (read_stats["decoded_frames"] == reported_count
                                                          if reported_count is not None else None),
-                       "camera_320x240": {name: float(getattr(camera, name)) for name in ("fx", "fy", "cx", "cy")},
+                       "camera_320x240": {name: float(getattr(camera, name)) for name in mvo.CAMERA_FIELDS},
                        "frame_coordinates": "first camera: x right, y down, z forward; not gravity aligned",
-                       "point_units": "arbitrary monocular odometry units, not metres", "distortion_correction": False,
+                       "point_units": "arbitrary monocular odometry units, not metres",
+                       "distortion_correction": any(getattr(camera, name) != 0.0 for name in ("k1", "k2", "p1", "p2", "k3")),
                        "count": int(cloud.count), "capacity": MAX_POINTS, "dropped": int(cloud.dropped),
                        "dropped_definition": "historical points evicted as the rolling map fills",
                        "continuous": int(cloud.continuous), "first_lost_frame": result["first_lost_frame"],
@@ -268,11 +268,9 @@ def run_video(video: Path, output: Path, camera: mvo.Camera, every: int = 1, boa
                     shutil.copyfileobj(source, target)
                 if mvo.file_sha256(output / "frames.bin") != frames_hash:
                     raise RuntimeError("Copied board frames differ from the processed frames")
-                camera_bits = [struct.unpack("<I", struct.pack("<f", getattr(camera, name)))[0]
-                               for name in ("fx", "fy", "cx", "cy")]
                 expected = {"frames": len(trajectory), "every": 1, "rate_hz": fps / every if fps else None,
                             "step_hashes": result["step_hashes"],
-                            "camera_bits": camera_bits, "seed": mvo.SEED,
+                            "camera_bits": mvo.camera_bits(camera), "seed": mvo.SEED,
                             **{key: before_sources[key] for key in ("core_sha256", "header_sha256")}}
                 expected_cloud = {"frames": len(trajectory), "step_hashes": result["step_hashes"],
                                   "cloud_policy": POLICY, "cloud_sha256": before_sources["cloud_sha256"],
@@ -297,11 +295,15 @@ def main() -> None:
     parser.add_argument("--fy", type=float, required=True, help="Focal length in y for the resized 320x240 image, pixels")
     parser.add_argument("--cx", type=float, default=160.0, help="Principal point x for 320x240, pixels")
     parser.add_argument("--cy", type=float, default=120.0, help="Principal point y for 320x240, pixels")
+    for name in ("k1", "k2", "p1", "p2", "k3"):
+        parser.add_argument(f"--{name}", type=float, default=0.0,
+                            help=f"Lens distortion {name} for 320x240 in OpenCV's model (default 0: a pinhole)")
     parser.add_argument("--every", type=int, default=1, help="Process every Nth decoded frame")
     parser.add_argument("--output", type=Path, required=True, help="New or empty output directory")
     parser.add_argument("--board-files", action="store_true", help="Also prepare frames and expectations for ESP32 replay")
     args = parser.parse_args()
-    summary = run_video(args.video, args.output, mvo.Camera(args.fx, args.fy, args.cx, args.cy), args.every, args.board_files)
+    camera = mvo.Camera(args.fx, args.fy, args.cx, args.cy, args.k1, args.k2, args.p1, args.p2, args.k3)
+    summary = run_video(args.video, args.output, camera, args.every, args.board_files)
     print(f"{summary['frames']} frames, {summary['count']} sparse points, "
           f"continuous={summary['continuous']}, dropped={summary['dropped']}; coordinates are not metres")
 

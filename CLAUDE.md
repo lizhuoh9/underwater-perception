@@ -11,7 +11,8 @@ Python tools (`src/uwslam/`) bind it with ctypes and score it against a reconstr
   `mono_cloud`), the board host `mvo_stream`, and `experiments/` (OpenCV prototype `mono_vo`, reference poses and
   masks `mask_motion`, `segmenter`).
 - `tests/`: unittest suite; `tests/c/` holds the C contract checks and the firmware host harnesses.
-- `firmware/esp32s3_mono_vo/`: the only firmware; frames and masks arrive over USB-Serial-JTAG.
+- `firmware/esp32s3_mono_vo/`: the only firmware, for the ESP32-S3 (default target) and the ESP32-P4
+  (`sdkconfig.defaults.<target>`); frames and masks arrive over USB-Serial-JTAG (S3) or the console UART (P4).
 - `results/lake_clip/`: committed results, including the board's expected-hash files.
 - `local/`: experiment folders, not in git.
 
@@ -53,5 +54,7 @@ Every tool refuses to overwrite its output: give it a fresh folder (scratch runs
   allocated before the USB driver, libmain `.bss` must stay near 94 KB, and the voxel map is allocated last. Internal
   RAM is the limit.
 - At real 5 Hz input a step must stay under 200 ms on the board.
+- The ESP32-P4 build tracks with `mvo_pie_p4.S` (the window kernels; the block copy stays C) and gives the same
+  hashes. Its build folder has its own sdkconfig (`-D SDKCONFIG=build_p4/sdkconfig`).
 
 Paths on this machine are in `CLAUDE.local.md`. Repeated procedures are skills in `.claude/skills/`.

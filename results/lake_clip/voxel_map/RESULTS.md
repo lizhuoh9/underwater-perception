@@ -6,8 +6,8 @@ Scores, after similarity alignments of the camera path (the map's unit is the od
 
 | Rate | Local: median distance | Local: within 0.1 / 0.2 m | Global: median distance | Global: within 0.2 m | Obstacles held at the end | Their age, median / 90% | Voxel side at the end | Side resets | LOST steps gone through | A map frozen at the first LOST would cover |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 10 Hz | 0.056 m [0.049–0.063] | 68% [63%–72%] / 84% [79%–88%] | 0.09 m [0.05–0.16] | 87% [76%–99%] | 857 [782–910] | 3.1 s [2.8–3.5] / 5.9 s [5.4–6.6] | 0.017 m [0.009–0.030] | 6 [3–8] | 2 [1–5] | 4.4 s [4.0–4.4] of 33.8 s |
-| 5 Hz | 0.057 m [0.046–0.088] | 65% [53%–73%] / 82% [71%–87%] | 0.19 m [0.08–0.27] | 52% [37%–77%] | 720 [635–791] | 4.0 s [3.6–5.0] / 8.2 s [7.8–12.2] | 0.024 m [0.018–0.037] | 4 [4–8] | 11 [9–14] | 4.3 s [4.2–4.4] of 33.8 s |
+| 10 Hz | 0.055 m [0.052–0.062] | 68% [64%–71%] / 84% [82%–85%] | 0.10 m [0.05–0.16] | 87% [74%–99%] | 876 [764–925] | 3.2 s [2.9–3.5] / 5.9 s [5.5–6.1] | 0.016 m [0.006–0.030] | 6 [3–8] | 2 [1–5] | 4.4 s [4.0–4.4] of 33.8 s |
+| 5 Hz | 0.061 m [0.048–0.083] | 64% [55%–71%] / 80% [74%–85%] | 0.16 m [0.09–0.28] | 61% [36%–77%] | 717 [666–789] | 4.0 s [3.8–4.8] / 8.3 s [7.8–8.6] | 0.023 m [0.016–0.037] | 4 [3–7] | 11 [9–14] | 4.3 s [4.2–4.4] of 33.8 s |
 
 The default seed's run is drawn in `map_<rate>hz.png`. Its board expectation (`board_expected_voxels_<rate>hz.json`) holds every step's voxel count and filed observations and the final map's hash for `uwslam.mvo_stream --expected-voxels`.
 

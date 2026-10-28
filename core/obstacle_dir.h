@@ -11,7 +11,10 @@
  * clearing is not. A direction the camera does not see (no cells) is never blocked nor chosen. The choice is the free
  * direction nearest straight ahead: the fewest sector and band steps from the centre, then a level direction before one
  * up or down (turning before rising or diving), then the lower share, then the lower index; -1 when every seen
- * direction is blocked.
+ * direction is blocked. The layout stays a sector per column and a band per row: with a lens (mvo_camera_t's
+ * distortion) a column takes the sector of its cell on the principal point's row, a row the band of its cell on the
+ * principal point's column, both undistorted (mvo_undistort); under strong distortion a corner cell may sit one
+ * direction off.
  *
  * The mask gives direction, not range: everything that is not water within the visibility counts, the lake bed below
  * and the water surface above included (the surface bounds the robot too). The directions are the camera's: without an
@@ -55,8 +58,8 @@ typedef struct {
     uint32_t frames;                /* masks taken */
 } od_state_t;
 
-/* Returns 1, or 0 (and a layout that refuses every mask) for a camera without positive focal lengths or a mask size
- * outside 1..OD_MAX_SIDE. */
+/* Returns 1, or 0 (and a layout that refuses every mask) for a camera without positive focal lengths, a lens model
+ * that folds over at a cell's centre (mvo_undistort) or a mask size outside 1..OD_MAX_SIDE. */
 int od_layout(od_layout_t *layout, const mvo_camera_t *camera, int mask_w, int mask_h);
 void od_init(od_state_t *state);
 /* Takes one frame's mask (layout->height rows of layout->width cells); returns the choice, or -1 also when the layout

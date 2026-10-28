@@ -2,18 +2,24 @@
  * Runs monocular visual odometry (core/mono_vo.c), a mask-independent sparse 3D cloud (core/mono_cloud.c), the
  * continuing voxel map (core/voxel_map.c, with the masks when they come), the planner (core/path_plan.c) and, when
  * masks come with the frames, the obstacle map (core/mono_map.c) and the obstacle directions (core/obstacle_dir.c) on
- * frames streamed over the USB-Serial-JTAG port, so a whole clip can be checked against the PC build of the same C code and timed. The host (python -m uwslam.mvo_stream) sends the camera and the seed, then one
- * 320x240 grey frame at a time, each optionally with the segmentation's 60x80 water mask; the board answers every frame
- * with one line. While idle it repeats a `ready` line, so the host can open the port at any time.
+ * frames streamed over the USB-Serial-JTAG port (the console on the ESP32-S3) or, when the console is a UART (an
+ * ESP32-P4 board's USB-UART bridge), over that UART at LINK_BAUD once the firmware runs, so a whole clip can be checked
+ * against the PC build of the same C code and timed. The host (python -m uwslam.mvo_stream) sends the camera and the
+ * seed, then one 320x240 grey frame at a time, each optionally with the segmentation's 60x80 water mask; the board
+ * answers every frame with one line. While idle it repeats a `ready` line, so the host can open the port at any time.
+ * The tracker's vector kernels are mvo_pie.S on the S3 and mvo_pie_p4.S on the P4; other chips run the portable ones.
  *
  *   host:  selftest <cases> <seed>                vector kernels and safe edge dispatch against portable C
  *   board: selftest cases=<n> template_mismatches=<n> sums_mismatches=<n> block_mismatches=<n> template_us_c=<t>
- *               template_us_simd=<t> sums_us_c=<t> sums_us_simd=<t> block_us_c=<t> block_us_simd=<t>
- *                                                 (microseconds per call, averaged)
- *   host:  start <fx> <fy> <cx> <cy> <seed> [<cores> [<simd>]]   the four floats as their IEEE-754 bits, unsigned
- *                                                       decimal; cores 2 (default) runs half of each split part on the
- *                                                       second core; simd 1 (default) uses the vector kernels
- *   board: started state_bytes=<n> cores=<1 or 2> simd=<0 or 1>
+ *               template_us_simd=<t> sums_us_c=<t> sums_us_simd=<t> block_us_c=<t> block_us_simd=<t> vector=<0 or 1>
+ *                                                 (microseconds per call, averaged; vector 0: the chip has no vector
+ *                                                 kernels and the portable ones stand in for them)
+ *   host:  start <fx> <fy> <cx> <cy> <seed> [<cores> [<simd> [<k1> <k2> <p1> <p2> <k3>]]]
+ *                                                       the camera's floats as their IEEE-754 bits, unsigned decimal;
+ *                                                       cores 2 (default) runs half of each split part on the second
+ *                                                       core; simd 1 (default) uses the vector kernels; the lens
+ *                                                       distortion (mvo_camera_t) all five or none (a pinhole)
+ *   board: started state_bytes=<n> cores=<1 or 2> simd=<0 or 1>   (simd 0 on a chip without vector kernels)
  *   host:  frame <index> <fnv> [<mask fnv>]       then the frame's 76800 bytes, and with a mask fnv its 600 bytes:
  *                                                 bit i of the mask (byte i / 8, least significant bit first) is cell
  *                                                 i in row-major order, set where it is not water
@@ -51,15 +57,21 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "sdkconfig.h"
+
+#if CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
 #include "driver/usb_serial_jtag.h"
 #include "driver/usb_serial_jtag_vfs.h"
+#else
+#include "driver/uart.h"
+#include "driver/uart_vfs.h"
+#endif
 #include "esp_cpu.h"
 #include "esp_heap_caps.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
-#include "sdkconfig.h"
 
 #include "mono_cloud.h"
 #include "mono_map.h"
@@ -75,6 +87,7 @@
 #define LINE_BYTES 160
 #define IDLE_MS 1000       /* a `ready` line this often while no command comes */
 #define CHUNK_WAIT_MS 5000 /* longest pause allowed inside a frame's bytes */
+#define LINK_BAUD 921600   /* a UART link's rate once the firmware runs (uwslam.mvo_stream.LINK_BAUD) */
 
 /* cloud_hash covers the entire struct, whose representation the host reconstructs from the exported point fields. */
 typedef char cloud_point_wire_layout[(sizeof(float) == 4 && sizeof(mc_point_t) == 24 &&
@@ -105,6 +118,7 @@ static SemaphoreHandle_t s_go, s_done; /* hand half of a split part to the secon
 static void (*s_work)(void *context, int part);
 static void *s_context;
 
+#if CONFIG_IDF_TARGET_ESP32S3
 /* mvo_pie.S: the tracker kernels with the S3's vector instructions, giving the portable ones' integers. */
 void mvo_pie_lk_template(mvo_window_t *window, const uint8_t *src, int stride, const int16_t weights[4], int64_t g[3]);
 void mvo_pie_lk_sums(const mvo_window_t *window, const uint8_t *src, int stride, const int16_t weights[4],
@@ -121,7 +135,44 @@ static void mvo_pie_block_safe(uint8_t *out, int size, const uint8_t *img, int w
     }
 }
 
-static const mvo_kernels_t s_simd = {mvo_pie_lk_template, mvo_pie_lk_sums, mvo_pie_block_safe};
+#define HAS_VECTOR_KERNELS 1
+static const mvo_kernels_t s_vector = {mvo_pie_lk_template, mvo_pie_lk_sums, mvo_pie_block_safe};
+#elif CONFIG_IDF_TARGET_ESP32P4
+/* mvo_pie_p4.S: the window kernels with the P4's vector instructions; the block copy stays the portable one. */
+void mvo_pie_p4_lk_template(mvo_window_t *window, const uint8_t *src, int stride, const int16_t weights[4],
+                            int64_t g[3]);
+void mvo_pie_p4_lk_sums(const mvo_window_t *window, const uint8_t *src, int stride, const int16_t weights[4],
+                        int64_t sums[2]);
+#define HAS_VECTOR_KERNELS 1
+static const mvo_kernels_t s_vector = {mvo_pie_p4_lk_template, mvo_pie_p4_lk_sums, mvo_block_c};
+#else
+/* No vector kernels for this chip: the portable ones stand in, so the selftest compares them with themselves. */
+#define HAS_VECTOR_KERNELS 0
+static const mvo_kernels_t s_vector = {mvo_lk_template_c, mvo_lk_sums_c, mvo_block_c};
+#endif
+
+#if CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
+static void link_open(void)
+{
+    usb_serial_jtag_driver_config_t config = {.tx_buffer_size = 2048, .rx_buffer_size = 8192};
+    ESP_ERROR_CHECK(usb_serial_jtag_driver_install(&config));
+    usb_serial_jtag_vfs_use_driver(); /* printf goes through the driver too */
+}
+
+static int link_read(void *out, uint32_t size, uint32_t wait) { return usb_serial_jtag_read_bytes(out, size, wait); }
+#else
+static void link_open(void)
+{
+    ESP_ERROR_CHECK(uart_driver_install(CONFIG_ESP_CONSOLE_UART_NUM, 16384, 2048, 0, NULL, 0));
+    ESP_ERROR_CHECK(uart_set_baudrate(CONFIG_ESP_CONSOLE_UART_NUM, LINK_BAUD)); /* the boot logs went at the console's */
+    uart_vfs_dev_use_driver(CONFIG_ESP_CONSOLE_UART_NUM); /* printf goes through the driver too */
+}
+
+static int link_read(void *out, uint32_t size, uint32_t wait) /* wait in ticks */
+{
+    return uart_read_bytes(CONFIG_ESP_CONSOLE_UART_NUM, out, size, wait);
+}
+#endif
 
 static void helper_task(void *unused)
 {
@@ -161,7 +212,7 @@ static int read_line(char *line, int size, int wait_ms)
     int length = 0;
     for (;;) {
         char c;
-        if (usb_serial_jtag_read_bytes(&c, 1, pdMS_TO_TICKS(length ? CHUNK_WAIT_MS : wait_ms)) != 1) {
+        if (link_read(&c, 1, pdMS_TO_TICKS(length ? CHUNK_WAIT_MS : wait_ms)) != 1) {
             return 0;
         }
         if (c == '\n') {
@@ -178,7 +229,7 @@ static int read_exact(uint8_t *out, int size)
 {
     int got = 0;
     while (got < size) {
-        const int part = usb_serial_jtag_read_bytes(out + got, (uint32_t)(size - got), pdMS_TO_TICKS(CHUNK_WAIT_MS));
+        const int part = link_read(out + got, (uint32_t)(size - got), pdMS_TO_TICKS(CHUNK_WAIT_MS));
         if (part <= 0) {
             return 0;
         }
@@ -232,7 +283,7 @@ static void selftest(const char *line)
         mvo_lk_template_c(&windows[0], src, stride, weights, g[0]);
         cycles[0] += esp_cpu_get_cycle_count() - begin;
         begin = esp_cpu_get_cycle_count();
-        mvo_pie_lk_template(&windows[1], src, stride, weights, g[1]);
+        s_vector.lk_template(&windows[1], src, stride, weights, g[1]);
         cycles[1] += esp_cpu_get_cycle_count() - begin;
         template_bad += memcmp(&windows[0], &windows[1], sizeof windows[0]) != 0
                         || memcmp(g[0], g[1], sizeof g[0]) != 0;
@@ -241,7 +292,7 @@ static void selftest(const char *line)
         mvo_lk_sums_c(&windows[0], src, stride, weights, sums[0]);
         cycles[2] += esp_cpu_get_cycle_count() - begin;
         begin = esp_cpu_get_cycle_count();
-        mvo_pie_lk_sums(&windows[0], src, stride, weights, sums[1]);
+        s_vector.lk_sums(&windows[0], src, stride, weights, sums[1]);
         cycles[3] += esp_cpu_get_cycle_count() - begin;
         sums_bad += memcmp(sums[0], sums[1], sizeof sums[0]) != 0;
         { /* a block anywhere near a random image level, including the start of the allocation */
@@ -254,7 +305,7 @@ static void selftest(const char *line)
             mvo_block_c(blocks[0], size, image, w, h, origin);
             cycles[4] += esp_cpu_get_cycle_count() - begin;
             begin = esp_cpu_get_cycle_count();
-            mvo_pie_block_safe(blocks[1], size, image, w, h, origin);
+            s_vector.block(blocks[1], size, image, w, h, origin);
             cycles[5] += esp_cpu_get_cycle_count() - begin;
             for (row = 0; row < size; ++row) { /* only the bytes that are the block's */
                 block_bad += memcmp(blocks[0] + row * stride, blocks[1] + row * stride, (size_t)size) != 0;
@@ -262,21 +313,22 @@ static void selftest(const char *line)
         }
     }
     printf("selftest cases=%d template_mismatches=%d sums_mismatches=%d block_mismatches=%d template_us_c=%.2f "
-           "template_us_simd=%.2f sums_us_c=%.2f sums_us_simd=%.2f block_us_c=%.2f block_us_simd=%.2f\n",
+           "template_us_simd=%.2f sums_us_c=%.2f sums_us_simd=%.2f block_us_c=%.2f block_us_simd=%.2f vector=%d\n",
            cases, template_bad, sums_bad, block_bad, (double)cycles[0] / CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ / cases,
            (double)cycles[1] / CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ / cases, (double)cycles[2] / CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ / cases,
            (double)cycles[3] / CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ / cases, (double)cycles[4] / CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ / cases,
-           (double)cycles[5] / CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ / cases);
+           (double)cycles[5] / CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ / cases, HAS_VECTOR_KERNELS);
 }
 
 static void start(const char *line)
 {
-    uint32_t bits[4], seed;
+    uint32_t bits[9] = {0}, seed;
     int cores = 2, simd = 1, fields;
     mvo_camera_t camera;
-    fields = sscanf(line, "start %" SCNu32 " %" SCNu32 " %" SCNu32 " %" SCNu32 " %" SCNu32 " %d %d", &bits[0], &bits[1],
-                    &bits[2], &bits[3], &seed, &cores, &simd);
-    if (fields < 5 || cores < 1 || cores > 2 || simd < 0 || simd > 1) {
+    fields = sscanf(line, "start %" SCNu32 " %" SCNu32 " %" SCNu32 " %" SCNu32 " %" SCNu32 " %d %d %" SCNu32 " %" SCNu32
+                    " %" SCNu32 " %" SCNu32 " %" SCNu32, &bits[0], &bits[1], &bits[2], &bits[3], &seed, &cores, &simd,
+                    &bits[4], &bits[5], &bits[6], &bits[7], &bits[8]);
+    if (fields < 5 || (fields > 7 && fields < 12) || cores < 1 || cores > 2 || simd < 0 || simd > 1) {
         printf("error bad start line\n");
         return;
     }
@@ -284,10 +336,16 @@ static void start(const char *line)
     memcpy(&camera.fy, &bits[1], sizeof camera.fy);
     memcpy(&camera.cx, &bits[2], sizeof camera.cx);
     memcpy(&camera.cy, &bits[3], sizeof camera.cy);
+    memcpy(&camera.k1, &bits[4], sizeof camera.k1); /* zero bits: 0.0f */
+    memcpy(&camera.k2, &bits[5], sizeof camera.k2);
+    memcpy(&camera.p1, &bits[6], sizeof camera.p1);
+    memcpy(&camera.p2, &bits[7], sizeof camera.p2);
+    memcpy(&camera.k3, &bits[8], sizeof camera.k3);
     mvo_init(s_state, &camera, seed, s_pyramid[0], s_pyramid[1]);
     s_state->timing.clock = clock_us;
     s_state->parallel = cores == 2 ? run_both : NULL;
-    s_state->kernels = simd ? &s_simd : NULL;
+    simd = simd && HAS_VECTOR_KERNELS;
+    s_state->kernels = simd ? &s_vector : NULL;
     mm_init(s_map);
     mc_init(s_cloud);
     vm_init(s_voxels);
@@ -450,7 +508,6 @@ static void cloud(void)
 
 void app_main(void)
 {
-    usb_serial_jtag_driver_config_t config = {.tx_buffer_size = 2048, .rx_buffer_size = 8192};
     char line[LINE_BYTES];
     int helper_ready = 0;
     /* The pyramids first, while the largest free region is still whole; the driver's buffers fit elsewhere. Aligned to
@@ -460,8 +517,7 @@ void app_main(void)
     s_state = heap_caps_malloc(sizeof *s_state, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     s_map = heap_caps_malloc(sizeof *s_map, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     s_cloud = heap_caps_malloc(sizeof *s_cloud, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    ESP_ERROR_CHECK(usb_serial_jtag_driver_install(&config));
-    usb_serial_jtag_vfs_use_driver(); /* printf goes through the driver too */
+    link_open();
     s_go = xSemaphoreCreateBinary();
     s_done = xSemaphoreCreateBinary();
     if (s_go && s_done) {

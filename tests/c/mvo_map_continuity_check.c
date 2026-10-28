@@ -25,6 +25,8 @@ typedef struct { int tx_buffer_size, rx_buffer_size; } usb_serial_jtag_driver_co
 #define OD_HEADER_SHA256 "dirheader"
 #define PP_CORE_SHA256 "plan"
 #define PP_HEADER_SHA256 "planheader"
+#define CONFIG_IDF_TARGET_ESP32S3 1 /* the S3's build: vector kernels (stubbed below) and the USB-Serial-JTAG link */
+#define CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG 1
 
 static uint8_t input[320 * 240 + 600], pixels[320 * 240];
 static int input_pos, fake_kind, observations, additions, initializations;
@@ -55,14 +57,23 @@ void vTaskDelay(int ticks) { (void)ticks; }
 
 #include "../../firmware/esp32s3_mono_vo/main/main.c"
 
+static mvo_camera_t last_camera;
 void mvo_init(mvo_t *s, const mvo_camera_t *camera, uint32_t seed, uint8_t *a, uint8_t *b)
 {
-    (void)camera; (void)seed; (void)a; (void)b;
+    (void)seed; (void)a; (void)b;
+    last_camera = *camera;
     memset(s, 0, sizeof *s);
     s->world_rotation[0] = s->world_rotation[4] = s->world_rotation[8] = 1.0f;
     ++initializations;
 }
 uint8_t *mvo_frame(mvo_t *s) { (void)s; return pixels; }
+int mvo_undistort(const mvo_camera_t *c, const float in[2], float out[2])
+{
+    (void)c;
+    out[0] = in[0];
+    out[1] = in[1];
+    return 1;
+}
 void mvo_start(mvo_t *s)
 {
     s->count = 1;
@@ -206,5 +217,23 @@ int main(void)
     submit(1, MVO_ROTATION, 1);
     assert(s_map_continuous && observations == 2 && additions == 3 && map.cell == 1.25f);
     end();
+
+    /* The lens rides after cores and simd: all five coefficients (as float bits) or none. */
+    {
+        const float lens[5] = {-0.25f, 0.06f, 0.001f, -0.0008f, -0.005f};
+        uint32_t bits[5];
+        char line[160];
+        memcpy(bits, lens, sizeof bits);
+        snprintf(line, sizeof line, "start 1 2 3 4 5 1 0 %lu %lu %lu %lu %lu", (unsigned long)bits[0],
+                 (unsigned long)bits[1], (unsigned long)bits[2], (unsigned long)bits[3], (unsigned long)bits[4]);
+        start(line);
+        assert(initializations == 4 && last_camera.k1 == lens[0] && last_camera.k2 == lens[1]
+               && last_camera.p1 == lens[2] && last_camera.p2 == lens[3] && last_camera.k3 == lens[4]);
+        start("start 1 2 3 4 5 1 0 6 7"); /* a partial lens is refused */
+        assert(initializations == 4);
+        start("start 1 2 3 4 5 1 0");
+        assert(initializations == 5 && last_camera.k1 == 0.0f && last_camera.k2 == 0.0f && last_camera.p1 == 0.0f
+               && last_camera.p2 == 0.0f && last_camera.k3 == 0.0f);
+    } /* no end: the host test counts the map and end lines above */
     return 0;
 }

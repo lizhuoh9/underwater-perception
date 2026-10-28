@@ -34,10 +34,14 @@ def texture(seed: int, size: int = 1024) -> np.ndarray:
     return cv2.GaussianBlur(cv2.resize(coarse, (size, size), interpolation=cv2.INTER_CUBIC), (5, 5), 0)
 
 
-def render(rotation: np.ndarray, centre: np.ndarray, camera, wall: np.ndarray, floor: np.ndarray) -> np.ndarray:
-    """320x240 grey view of a wall at z = WALL_Z and a floor at y = FLOOR_Y (world = first camera, y down)."""
+def render(rotation: np.ndarray, centre: np.ndarray, camera, wall: np.ndarray, floor: np.ndarray,
+           normalised: np.ndarray | None = None) -> np.ndarray:
+    """320x240 grey view of a wall at z = WALL_Z and a floor at y = FLOOR_Y (world = first camera, y down). normalised:
+    every pixel's ray as (x, y) at z = 1 (240 x 320 x 2), for a lens; the pinhole's by default."""
     v, u = np.mgrid[0:mvo.HEIGHT, 0:mvo.WIDTH].astype(np.float64)
-    rays = np.stack([(u - camera.cx) / camera.fx, (v - camera.cy) / camera.fy, np.ones_like(u)], axis=-1) @ rotation.T
+    if normalised is None:
+        normalised = np.stack([(u - camera.cx) / camera.fx, (v - camera.cy) / camera.fy], axis=-1)
+    rays = np.concatenate([normalised, np.ones_like(normalised[..., :1])], axis=-1) @ rotation.T
     with np.errstate(divide="ignore", invalid="ignore"):
         t_wall = np.where(rays[..., 2] > 1e-6, (WALL_Z - centre[2]) / rays[..., 2], np.inf)
         t_floor = np.where(rays[..., 1] > 1e-6, (FLOOR_Y - centre[1]) / rays[..., 1], np.inf)

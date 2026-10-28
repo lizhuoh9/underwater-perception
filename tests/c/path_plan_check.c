@@ -13,7 +13,7 @@ static od_state_t dirs;
 static pp_plan_t plan, saved;
 
 /* The lake clip's camera: 110 degrees across a 960x544 frame stretched to 320x240. */
-static const mvo_camera_t lake = {112.0302963f, 148.2792358f, 160.0f, 120.0f};
+static const mvo_camera_t lake = {112.0302963f, 148.2792358f, 160.0f, 120.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
 
 /* A camera at the origin looking along world z, one step being half a unit (so PP_SAFE_STEPS is 4 units), an empty
  * map of unit voxels, every direction seen and, from a first mask, none blocked. */

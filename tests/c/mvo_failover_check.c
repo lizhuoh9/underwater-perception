@@ -34,7 +34,7 @@ int mvo_track_features(mvo_t *s, const uint8_t *previous, const uint8_t *current
 int main(void)
 {
     static mvo_t state, probe;
-    const mvo_camera_t camera = {150.0f, 150.0f, 160.0f, 120.0f};
+    const mvo_camera_t camera = {150.0f, 150.0f, 160.0f, 120.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
     mvo_step_t step;
     uint32_t rng = 42u;
     float rotation[9], direction[3];

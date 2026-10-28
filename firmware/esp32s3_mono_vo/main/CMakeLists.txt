@@ -1,10 +1,15 @@
+set(SOURCES "main.c" "../../../core/mono_vo.c" "../../../core/mono_vo_numerics.c" "../../../core/mono_vo_tracking.c"
+    "../../../core/mono_vo_homography.c" "../../../core/mono_vo_essential.c" "../../../core/mono_map.c"
+    "../../../core/mono_cloud.c" "../../../core/voxel_map.c" "../../../core/obstacle_dir.c" "../../../core/path_plan.c")
+if(CONFIG_IDF_TARGET_ESP32S3) # the tracker's vector kernels, in each chip's instructions; other chips run the C ones
+    list(APPEND SOURCES "mvo_pie.S")
+elseif(CONFIG_IDF_TARGET_ESP32P4)
+    list(APPEND SOURCES "mvo_pie_p4.S")
+endif()
 idf_component_register(
-    SRCS "main.c" "mvo_pie.S" "../../../core/mono_vo.c" "../../../core/mono_vo_numerics.c" "../../../core/mono_vo_tracking.c"
-         "../../../core/mono_vo_homography.c" "../../../core/mono_vo_essential.c" "../../../core/mono_map.c"
-         "../../../core/mono_cloud.c" "../../../core/voxel_map.c" "../../../core/obstacle_dir.c"
-         "../../../core/path_plan.c"
+    SRCS ${SOURCES}
     INCLUDE_DIRS "." "../../../core"
-    REQUIRES esp_timer esp_driver_usb_serial_jtag vfs
+    REQUIRES esp_timer esp_driver_usb_serial_jtag esp_driver_uart vfs
 )
 
 # Same floating-point contract as the PC build (uwslam.core.CFLAGS): no fused multiply-add, so results match bit for bit.

@@ -106,6 +106,68 @@ float mvo_step_length(mvo_t *s, float *ratios, int count)
     return length;
 }
 
+/* Carries the chain of shared depths through a LOST step with the essential pose (r, t) its tracks fit, whose
+ * translation the step does not take: on the lake clip at 5 Hz such poses' directions of travel lie a median 87-126
+ * degrees from the reference's on fast turns, where the accepted ones lie 10-11 degrees from it. Their depths still
+ * carry the scale. Dropping every point at each of the 11 lost steps a run restarted the scale from the recent speed
+ * each time, and the scale jumped by 1.4 times in the median across them; carried on, the path after one alignment came
+ * out 0.33 m off in the median of 16 seeds instead of 0.40 m. The points take the length the shared depth ratios give,
+ * as on an ESSENTIAL step (without adding it to the recent speeds), only when at least MVO_MIN_SCALE_POINTS of them
+ * agree on it: their interquartile range at most MVO_CARRY_SPREAD of their median. Else it returns 0 and changes no
+ * point. A still camera's noise fits poses whose ratios scatter (the range 0.64-1.71 of the median, 10th to 90th
+ * percentile, against 0.08-0.80 on the lake's lost steps), and their points would set the scale when the camera moves
+ * again. Without shared points there is no scale to carry: a test of the points' parallax alone let a still camera's
+ * noise through in a third of its poses at 2-3 px, and after two noisy hovers the next move's length was off by more
+ * than 23% in a quarter to two fifths of the trials. */
+int mvo_carry_depths(mvo_t *s, int n, const float r[9], const float t[3])
+{
+    float recent[MVO_SPEED_STEPS], speed, length;
+    int k, shared = 0;
+    for (k = 0; k < n; ++k) { /* depth ratios against the points the previous step left in this frame pair's A */
+        float p[3];
+        if (mvo_best[k] && s->feature[k].has_point && s->feature[k].point[2] > 0.0f
+            && mvo_triangulate(r, t, mvo_ra[k], mvo_rb[k], p) && p[2] > 0.0f) {
+            mvo_values[shared++] = s->feature[k].point[2] / p[2];
+        }
+    }
+    if (shared < MVO_MIN_SCALE_POINTS) {
+        return 0;
+    }
+    length = mvo_median(mvo_values, shared); /* sorts, so the quartiles are at hand */
+    if (mvo_values[(3 * shared) / 4] - mvo_values[shared / 4] > MVO_CARRY_SPREAD * length) {
+        return 0;
+    }
+    if (s->recent_count > 0) {
+        memcpy(recent, s->recent_length, (size_t)s->recent_count * sizeof recent[0]); /* the median reorders */
+        speed = mvo_median(recent, s->recent_count);
+    } else {
+        speed = length;
+    }
+    if (s->recent_count > 0 && length > MVO_SPEED_LIMIT * speed) {
+        length = MVO_SPEED_LIMIT * speed;
+    } else if (s->recent_count > 0 && length * MVO_SPEED_LIMIT < speed) {
+        length = speed / MVO_SPEED_LIMIT;
+    }
+    for (k = 0; k < n; ++k) { /* as on an ESSENTIAL step: points in B, in front of both cameras */
+        float p[3], q[3];
+        s->feature[k].has_point = 0;
+        if (mvo_epipolar[k] && mvo_best[k] && mvo_triangulate(r, t, mvo_ra[k], mvo_rb[k], p)) {
+            mat3_vec(r, p, q);
+            q[0] += t[0];
+            q[1] += t[1];
+            q[2] += t[2];
+            if (p[2] > 0.0f && q[2] > 0.0f) {
+                s->feature[k].point[0] = length * q[0];
+                s->feature[k].point[1] = length * q[1];
+                s->feature[k].point[2] = length * q[2];
+                s->feature[k].spread = mvo_ray_spread(r, k);
+                s->feature[k].has_point = 1;
+            }
+        }
+    }
+    return 1;
+}
+
 void mvo_step(mvo_t *s, mvo_step_t *out)
 {
     static const float identity[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1}, zero[3] = {0, 0, 0};
@@ -124,6 +186,8 @@ void mvo_step(mvo_t *s, mvo_step_t *out)
     for (k = 0; k < n; ++k) {
         mvo_pb[k][0] = s->feature[k].x;
         mvo_pb[k][1] = s->feature[k].y;
+        mvo_undistort(&s->camera, mvo_pa[k], mvo_pa[k]); /* where the models work: a pinhole's pixels */
+        mvo_undistort(&s->camera, mvo_pb[k], mvo_pb[k]);
         to_ray(&s->camera, mvo_pa[k], mvo_ra[k]);
         to_ray(&s->camera, mvo_pb[k], mvo_rb[k]);
     }
@@ -164,22 +228,27 @@ void mvo_step(mvo_t *s, mvo_step_t *out)
             refill(s);
             return;
         }
-        for (k = 0; k < n; ++k) {
-            s->feature[k].has_point = 0;
+        if (count < MVO_MIN_INLIERS || !mvo_carry_depths(s, n, r, t)) {
+            for (k = 0; k < n; ++k) {
+                s->feature[k].has_point = 0;
+            }
         }
         s->timing.motion_us = mvo_now(s) - start;
         if (rotation_count >= MVO_MIN_TURN_INLIERS && 2 * rotation_count >= n) {
             finish(s, out, rotation_fit, zero, MVO_LOST, n, rotation_count, 0);
-        } else if (homography_count >= MVO_MIN_TURN_INLIERS && 2 * homography_count >= n && count >= MVO_MIN_INLIERS) {
-            /* The rotation fit lacks the support the homography has, so the camera moved and the homography read the
-             * parallax as a turn: over the floor of the lake clip at 5 Hz, +3.8 degrees of pitch a step on lost 5-10
-             * degree turns, against +0.7 for the essential pose, which models the travel. Its rotation stands, its
-             * translation does not. */
-            float rt[9];
-            mat3_transpose(r, rt);
-            finish(s, out, rt, zero, MVO_LOST, n, count, 0);
         } else if (homography_count >= MVO_MIN_TURN_INLIERS && 2 * homography_count >= n) {
-            finish(s, out, rotation_ab, zero, MVO_LOST, n, homography_count, 0);
+            if (count >= MVO_MIN_INLIERS) {
+                /* The rotation fit lacks the support the homography has: mostly the camera moved and the homography
+                 * read the parallax as a turn. Its pitch is biased, not its size: on such lost steps of the lake clip
+                 * at 5 Hz, +1.5 degrees of pitch a step against -0.2 for the essential pose, which models the travel,
+                 * for errors of 6.0 and 6.2 degrees in all. A still camera with noisy tracks lands here too, rarely.
+                 * The pose's rotation stands, its translation does not. */
+                float rt[9];
+                mat3_transpose(r, rt);
+                finish(s, out, rt, zero, MVO_LOST, n, count, 0);
+            } else {
+                finish(s, out, rotation_ab, zero, MVO_LOST, n, homography_count, 0);
+            }
         } else {
             finish(s, out, identity, zero, MVO_LOST, n, 0, 0);
         }

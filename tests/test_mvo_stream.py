@@ -19,7 +19,8 @@ from uwslam import mvo_stream
 def record(cores: int, mismatched: list[int], with_map: bool, simd: bool) -> dict:
     timing = {f"{stage}_ms": {"mean": 10.0 * k, "median": 9.0 * k, "p90": 12.0 * k, "max": 15.0 * k}
               for k, stage in enumerate(("total", "track", "motion", "detect"), start=1)}
-    entry = {"cores": cores, "simd": simd, "frames": 5, "steps": 4, "mismatched_steps": mismatched, "timing": timing}
+    entry = {"cores": cores, "simd": simd, "frames": 5, "steps": 4, "mismatched_steps": mismatched, "timing": timing,
+             "cpu_mhz": 240 if simd else 360}
     if with_map:
         entry["timing"]["map_ms"] = {"mean": 0.25, "median": 0.2, "p90": 0.3, "max": 0.4}
         entry["map"] = {"observations": 42, "match": True}
@@ -48,8 +49,9 @@ class MvoStreamTests(unittest.TestCase):
             text = (results / "RESULTS.md").read_text(encoding="utf-8")
         self.assertTrue(text.startswith("# Report\n\nBody.\n"))
         self.assertEqual(text.count(mvo_stream.BOARD_HEADING), 1)
-        self.assertIn("| `a` | 10 Hz | 2 | vector | 5 | 4 of 4 | 42 observations, hash equal to the PC's |", text)
-        self.assertIn("| `b` | 10 Hz | 1 | C | 5 | 3 of 4 | — |", text)
+        self.assertIn("| `a` | 240 MHz | 10 Hz | 2 | vector | 5 | 4 of 4 | 42 observations, hash equal to the PC's |",
+                      text)
+        self.assertIn("| `b` | 360 MHz | 10 Hz | 1 | C | 5 | 3 of 4 | — |", text)
 
     def test_board_section_does_not_invent_an_unknown_frame_rate(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -60,7 +62,7 @@ class MvoStreamTests(unittest.TestCase):
             (results / "board" / "unknown.json").write_text(json.dumps(item), encoding="utf-8")
             mvo_stream.write_board_section(results)
             text = (results / "RESULTS.md").read_text(encoding="utf-8")
-        self.assertIn("| `unknown` | unknown |", text)
+        self.assertIn("| `unknown` | 240 MHz | unknown |", text)
 
     def test_board_section_preserves_other_sections_after_it(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -187,6 +189,22 @@ class MapProtocolTests(unittest.TestCase):
         with mock.patch.object(mvo_stream, "Board", return_value=board), mock.patch("builtins.print"):
             return mvo_stream.stream("no-port", self.frames, self.expected, limit=limit,
                                      masks_path=self.masks if masks else None, expected_map_path=self.expected_map)
+
+    def test_start_line_carries_the_lens(self):
+        board = FakeBoard()
+        self.replay(board)
+        self.assertIn(b"start 1 2 3 4 1 2 1\n", board.sent)  # a pinhole: the four intrinsics alone
+        self.vo["camera_bits"] = [1, 2, 3, 4, 6, 7, 8, 9, 10]
+        self.write_expectations()
+        board = FakeBoard()
+        self.replay(board)
+        self.assertIn(b"start 1 2 3 4 1 2 1 6 7 8 9 10\n", board.sent)
+        for bad in ([1, 2, 3, 4, 6], [1, 2, 3, 4, -1, 0, 0, 0, 0], [1, 2, 3, 4, 1.5, 0, 0, 0, 0]):
+            with self.subTest(camera_bits=bad):
+                self.vo["camera_bits"] = bad
+                self.write_expectations()
+                with self.assertRaisesRegex(RuntimeError, "camera_bits"):
+                    self.replay(FakeBoard())
 
     def test_full_replay_checks_states_independent_of_equal_map_hash(self):
         board = FakeBoard()

@@ -21,7 +21,7 @@ int mvo_track_features(mvo_t *s, const uint8_t *a, const uint8_t *b)
 int main(void)
 {
     static mvo_t state, probe;
-    const mvo_camera_t camera = {4000, 4000, 160, 120};
+    const mvo_camera_t camera = {4000, 4000, 160, 120, 0, 0, 0, 0, 0};
     uint32_t rng = 1u;
     float rotation[9];
     int k, h, support;

@@ -113,6 +113,10 @@ static inline void to_ray(const mvo_camera_t *c, const float p[2], float r[2])
     r[1] = (p[1] - c->cy) / c->fy;
 }
 
+/* mono_vo.c */
+/* Carries the depth chain through a LOST step with the essential pose (r, t), or returns 0 changing no point. */
+int mvo_carry_depths(mvo_t *s, int n, const float r[9], const float t[3]);
+
 /* mono_vo_numerics.c */
 void mvo_smallest_vector(float *a, int n, float *out);
 void mvo_svd3(const float m[9], float u[9], float s[3], float v[9]);

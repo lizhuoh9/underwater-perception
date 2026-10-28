@@ -327,6 +327,42 @@ void mvo_cayley(const float c[3], float out[9])
     }
 }
 
+/* See mono_vo.h. OpenCV's model takes normalised (x, y) to x (1 + k1 r^2 + k2 r^4 + k3 r^6) + 2 p1 x y + p2 (r^2 + 2 x^2)
+ * and y (1 + k1 r^2 + k2 r^4 + k3 r^6) + p1 (r^2 + 2 y^2) + 2 p2 x y; Newton steps on that map, with its Jacobian, from
+ * the distorted point. */
+int mvo_undistort(const mvo_camera_t *camera, const float in[2], float out[2])
+{
+    const float xd = (in[0] - camera->cx) / camera->fx, yd = (in[1] - camera->cy) / camera->fy;
+    const float k1 = camera->k1, k2 = camera->k2, k3 = camera->k3, p1 = camera->p1, p2 = camera->p2;
+    float x = xd, y = yd;
+    int i, ok = 1;
+    if (k1 == 0.0f && k2 == 0.0f && k3 == 0.0f && p1 == 0.0f && p2 == 0.0f) {
+        out[0] = in[0];
+        out[1] = in[1];
+        return 1;
+    }
+    for (i = 0; i < MVO_UNDISTORT_STEPS; ++i) {
+        const float r2 = x * x + y * y, xy = x * y;
+        const float radial = 1.0f + r2 * (k1 + r2 * (k2 + r2 * k3));
+        const float slope = k1 + r2 * (2.0f * k2 + 3.0f * k3 * r2); /* d radial / d r^2 */
+        const float ex = x * radial + 2.0f * p1 * xy + p2 * (r2 + 2.0f * x * x) - xd;
+        const float ey = y * radial + p1 * (r2 + 2.0f * y * y) + 2.0f * p2 * xy - yd;
+        const float a = radial + 2.0f * x * x * slope + 2.0f * p1 * y + 6.0f * p2 * x;
+        const float b = 2.0f * xy * slope + 2.0f * p1 * x + 2.0f * p2 * y;
+        const float d = radial + 2.0f * y * y * slope + 6.0f * p1 * y + 2.0f * p2 * x;
+        const float det = a * d - b * b;
+        if (!(radial > 0.0f) || !(det > 1e-6f)) { /* folded over: a radius turned back or through the centre */
+            ok = 0;
+            break;
+        }
+        x -= (d * ex - b * ey) / det;
+        y -= (a * ey - b * ex) / det;
+    }
+    out[0] = camera->cx + camera->fx * x;
+    out[1] = camera->cy + camera->fy * y;
+    return ok;
+}
+
 static void sort_floats(float *v, int n) /* insertion sort: n <= MVO_MAX_FEATURES */
 {
     int i, j;

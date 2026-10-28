@@ -22,7 +22,7 @@ int mvo_track_features(mvo_t *s, const uint8_t *a, const uint8_t *b)
 int main(void)
 {
     static mvo_t s, probe;
-    const mvo_camera_t camera = {150, 150, 160, 120};
+    const mvo_camera_t camera = {150, 150, 160, 120, 0, 0, 0, 0, 0};
     int scenario, k;
     for (scenario = 0; scenario < 2; ++scenario) {
         float h[9], parallax;

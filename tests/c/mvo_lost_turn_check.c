@@ -63,7 +63,7 @@ int main(int argc, char **argv)
 {
     static mvo_t state, probe;
     static const float identity[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
-    const mvo_camera_t camera = {150.0f, 150.0f, 160.0f, 120.0f};
+    const mvo_camera_t camera = {150.0f, 150.0f, 160.0f, 120.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
     float sigma, outliers, centre[3], yaw, pitch, ry[9], rx[9], r[9];
     int first_seed, trials, trial, k;
     if (argc != 11) {

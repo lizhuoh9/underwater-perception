@@ -14,7 +14,7 @@ static od_layout_t layout;
 static od_state_t state, saved;
 
 /* The lake clip's camera: 110 degrees across a 960x544 frame stretched to 320x240. */
-static const mvo_camera_t lake = {112.0302963f, 148.2792358f, 160.0f, 120.0f};
+static const mvo_camera_t lake = {112.0302963f, 148.2792358f, 160.0f, 120.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
 
 /* Marks the cells of direction d as not water in a share of its columns (share of 16 columns, all its rows). */
 static void fill(int d, int columns)

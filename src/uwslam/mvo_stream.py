@@ -41,6 +41,10 @@ FNV_OFFSET, FNV_PRIME = 2166136261, 16777619
 RESULTS = LAKE_CLIP_RESULTS / "mono_vo_c"
 READY_TIMEOUT_S = 20.0
 REPLY_TIMEOUT_S = 30.0
+LINK_BAUD = 921_600  # a UART link's rate (the firmware's LINK_BAUD); a USB-Serial-JTAG port ignores it. A CH340
+# bridge's link at 2 Mbaud lost single bytes of the board's replies in two of three lake runs.
+STEP_FIELDS = ("index", "kind", "tracks", "inliers", "scale_points", "hash", "detect_us", "track_us",
+               "motion_us", "total_us")  # every step line carries these
 SELFTEST_CASES, SELFTEST_SEED = 2000, 12345
 SELFTEST_TIMEOUT_S = 120.0
 SOURCES = ("core_sha256", "header_sha256")
@@ -259,10 +263,10 @@ def write_cloud_ply(path: Path, cloud: dict) -> None:
 class Board:
     """Line-level access to the firmware, keeping every line it sends for the log."""
 
-    def __init__(self, port_name: str):
+    def __init__(self, port_name: str, baud: int = LINK_BAUD):
         import serial
         self.port = serial.Serial()
-        self.port.port, self.port.baudrate, self.port.timeout = port_name, 115200, 0.5
+        self.port.port, self.port.baudrate, self.port.timeout = port_name, baud, 0.5
         self.port.dtr = False  # opening must not reset the chip
         self.port.rts = False
         self.port.open()
@@ -299,7 +303,8 @@ def summarise(values: list[float]) -> dict:
 def stream(port_name: str, frames_path: Path, expected_path: Path, limit: int | None = None, cores: int = 2,
            masks_path: Path | None = None, expected_map_path: Path | None = None,
            simd: bool = True, expected_cloud_path: Path | None = None, expected_voxels_path: Path | None = None,
-           expected_dirs_path: Path | None = None, expected_plan_path: Path | None = None) -> tuple[dict, list[str]]:
+           expected_dirs_path: Path | None = None, expected_plan_path: Path | None = None,
+           baud: int = LINK_BAUD) -> tuple[dict, list[str]]:
     """Runs the frames (the first `limit` of them, when given) through the board on `cores` cores, tracking with the
     vector kernels or (simd False) the portable ones and, with masks, building the map; the record and the board's
     lines."""
@@ -350,7 +355,7 @@ def stream(port_name: str, frames_path: Path, expected_path: Path, limit: int | 
     try:
         frame_stream = resources.enter_context(frames_path.open("rb"))
         mask_stream = resources.enter_context(masks_path.open("rb")) if masks_path is not None else None
-        board = Board(port_name)
+        board = Board(port_name, baud)
         resources.callback(board.close)
         ready = fields(board.reply(("ready",), READY_TIMEOUT_S))
         if expected_map is not None and (type(ready.get("map_policy")) is not int or ready["map_policy"] != MAP_POLICY):
@@ -374,8 +379,11 @@ def stream(port_name: str, frames_path: Path, expected_path: Path, limit: int | 
             if key not in ready or key not in source or ready[key] != source[key]:
                 raise RuntimeError(f"The board's {key} differs from the PC run's: rebuild and flash the firmware, or "
                                    "re-run the PC side on the current sources")
-        board.send(("start " + " ".join(str(bits) for bits in expected["camera_bits"])
-                    + f" {expected['seed']} {cores} {int(simd)}\n").encode())
+        camera = expected["camera_bits"]  # fx fy cx cy, then the lens's k1 k2 p1 p2 k3 (none: a pinhole)
+        if len(camera) not in (4, 9) or not all(type(bits) is int and 0 <= bits <= 0xffffffff for bits in camera):
+            raise RuntimeError("The expectation's camera_bits must be 4 or 9 float bit patterns")
+        board.send(("start " + " ".join(str(bits) for bits in camera[:4]) + f" {expected['seed']} {cores} {int(simd)}"
+                    + "".join(f" {bits}" for bits in camera[4:]) + "\n").encode())
         started = fields(board.reply(("started",), REPLY_TIMEOUT_S))
         board.send(f"selftest {SELFTEST_CASES} {SELFTEST_SEED}\n".encode())
         selftest = fields(board.reply(("selftest",), SELFTEST_TIMEOUT_S))
@@ -417,6 +425,10 @@ def stream(port_name: str, frames_path: Path, expected_path: Path, limit: int | 
                     check_dirs(first, expected_dirs, index, dir_mismatches)
             else:
                 step = fields(line)
+                missing = [key for key in STEP_FIELDS if type(step.get(key)) is not int]
+                if missing:  # a UART link that drops a byte loses a field's "=" or digits
+                    raise RuntimeError(f"Board step line for frame {index} arrived damaged (no valid {missing[0]}); "
+                                       f"on a UART link try a lower --baud: {line[:160]}")
                 if checked:
                     if index == 0 or step.get("index") != index or step.get("kind") not in (0, 1, 2):
                         raise RuntimeError(f"Board sent an invalid step for frame {index}: {line}")
@@ -494,7 +506,7 @@ def stream(port_name: str, frames_path: Path, expected_path: Path, limit: int | 
                                                for step in steps])
     record = {"task": "Monocular VO" + (" and obstacle grid" if expected_map is not None else "")
                       + (" and sparse cloud" if expected_cloud is not None else "")
-                      + " on the ESP32-S3, replayed over USB against the PC build",
+                      + " on an ESP32 board, replayed over its serial link against the PC build",
               "frames_file": frames_path.name, "expected_file": expected_path.name, "rate_hz": expected.get("rate_hz", 10.0),
               "cpu_mhz": ready["cpu_mhz"],
               **{key: ready[key] for key in SOURCES + (MAP_SOURCES if expected_map is not None else ())},
@@ -536,11 +548,12 @@ def stream(port_name: str, frames_path: Path, expected_path: Path, limit: int | 
     return record, board.lines
 
 
-BOARD_HEADING = "## ESP32-S3"
+BOARD_HEADING = "## ESP32 boards"
 
 
 def write_board_section(results: Path) -> None:
-    """Replace only the ESP32-S3 section of RESULTS.md from records in board/."""
+    """Replace only the boards section of RESULTS.md (headed BOARD_HEADING, or the older "## ESP32-S3") from records
+    in board/."""
     rows = []
     for path in sorted((results / "board").glob("*.json")):
         record = json.loads(path.read_text(encoding="utf-8"))
@@ -571,25 +584,32 @@ def write_board_section(results: Path) -> None:
         kernels = "vector" if record.get("simd") else "C"
         rate = record.get("rate_hz", 10.0)
         rate_text = f"{rate:g} Hz" if isinstance(rate, (int, float)) and math.isfinite(rate) and rate > 0 else "unknown"
-        rows.append(f"| `{path.stem}` | {rate_text} | {record['cores']} | {kernels} | {record['frames']} | "
+        clock = f"{record['cpu_mhz']} MHz" if "cpu_mhz" in record else "—"
+        rows.append(f"| `{path.stem}` | {clock} | {rate_text} | {record['cores']} | {kernels} | "
+                    f"{record['frames']} | "
                     f"{record['steps'] - len(record['mismatched_steps'])} of {record['steps']} | {map_cell} | "
                     f"{step_time} | {' | '.join(stage_times)} | {map_time} | {extra_cell} |")
     section = [BOARD_HEADING, "",
-               "The host streams grayscale frames and optional masks over USB (`python -m uwslam.mvo_stream`); "
-               "the board reports each step's hash and stage times. These timings exclude capture and USB transfer. "
-               "Each record provides its own rate, core count and kernel choice. Before streaming, the board checks "
-               "its vector dispatch against C on random windows. Records and raw serial lines are in `board/`.", "",
-               "| Record | Rate | Cores | Kernels | Frames | Steps equal to the PC | Map | Per step, mean / median / max | "
-               "Tracking | Motion | Detection | Map update | Voxel map / directions / plan (update) |",
-               "|---|---:|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---|",
+               "The host streams grayscale frames and optional masks over the board's serial link (`python -m "
+               "uwslam.mvo_stream`): the ESP32-S3's USB-Serial-JTAG port, or an ESP32-P4 board's USB-UART bridge. The "
+               "board reports each step's hash and stage times. These timings exclude capture and transfer. Each record "
+               "provides its own clock, rate, core count and kernel choice (the vector kernels are mvo_pie.S on the S3 "
+               "and mvo_pie_p4.S on the P4). Before streaming, the board checks its vector dispatch against C on random "
+               "windows. "
+               "Records and raw serial lines are in `board/`.", "",
+               "| Record | Clock | Rate | Cores | Kernels | Frames | Steps equal to the PC | Map | Per step, mean / "
+               "median / max | Tracking | Motion | Detection | Map update | Voxel map / directions / plan (update) |",
+               "|---|---:|---:|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---|",
                *rows, "",
                "Re-run (after `uwslam.mvo compare --board-frames` and `uwslam.mono_map --board-masks`):", "", "```bash",
                "idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_240 -p <port> flash",
+               "idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_p4 -D SDKCONFIG=build_p4/sdkconfig "
+               "-D IDF_TARGET=esp32p4 -p <port> flash   # an ESP32-P4",
                "python -m uwslam.mvo_stream --port <port> --frames <frames file> --masks <masks file> --label <name>",
                "```", ""]
     report = results / "RESULTS.md"
     text = report.read_text(encoding="utf-8") if report.exists() else ""
-    heading = re.search(r"(?m)^## ESP32-S3[ \t]*$", text)
+    heading = re.search(r"(?m)^## (?:ESP32-S3|ESP32 boards)[ \t]*$", text)
     prefix, suffix = text, ""
     if heading:
         prefix = text[:heading.start()]
@@ -619,6 +639,8 @@ def main() -> None:
     parser.add_argument("--frames-limit", type=int, help="Stream only the first this many frames")
     parser.add_argument("--cores", type=int, choices=(1, 2), default=2, help="Run on one core or on both")
     parser.add_argument("--no-simd", action="store_true", help="Track with the portable C kernels, not the vector ones")
+    parser.add_argument("--baud", type=int, default=LINK_BAUD, help="A UART link's rate (a USB-Serial-JTAG port ignores "
+                        "it); the firmware switches its console UART to this once it runs")
     args = parser.parse_args()
     if args.cloud_output is not None and args.expected_cloud is None:
         parser.error("--cloud-output requires --expected-cloud")
@@ -641,7 +663,7 @@ def main() -> None:
         expected_map = LAKE_CLIP_RESULTS / "mono_map" / f"board_expected_map_{rate:g}hz.json"
     record, lines = stream(args.port, args.frames, args.expected, args.frames_limit, args.cores, args.masks,
                            expected_map, not args.no_simd, args.expected_cloud, args.expected_voxels, args.expected_dirs,
-                           args.expected_plan)
+                           args.expected_plan, args.baud)
     if args.cloud_output is not None:
         write_cloud_ply(args.cloud_output, record["cloud"])
     folder.mkdir(parents=True, exist_ok=True)

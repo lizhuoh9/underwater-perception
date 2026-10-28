@@ -47,7 +47,19 @@ BOARD_RATES = {10.0: 1, 5.0: 2}  # Hz: every how many of the 10 Hz board frames 
 
 
 class Camera(ctypes.Structure):
-    _fields_ = [("fx", ctypes.c_float), ("fy", ctypes.c_float), ("cx", ctypes.c_float), ("cy", ctypes.c_float)]
+    """mvo_camera_t: pinhole intrinsics of the 320x240 frame and its lens distortion in OpenCV's model and order (all
+    zero for a pinhole)."""
+    _fields_ = [("fx", ctypes.c_float), ("fy", ctypes.c_float), ("cx", ctypes.c_float), ("cy", ctypes.c_float),
+                ("k1", ctypes.c_float), ("k2", ctypes.c_float), ("p1", ctypes.c_float), ("p2", ctypes.c_float),
+                ("k3", ctypes.c_float)]
+
+
+CAMERA_FIELDS = tuple(name for name, _ in Camera._fields_)
+
+
+def camera_bits(camera: Camera) -> list[int]:
+    """The camera's floats as their IEEE-754 bits, in mvo_camera_t's order: what the board's start line carries."""
+    return [struct.unpack("<I", struct.pack("<f", getattr(camera, name)))[0] for name in CAMERA_FIELDS]
 
 
 class StepC(ctypes.Structure):
@@ -224,10 +236,15 @@ def write_report(output: Path, summary: dict) -> None:
              "over a separately fitted rotation: such a step counts as rotation only when that rotation has 15 tracks "
              "and half of them, else as lost. A step lost on a fast turn keeps the last pose in the prototype, while in "
              "the C port it keeps a turn when at least 8 tracks and half of them agree on one (at 5 Hz the lost steps "
-             "turn by 11 degrees in the median, all of which the heading lost): the fitted rotation's, else the "
-             "essential pose's when it had 15 inliers, else the homography's. A homography the fitted rotation does "
-             "not share has read the travel's parallax as a turn, over the lake's floor as pitch: on the lost 5–10 "
-             "degree turns at 5 Hz, +3.8 degrees a step against +0.7 for the essential pose, which made the path climb. "
+             "turn by 11 degrees in the median, all of which the heading lost): the fitted rotation's, and where only "
+             "the homography has that support, the essential pose's when it had 15 inliers, else the homography's. A "
+             "homography the fitted rotation does not share has mostly read the travel's parallax as a turn, over the "
+             "lake's floor as pitch: on such lost steps at 5 Hz it errs +1.5 degrees in pitch a step against -0.2 for "
+             "the essential pose, though by as much in all (6.0 and 6.2 degrees), and that bias made the path climb. "
+             "Any lost step whose essential pose had 15 inliers carries the chain of shared depths on with that pose, "
+             "still without its translation, when at least 8 depth ratios it shares with the earlier points agree on "
+             "one scale (their interquartile range at most half their median): dropping every point at each of the 11 "
+             "lost steps a run restarted the scale from the recent speed each time. "
              "Last, where the homography and the essential matrix both turn a step by more than 5 "
              "degrees, the C port pulls the essential rotation's angle about the homography's turn axis towards the "
              "homography's: on a fast turn two views trade the turn against sideways travel for a fraction of a pixel, "
@@ -312,8 +329,8 @@ def compare(video: Path, reconstruction: Path, output: Path, board_frames: Path 
                   flush=True)
             if rate in BOARD_RATES:
                 boards[rate] = {"rate_hz": rate, "stride": stride, "every": BOARD_RATES[rate], "frames": len(indices),
-                                "steps": len(steps), "camera": [camera.fx, camera.fy, camera.cx, camera.cy], "seed": SEED,
-                                "camera_bits": [struct.unpack("<I", struct.pack("<f", v))[0] for v in (camera.fx, camera.fy, camera.cx, camera.cy)],
+                                "steps": len(steps), "camera": [getattr(camera, name) for name in CAMERA_FIELDS],
+                                "seed": SEED, "camera_bits": camera_bits(camera),
                                 "step_hashes": hashes, "kinds": [KINDS[s.kind] for s in steps],
                                 "final_world_centre": list(steps[-1].world_centre), **sources_sha256()}
                 if board_frames is not None and BOARD_RATES[rate] == 1:

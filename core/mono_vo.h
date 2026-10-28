@@ -31,10 +31,18 @@
  * MVO_MIN_SCALE_POINTS shared points the length is the recent speed (1 for the first). A step with fewer than
  * MVO_MIN_INLIERS counts as lost and keeps the position; a lost step still takes a rotation supported by at least
  * MVO_MIN_TURN_INLIERS and half of the tracks. Where only the homography has that support and the essential pose had
- * MVO_MIN_INLIERS inliers, the pose's rotation stands instead: a homography the rotation fit does not share has read
- * the travel's parallax as a turn, over a floor as pitch. ROTATION means translation is indistinguishable under the
- * heuristic, not proof of physically zero translation. Poses are camera-to-world, world = the first camera (x right,
- * y down, z forward).
+ * MVO_MIN_INLIERS inliers, the pose's rotation stands instead: a homography the rotation fit does not share has mostly
+ * read the travel's parallax as a turn, over a floor as pitch. Any lost step whose essential pose had MVO_MIN_INLIERS
+ * inliers carries the chain of shared depths on with that pose, though not its translation: its points go on to the
+ * next step at the length the shared depth ratios give, when at least MVO_MIN_SCALE_POINTS of them agree on it (their
+ * interquartile range at most MVO_CARRY_SPREAD of their median); else they are dropped and the next step takes the
+ * recent speed. A still camera's noise fits poses whose ratios scatter, so it nearly always drops them. ROTATION means
+ * translation is indistinguishable under the heuristic, not proof of physically zero translation. Poses are
+ * camera-to-world, world = the first camera (x right, y down, z forward). A lens with distortion (mvo_camera_t's k1, k2,
+ * p1, p2, k3: OpenCV's model, as its calibration gives them) is taken out of each step's pairs before any model sees
+ * them, which then work on the pixels a pinhole with the same fx, fy, cx, cy would have seen (mvo_undistort); the
+ * corners, the tracking and the features' pixels stay in the raw image, where the masks are. With all five zero the
+ * pairs reach the models untouched.
  *
  * C99, no heap, no libm (a local square root, by Newton steps without division), xorshift32 for RANSAC, so a PC build
  * and an ESP32-S3 build give identical results with -ffp-contract=off and without fast-math. It follows the OpenCV
@@ -74,7 +82,9 @@
 #define MVO_MIN_SCALE_POINTS 8
 #define MVO_SPEED_STEPS 10   /* the recent speed: the median of this many step lengths */
 #define MVO_SPEED_LIMIT 3.0f /* a step length stays within this factor of the recent speed */
+#define MVO_CARRY_SPREAD 0.5f /* a lost step's shared depth ratios agree: interquartile range at most this x median */
 #define MVO_MAX_DEPTH 50.0f /* cheirality: points farther than this many baselines get no point (but stay tracked) */
+#define MVO_UNDISTORT_STEPS 5 /* Newton steps inverting the lens model: within 1e-3 px of OpenCV's in the tests */
 #define MVO_TURN_GATE 0.0038053019f /* 1 - cos 5 degrees: a step either rotation turns less does not pull */
 #define MVO_TURN_FULL 0.0151922470f /* 1 - cos 10 degrees: where the pull is MVO_TURN_PULL */
 #define MVO_TURN_PULL 3000.0f /* per squared radian, against a robust cost in which a pair costs at most 1 */
@@ -93,7 +103,9 @@
 enum { MVO_LOST = 0, MVO_ROTATION = 1, MVO_ESSENTIAL = 2 };
 
 typedef struct {
-    float fx, fy, cx, cy; /* pinhole intrinsics of the 320x240 frame, pixels */
+    float fx, fy, cx, cy;     /* pinhole intrinsics of the 320x240 frame, pixels */
+    float k1, k2, p1, p2, k3; /* that frame's lens distortion in OpenCV's model and order (radial k1, k2, k3 and
+                               * tangential p1, p2 on normalised coordinates); all zero for a pinhole */
 } mvo_camera_t;
 
 typedef struct {
@@ -182,6 +194,11 @@ float mvo_step_length(mvo_t *s, float *ratios, int count);
 uint32_t mvo_state_size(void);
 uint32_t mvo_pyramid_bytes(void);
 float mvo_sqrt(float v);
+/* Where a pinhole with the camera's fx, fy, cx, cy would see the ray its lens shows at pixel `in` of the 320x240 frame:
+ * OpenCV's distortion model inverted by MVO_UNDISTORT_STEPS Newton steps from `in` (in and out may be the same).
+ * Returns 1, or 0 where an estimate reaches a fold of the model (its radial factor or its Jacobian's determinant not
+ * positive), out then holding that estimate. With all five coefficients zero out = in exactly. */
+int mvo_undistort(const mvo_camera_t *camera, const float in[2], float out[2]);
 /* The features tracked into the newest frame: pixels (x, y pairs) and ids, at most capacity; returns the count. */
 int mvo_tracks(const mvo_t *s, float *xy, uint32_t *ids, int capacity);
 /* The portable tracker kernels (see mvo_kernels_t). */

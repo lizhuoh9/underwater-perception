@@ -226,7 +226,7 @@ class MonoCloudBoardHostTests(unittest.TestCase):
             vo_path, cloud_path = folder / "vo.json", folder / "cloud.json"
             vo_path.write_text(json.dumps(expected), encoding="utf-8")
             cloud_path.write_text(json.dumps(expected_cloud), encoding="utf-8")
-            with patch.object(mvo_stream, "Board", side_effect=lambda port: ProcessBoard(self.program)), patch("builtins.print"):
+            with patch.object(mvo_stream, "Board", side_effect=lambda port, baud: ProcessBoard(self.program)), patch("builtins.print"):
                 record, lines = mvo_stream.stream("host-only", path, vo_path, cores=1,
                                                   expected_cloud_path=cloud_path)
         self.assertTrue(record["all_match"])
@@ -293,7 +293,7 @@ class MonoCloudBoardHostTests(unittest.TestCase):
             voxel_map.write_board_files(folder, voxels, 10.0)
             obstacle_dir.write_board_files(folder, dirs, masks, 10.0)
             path_plan.write_board_files(folder, plans, 10.0)
-            with patch.object(mvo_stream, "Board", side_effect=lambda port: ProcessBoard(self.program)), \
+            with patch.object(mvo_stream, "Board", side_effect=lambda port, baud: ProcessBoard(self.program)), \
                     patch("builtins.print"):
                 record, _ = mvo_stream.stream("host-only", frames_path, vo_path, cores=1, masks_path=masks_path,
                                               expected_map_path=folder / "board_expected_map_10hz.json",
@@ -318,7 +318,7 @@ class MonoCloudBoardHostTests(unittest.TestCase):
             tampered = json.loads(plan_path.read_text(encoding="utf-8"))
             tampered["plan_hashes"][1] ^= 1
             plan_path.write_text(json.dumps(tampered), encoding="utf-8")
-            with patch.object(mvo_stream, "Board", side_effect=lambda port: ProcessBoard(self.program)), \
+            with patch.object(mvo_stream, "Board", side_effect=lambda port, baud: ProcessBoard(self.program)), \
                     patch("builtins.print"):
                 partial, _ = mvo_stream.stream("host-only", frames_path, vo_path, limit=4, cores=1, masks_path=masks_path,
                                                expected_map_path=folder / "board_expected_map_10hz.json",

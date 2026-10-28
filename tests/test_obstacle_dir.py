@@ -36,7 +36,8 @@ class ObstacleDirectionTests(unittest.TestCase):
         program = self.folder / "obstacle_dir_check.exe"
         subprocess.run(["gcc", "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-pedantic", "-ffp-contract=off",
                         *STATIC, f"-I{ROOT / 'core'}", str(ROOT / "tests/c/obstacle_dir_check.c"),
-                        str(ROOT / "core/obstacle_dir.c"), "-o", str(program)], check=True)
+                        str(ROOT / "core/obstacle_dir.c"), str(ROOT / "core/mono_vo_numerics.c"), "-o", str(program)],
+                       check=True)
         output = subprocess.run([str(program)], check=True, capture_output=True, text=True).stdout
         self.assertIn("obstacle_dir_check ok", output)
 

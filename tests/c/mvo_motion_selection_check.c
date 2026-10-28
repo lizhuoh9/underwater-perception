@@ -107,7 +107,7 @@ int mvo_track_features(mvo_t *s, const uint8_t *previous, const uint8_t *current
 int main(int argc, char **argv)
 {
     static mvo_t state, probe;
-    const mvo_camera_t camera = {150.0f, 150.0f, 160.0f, 120.0f};
+    const mvo_camera_t camera = {150.0f, 150.0f, 160.0f, 120.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
     float sigma_x, sigma_y, outlier_fraction, centre_x, centre_z, yaw_degrees, angle, c, s;
     int first_seed, trials, trial, k;
 

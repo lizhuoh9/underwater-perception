@@ -1,12 +1,11 @@
+# The ESP32-S3 is the default target; sdkconfig.defaults.<target> adds each chip's own settings. Build for the ESP32-P4
+# in a build folder of its own with its own sdkconfig (see README.md, ESP32-P4).
 CONFIG_IDF_TARGET="esp32s3"
-CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
 
 # No PSRAM: the odometry state (two image pyramids, about 210 KB) and its scratch live in internal RAM.
 # CONFIG_SPIRAM is not set
 
-# Frames come in and results go out over the USB-Serial-JTAG port.
-CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
 CONFIG_LOG_DEFAULT_LEVEL_WARN=y
 
