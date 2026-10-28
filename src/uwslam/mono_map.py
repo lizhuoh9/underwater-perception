@@ -1,7 +1,7 @@
 """A top-view obstacle map from the C monocular odometry and the segmentation's water masks (core/mono_vo*.c and
 core/mono_map.c, camera only), built on the lake clip and scored against the reconstruction's point cloud.
 
-Before an explicit tracking loss, the tracked features with a well-triangulated point (rays at least 1 degree apart, 1.5 in the p4 configuration) whose
+Before an explicit tracking loss, the tracked features with a well-triangulated point (rays at least 1 degree apart) whose
 pixel the frame's 60x80 mask marks as not water are obstacle observations; core/mono_map.c files them in a 128x128
 obstacle-evidence grid seen from above. Unobserved cells remain unknown; the cell size is one eighth of the scene's
 median depth since one camera fixes no scale. The old grid freezes after the first LOST step: later tracking does

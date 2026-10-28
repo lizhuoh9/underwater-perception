@@ -48,7 +48,7 @@
  * and an ESP32-S3 build give identical results with -ffp-contract=off and without fast-math. It follows the OpenCV
  * prototype's design, not its numbers: the prototype uses OpenCV's five-point solver and its own Lucas-Kanade, stops
  * tracking the pairs recoverPose drops as too far, and takes every median depth ratio as it comes. One mvo_t is about
- * 8 KB; the caller also provides two image
+ * 8 KB (9.8 KB in the p4 configuration); the caller also provides two image
  * pyramids of MVO_PYRAMID_BYTES (about 100 KB each, 16-byte aligned for vector kernels), separate blocks so that they
  * fit a fragmented heap. Most of a step splits in two halves that can run at once (mvo_t.parallel): pyramid level 1
  * (half the rows each), the tracking (half the features), each RANSAC batch (half the samples), the corner search (half
@@ -69,16 +69,15 @@
  * about half as long: it tracks 300 features, which on the lake clip at 5 Hz brought the path after one alignment from
  * 0.33 to 0.26 m in the median of 16 seeds and from 0.079 to 0.067 m on 10 s windows (lower in 68% of 192 paired
  * runs), the heading unchanged; at 10 Hz it is worse, so it is a 5 Hz configuration. The extra features triangulate
- * less well, so its maps file only points from rays at least 1.5 degrees apart (MVO_MAP_MIN_SPREAD, 1 degree by
- * default), which keeps the voxel map's local accuracy where it was (6.1 cm) for the same share of the seen surface. */
+ * less well: the 5 Hz voxel map's local error is 7.1 cm instead of 6.1. Filing only points from rays 1.5 degrees apart
+ * took that back, but forward motion leaves the least parallax straight ahead, and the range there was then known in
+ * 34% of the 5 Hz steps instead of 71%, so the maps file from 1 degree in both (MM_, VM_ and MC_MIN_SPREAD). */
 #if defined(MVO_CONFIG_P4)
 #define MVO_CONFIG_NAME "p4"
 #define MVO_MAX_FEATURES 300
-#define MVO_MAP_MIN_SPREAD 6.8523e-4f /* squared sine of 1.5 degrees */
 #else
 #define MVO_CONFIG_NAME "s3"
 #define MVO_MAX_FEATURES 250
-#define MVO_MAP_MIN_SPREAD 3.0e-4f /* squared sine of 1 degree */
 #endif
 
 #define MVO_REFILL 0.6f

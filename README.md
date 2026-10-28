@@ -107,8 +107,8 @@ python -m uwslam.mono_map <video> --reconstruction <folder> --output results/lak
 ```
 
 The core has two build configurations ([core/mono_vo.h](core/mono_vo.h)): `s3`, the default, and `p4` for the
-ESP32-P4 (300 features, map points from rays at least 1.5° apart; see ESP32-P4 below). The tools and tests build the one
-the `UWSLAM_CONFIG` environment variable names, `s3` when it is unset, and record it in their outputs.
+ESP32-P4 (300 features instead of 250; see ESP32-P4 below). The tools and tests build the one the `UWSLAM_CONFIG`
+environment variable names, `s3` when it is unset, and record it in their outputs.
 
 The water masks come from [mask_motion](src/uwslam/experiments/mask_motion.py), which runs an exported ESP-DL int8
 segmentation model on the clip ([segmenter.py](src/uwslam/experiments/segmenter.py) describes the model folder).
@@ -331,9 +331,9 @@ feeds about a frame a second, and the segmentation model is not in them.
 
 With the time the P4 leaves over, its firmware builds the `p4` configuration of the core (`MVO_CONFIG_P4` in
 [core/mono_vo.h](core/mono_vo.h); on the PC `UWSLAM_CONFIG=p4`, results in [results/lake_clip_p4](results/lake_clip_p4)).
-It tracks 300 features instead of 250, and its maps file only points from rays at least 1.5° apart instead of 1°. Of
-the ways tried to spend the P4's time on accuracy, more features helped, and only at 5 Hz (640×480 frames, 10 Hz input,
-more RANSAC samples, refinement or tracking iterations and a larger voxel map did not):
+It tracks 300 features instead of 250. Of the ways tried to spend the P4's time on accuracy, more features helped, and
+only at 5 Hz (640×480 frames, 10 Hz input, more RANSAC samples, refinement or tracking iterations and a larger voxel map
+did not):
 
 | Lake clip, 16 seeds | default (250 features) | p4 (300) |
 |---|---:|---:|
@@ -342,19 +342,18 @@ more RANSAC samples, refinement or tracking iterations and a larger voxel map di
 | 5 Hz, full clip: position RMSE | 0.33 m [0.24–0.45] | 0.26 m [0.21–0.31] |
 | 5 Hz, full clip: scale spread | 2.6× | 2.1× |
 | 10 Hz, 10 s windows: position / heading RMSE, median | 0.078 m / 11.2° | 0.083 m / 13.4° |
-| 5 Hz voxel map: local / global median distance, obstacles held | 0.061 / 0.16 m, 717 | 0.061 / 0.15 m, 687 |
+| 5 Hz voxel map: local / global median distance, obstacles held | 0.061 / 0.16 m, 717 | 0.071 / 0.18 m, 790.5 |
+| 5 Hz plan: moving steps with a known range straight ahead | 66% | 71% |
 
 A 19×19 tracking window instead of 15×15, on top of the 300 features, improved the heading over the 5 Hz windows (7.8°
 against 8.3°, lower in 57%) and the full-clip position (0.21 m against 0.26 m), but not the position over the windows
 or the full-clip heading. It needs new P4 vector kernels and is left for later.
 
-The extra features triangulate less well: filed from 1°, the voxel map's local error grew from 6.1 to 7.1 cm, which the
-1.5° admission takes back. The admission drops the points with the least parallax, and forward motion leaves those in
-the direction of travel. Against 300 features filed from 1°, the 5 Hz map holds 687 obstacles instead of about 790
-(medians of 16 seeds). Driving straight at a wall in the synthetic test, the default configuration knows the range
-straight ahead in 6 of 11 steps and this one in none, as does the default with only the 1.5° admission; that test is
-skipped in this configuration. The obstacle directions from the mask, which block such a wall, are the same in both
-configurations.
+The extra features triangulate less well, so the map's points lie a little farther from the reference. Filing only
+points from rays at least 1.5° apart instead of 1°, as first tried, kept the local error at 6.1 cm but halved how often
+the range straight ahead was known (34% of the 5 Hz steps instead of 71%), because forward motion gives the least
+parallax there: driving straight at a wall in the synthetic test, it knew that range in none of 11 steps instead of 7,
+and 1.25° in none either. Both configurations therefore file from 1°.
 
 ## Limitations
 

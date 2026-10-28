@@ -52,7 +52,7 @@ class ConfigTests(unittest.TestCase):
 
     def test_each_configuration_sets_its_count_and_map_admission(self):
         program = self.folder / "mvo_config_check.exe"
-        for config, defines, spread in (("s3", [], 3.0e-4), ("p4", ["-DMVO_CONFIG_P4"], 6.8523e-4)):
+        for config, defines, spread in (("s3", [], 3.0e-4), ("p4", ["-DMVO_CONFIG_P4"], 3.0e-4)):  # one admission
             with self.subTest(config=config):
                 subprocess.run(["gcc", *CFLAGS, *defines, *STATIC, f"-I{ROOT / 'core'}",
                                 str(ROOT / "tests/c/mvo_config_check.c"), "-o", str(program)], check=True)

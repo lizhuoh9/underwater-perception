@@ -2,9 +2,9 @@
   "task": "Local avoidance and 3D path choice from the voxel map and the water masks on the lake clip, scored open-loop against the reference reconstruction",
   "sources_sha256": {
     "core_sha256": "b7b36567dd5de3e9171494186afdc8406cf6dc4e5a5c7b5b9eb0447bfa68390b",
-    "header_sha256": "dec7c320ab39e3054018ddac0efa3213815e10e9029a391f92bc185de56f23ea",
+    "header_sha256": "c5c620d24046e5f9f6c17cf6e29bffae321c1d0d11f67991a00e284caa181f2e",
     "voxel_sha256": "b803ea6bf97c0334f71e65c3df31b06c2430e628b34f67a1c02d99f82a8eb0c5",
-    "voxel_header_sha256": "c12b409d6c5526968fa9c350a7e75b1b94fa7d5115545f616986da070c58cc47",
+    "voxel_header_sha256": "048b6d5c2124e0cea4a4cd97b1b2a2e7cfb80dcbb3cf056060d69372fef70dd8",
     "dir_sha256": "ed8b510cdc05db181f41d5b8426ee2c7ee8d03d5ae04caa295ab71b7b3d12aa6",
     "dir_header_sha256": "4ec7b465dba1fc9b51670029a93c806a4c9def2895b00a6bacbe8050b274813d",
     "plan_sha256": "9e0f7bbd301b6d2f554c43ec3887ab47492495bddc1fd300c9152de5327a2e3f",
@@ -102,7 +102,8 @@
             "median_log2_ratio": -1.457536963573618,
             "within_2x": 0.3157894736842105
           }
-        }
+        },
+        "ahead_known": 0.2958579881656805
       },
       "over_seeds": {
         "danger": {
@@ -134,6 +135,11 @@
           "median": 0.8514479021462409,
           "min": 0.8225361819434872,
           "max": 0.8663400979706088
+        },
+        "ahead_known": {
+          "median": 0.31952662721893493,
+          "min": 0.2869822485207101,
+          "max": 0.3668639053254438
         },
         "chosen_within_2x": {
           "median": 0.3592105263157894,
@@ -301,7 +307,8 @@
             "median_log2_ratio": -0.1154484698675379,
             "within_2x": 0.8333333333333334
           }
-        }
+        },
+        "ahead_known": 0.6568047337278107
       },
       "over_seeds": {
         "danger": {
@@ -333,6 +340,11 @@
           "median": 0.9107645734863831,
           "min": 0.8759322033898305,
           "max": 0.9241379310344827
+        },
+        "ahead_known": {
+          "median": 0.6597633136094675,
+          "min": 0.5621301775147929,
+          "max": 0.6982248520710059
         },
         "chosen_within_2x": {
           "median": 0.9083333333333333,

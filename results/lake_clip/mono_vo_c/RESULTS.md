@@ -6,11 +6,11 @@ Each row of the first table is one run with one RANSAC seed. On this clip the se
 
 | Rate | Version | Steps (lost / rotation only) | Position RMSE after alignment | Heading RMSE / max | Direction of travel, median | Scale ratio over 5 s windows | ms per step (PC) |
 |---:|---|---:|---:|---:|---:|---:|---:|
-| 10 Hz | C | 338 (1 / 12) | 0.37 m | 26.0° / 48° | 12.6° | 0.14–1.41 | 8.3 |
+| 10 Hz | C | 338 (1 / 12) | 0.37 m | 26.0° / 48° | 12.6° | 0.14–1.41 | 8.0 |
 | 10 Hz | OpenCV prototype | 338 (0 / 1) | 0.41 m | 27.4° / 46° | 14.4° | 0.73–1.69 | 5.8 |
-| 5 Hz | C | 169 (12 / 6) | 0.25 m | 8.5° / 32° | 11.5° | 0.74–1.33 | 11.8 |
+| 5 Hz | C | 169 (12 / 6) | 0.25 m | 8.5° / 32° | 11.5° | 0.74–1.33 | 10.7 |
 | 5 Hz | OpenCV prototype | 169 (3 / 0) | 0.44 m | 25.7° / 49° | 12.7° | 0.48–1.61 | 7.9 |
-| 3 Hz | C | 101 (20 / 0) | 0.43 m | 9.8° / 48° | 9.4° | 0.28–2.30 | 12.9 |
+| 3 Hz | C | 101 (20 / 0) | 0.43 m | 9.8° / 48° | 9.4° | 0.28–2.30 | 13.8 |
 | 3 Hz | OpenCV prototype | 101 (7 / 0) | 0.33 m | 18.5° / 47° | 11.2° | 0.35–2.12 | 9.1 |
 
 C port over 16 RANSAC seeds, median [smallest–largest]:

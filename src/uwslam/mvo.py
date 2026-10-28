@@ -38,8 +38,8 @@ VOXEL_SOURCE = CORE_DIR / "voxel_map.c"
 DIRECTION_SOURCE = CORE_DIR / "obstacle_dir.c"
 PLAN_SOURCE = CORE_DIR / "path_plan.c"
 WIDTH, HEIGHT = 320, 240
-# The build configuration (core/mono_vo.h): "s3", the default, or "p4" (MVO_CONFIG_P4: 300 features, maps from rays 1.5
-# degrees apart), chosen with the UWSLAM_CONFIG environment variable for every tool that builds the core.
+# The build configuration (core/mono_vo.h): "s3", the default, or "p4" (MVO_CONFIG_P4: 300 features), chosen with the
+# UWSLAM_CONFIG environment variable for every tool that builds the core.
 CONFIGS = {"s3": {"defines": [], "max_features": 250}, "p4": {"defines": ["-DMVO_CONFIG_P4"], "max_features": 300}}
 CONFIG = os.environ.get("UWSLAM_CONFIG", "s3")
 if CONFIG not in CONFIGS:

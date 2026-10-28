@@ -28,9 +28,8 @@ python -m uwslam.voxel_map <video> --reconstruction <folder> --output <fresh fol
 ```
 
 Every tool refuses to overwrite its output: give it a fresh folder (scratch runs go under `local/`). The core has two
-build configurations (`core/mono_vo.h`): `s3`, the default, and `p4` (`MVO_CONFIG_P4`: 300 features, map points from
-rays at least 1.5° apart). Tools and tests build the one `UWSLAM_CONFIG` names; the `p4` results live in
-`results/lake_clip_p4/`.
+build configurations (`core/mono_vo.h`): `s3`, the default, and `p4` (`MVO_CONFIG_P4`: 300 features instead of 250).
+Tools and tests build the one `UWSLAM_CONFIG` names; the `p4` results live in `results/lake_clip_p4/`.
 
 ## Verifying a change
 

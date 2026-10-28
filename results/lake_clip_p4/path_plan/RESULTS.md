@@ -7,30 +7,30 @@
 | Heading for | Free beyond 0.25 m | Free beyond 0.5 m | Free beyond 1 m |
 |---|---:|---:|---:|
 | the plan, going | 100% [100%–100%] | 97% [97%–97%] | 93% [93%–93%] |
-| the plan, creeping | 95% [73%–100%] | 55% [36%–91%] | 27% [0%–64%] |
+| the plan, creeping | 91% [82%–100%] | 64% [36%–100%] | 64% [36%–100%] |
 | the mask's own choice (when it has one) | 100% [100%–100%] | 97% [97%–97%] | 93% [93%–93%] |
 | straight ahead | 92% [92%–92%] | 84% [84%–84%] | 51% [51%–51%] |
 | the best direction (hindsight) | 100% [100%–100%] | 100% [100%–100%] | 100% [100%–100%] |
 
 Actions: stop 0%, go 97%, creep 3%, turn 0%. The plan went into a corridor blocked within 0.25 m in 0% of its go steps; it creeps where the mask has no free direction.
-Its ranges in steps agree with the reference's within a factor of 2 for 84% of the directions with a known range (the default seed: 2521 direction-steps, median log2 ratio -0.26; below zero is short, the safe side). The direction it heads for seldom has one (19 steps): it mostly heads into open water, where the map holds nothing.
+Its ranges in steps agree with the reference's within a factor of 2 for 83% of the directions with a known range (the default seed: 2939 direction-steps, median log2 ratio -0.30; below zero is short, the safe side). The direction it heads for seldom has one (20 steps): it mostly heads into open water, where the map holds nothing. The range straight ahead, where forward motion gives the least parallax, is known in 38% [33%–42%] of the steps.
 
-Water directions (the default seed: 866 of them over the steps): the map vetoed one in 0 steps, never the mask's own choice (0 times); the reference had a surface within 8 steps for 0 of those vetoes and none for 0. The reference had a surface within 8 steps in 0 water directions in all: nothing to veto. The plan bounds them instead (`clear`, 0.75 of the median range of the surfaces in view): known in 89% of them, median 14.2 steps, beyond 8 steps in 97%; the reference was nearer than it in 0% [0%–0%].
+Water directions (the default seed: 866 of them over the steps): the map vetoed one in 0 steps, never the mask's own choice (0 times); the reference had a surface within 8 steps for 0 of those vetoes and none for 0. The reference had a surface within 8 steps in 0 water directions in all: nothing to veto. The plan bounds them instead (`clear`, 0.75 of the median range of the surfaces in view): known in 91% of them, median 15.6 steps, beyond 8 steps in 99%; the reference was nearer than it in 0% [0%–0%].
 
 ## 5 Hz (169 steps)
 
 | Heading for | Free beyond 0.25 m | Free beyond 0.5 m | Free beyond 1 m |
 |---|---:|---:|---:|
 | the plan, going | 100% [100%–100%] | 97% [97%–97%] | 93% [93%–94%] |
-| the plan, creeping | 100% [83%–100%] | 83% [67%–100%] | 50% [17%–100%] |
+| the plan, creeping | 100% [100%–100%] | 83% [67%–100%] | 83% [33%–83%] |
 | the mask's own choice (when it has one) | 100% [100%–100%] | 97% [97%–97%] | 93% [93%–93%] |
 | straight ahead | 92% [92%–92%] | 85% [85%–85%] | 51% [51%–51%] |
 | the best direction (hindsight) | 100% [100%–100%] | 100% [100%–100%] | 100% [100%–100%] |
 
 Actions: stop 0%, go 96%, creep 4%, turn 0%. The plan went into a corridor blocked within 0.25 m in 0% of its go steps; it creeps where the mask has no free direction.
-Its ranges in steps agree with the reference's within a factor of 2 for 90% of the directions with a known range (the default seed: 1420 direction-steps, median log2 ratio -0.11; below zero is short, the safe side). The direction it heads for seldom has one (8 steps): it mostly heads into open water, where the map holds nothing.
+Its ranges in steps agree with the reference's within a factor of 2 for 90% of the directions with a known range (the default seed: 1537 direction-steps, median log2 ratio -0.14; below zero is short, the safe side). The direction it heads for seldom has one (7 steps): it mostly heads into open water, where the map holds nothing. The range straight ahead, where forward motion gives the least parallax, is known in 71% [61%–75%] of the steps.
 
-Water directions (the default seed: 418 of them over the steps): the map vetoed one in 1 steps, never the mask's own choice (0 times); the reference had a surface within 8 steps for 0 of those vetoes and none for 1. The reference had a surface within 8 steps in 0 water directions in all: nothing to veto. The plan bounds them instead (`clear`, 0.75 of the median range of the surfaces in view): known in 84% of them, median 8.8 steps, beyond 8 steps in 58%; the reference was nearer than it in 0% [0%–1%].
+Water directions (the default seed: 418 of them over the steps): the map vetoed one in 6 steps, never the mask's own choice (1 times); the reference had a surface within 8 steps for 0 of those vetoes and none for 6. The reference had a surface within 8 steps in 0 water directions in all: nothing to veto. The plan bounds them instead (`clear`, 0.75 of the median range of the surfaces in view): known in 84% of them, median 9.6 steps, beyond 8 steps in 72%; the reference was nearer than it in 0% [0%–1%].
 
 Figures: `plan_<rate>hz.png` (the planned direction's corridor over the clip) and `plan_frames_<rate>hz.png` (example frames with the plan). `board_expected_plan_<rate>hz.json` holds every step's plan hash and the final one for `uwslam.mvo_stream --expected-plan`.
 

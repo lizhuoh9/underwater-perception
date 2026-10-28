@@ -861,7 +861,7 @@
   "voxel_rescales": 7,
   "voxel_lost": 12,
   "voxel_sha256": "b803ea6bf97c0334f71e65c3df31b06c2430e628b34f67a1c02d99f82a8eb0c5",
-  "voxel_header_sha256": "c12b409d6c5526968fa9c350a7e75b1b94fa7d5115545f616986da070c58cc47",
+  "voxel_header_sha256": "048b6d5c2124e0cea4a4cd97b1b2a2e7cfb80dcbb3cf056060d69372fef70dd8",
   "config": "s3",
   "max_features": 250
 }

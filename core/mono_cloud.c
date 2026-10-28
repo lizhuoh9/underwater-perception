@@ -4,6 +4,9 @@
 #include <float.h>
 #include <string.h>
 
+/* A step files at most MVO_MAX_FEATURES points, so a full map always keeps an unprotected slot to evict. */
+typedef char mc_points_outnumber_features[(MC_MAX_POINTS > MVO_MAX_FEATURES) ? 1 : -1];
+
 static int finite_float(float value)
 {
     return value >= -FLT_MAX && value <= FLT_MAX;

@@ -4,15 +4,15 @@ Camera only: `core/mono_vo*.c` gives the motion (up to scale), `core/mono_map.c`
 
 | Rate | Observations (frames) | Distance to cloud, median | Within 0.1 / 0.2 / 0.3 m | Path RMSE after alignment | Continuous frames / total | Alignment spread ratio | Grid cell (odometry units) | Occupied / unknown cells | Slice height / resets |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 10 Hz | 3229 (40) | 0.23 m | 14% / 41% / 74% | 0.13 m | 44 / 339 | 0.014 | 1.37 | 47 / 16337 | -2.74 / 2 |
-| 5 Hz | 1591 (20) | 0.19 m | 13% / 53% / 86% | 0.08 m | 21 / 170 | 0.019 | 1.01 | 148 / 16236 | -0.92 / 1 |
+| 10 Hz | 4540 (43) | 0.24 m | 12% / 38% / 72% | 0.13 m | 44 / 339 | 0.014 | 1.43 | 58 / 16326 | -2.74 / 2 |
+| 5 Hz | 1985 (20) | 0.20 m | 14% / 50% / 82% | 0.08 m | 21 / 170 | 0.019 | 1.01 | 201 / 16183 | -0.92 / 1 |
 
 Over 16 RANSAC seeds, median [smallest–largest]:
 
 | Rate | Distance to cloud, median of the run | Path RMSE after alignment |
 |---:|---:|---:|
-| 10 Hz | 0.20 m [0.12–0.24] (16/16 seeds) | 0.10 m [0.09–0.32] (16/16 seeds) |
-| 5 Hz | 0.19 m [0.15–0.26] (16/16 seeds) | 0.08 m [0.04–0.10] (16/16 seeds) |
+| 10 Hz | 0.21 m [0.12–0.25] (16/16 seeds) | 0.10 m [0.09–0.32] (16/16 seeds) |
+| 5 Hz | 0.20 m [0.15–0.27] (16/16 seeds) | 0.08 m [0.04–0.10] (16/16 seeds) |
 
 The grid's cell is an eighth of the scene's median depth when the map starts; it stays in odometry units, whose length in metres drifts with the odometry's scale, so the grid has no fixed metric size. The grid takes a slice within half a scene depth of its fixed height; the grid resets when the estimated camera height moves one cell from it. Unobserved cells remain unknown: a ray at one height cannot prove the whole slice is free. On this clip most observations are the lake bed below the robot, so the slice is sparse.
 

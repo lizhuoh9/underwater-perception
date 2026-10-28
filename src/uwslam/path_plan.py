@@ -142,10 +142,11 @@ def score(result: dict, truth: np.ndarray, reference_step_m: np.ndarray) -> dict
     def free(values: np.ndarray) -> dict:
         return {f"within_{near:g}_m_free": float(np.mean(values >= near)) if len(values) else None for near in NEAR}
 
-    ratios, chosen_ratios = [], []
+    ratios, chosen_ratios, ahead_known = [], [], []
     for k, p in enumerate(plans):
         if not (p["speed"] > 0) or not (reference_step_m[k] > 0):
             continue
+        ahead_known.append((p["known"] >> CENTRE) & 1)
         for d in range(DIRECTIONS):
             if (p["known"] >> d) & 1 and np.isfinite(truth[k, d]) and truth[k, d] > 0:
                 ratio = np.log2((p["range"][d] / p["speed"]) / (truth[k, d] / reference_step_m[k]))
@@ -165,7 +166,8 @@ def score(result: dict, truth: np.ndarray, reference_step_m: np.ndarray) -> dict
             "plan_creeping": {**free(crept), "steps": len(creeping)},
             "straight_ahead": free(ahead), "mask_choice": {**free(mask_chosen), "steps_with_a_choice": len(masked)},
             "best_direction": free(best), "steps_in_steps": {"all_known": agreement(ratios),
-                                                             "chosen": agreement(chosen_ratios)}}
+                                                             "chosen": agreement(chosen_ratios)},
+            "ahead_known": float(np.mean(ahead_known)) if ahead_known else None}
 
 
 def water_scores(plans: list[dict], choices: np.ndarray, truth: np.ndarray, reference_step_m: np.ndarray) -> tuple:
@@ -337,7 +339,9 @@ def write_report(output: Path, summary: dict) -> None:
                   f"seed: {counts['all_known']['directions']} direction-steps, median log2 ratio "
                   f"{number(counts['all_known']['median_log2_ratio'], '+.2f')}; below zero is short, the safe side). "
                   f"The direction it heads for seldom has one ({counts['chosen']['directions']} steps): it mostly "
-                  "heads into open water, where the map holds nothing.", "",
+                  "heads into open water, where the map holds nothing. The range straight ahead, where forward motion "
+                  f"gives the least parallax, is known in {percent(s['ahead_known']['median'])} "
+                  f"[{percent(s['ahead_known']['min'])}–{percent(s['ahead_known']['max'])}] of the steps.", "",
                   f"Water directions (the default seed: {bound['water_directions']} of them over the steps): the map "
                   f"vetoed one in {vetoes['steps']} steps, never the mask's own choice "
                   f"({vetoes['on_the_mask_choice']} times); the reference had a surface within 8 steps for "
@@ -415,6 +419,7 @@ def run(video: Path, reconstruction: Path, output: Path, time_scale: float) -> d
                     "clear_beyond_safe": spread([s["water_bound"]["clear_beyond_safe"] for s in scores]),
                     "nearer_than_clear": spread([s["water_bound"]["nearer_than_the_bound"] for s in scores]),
                     "known_within_2x": spread([s["steps_in_steps"]["all_known"]["within_2x"] for s in scores]),
+                    "ahead_known": spread([s["ahead_known"] for s in scores]),
                     "chosen_within_2x": spread([s["steps_in_steps"]["chosen"]["within_2x"] for s in scores]),
                     **{f"action_{name}": spread([s["actions"][name] for s in scores]) for name in ACTIONS}}
             for key in ("plan", "plan_creeping", "mask_choice", "straight_ahead", "best_direction"):

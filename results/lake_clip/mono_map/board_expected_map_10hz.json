@@ -696,9 +696,9 @@
   "map_slice_y": -1.2059794664382935,
   "map_height_resets": 1,
   "core_sha256": "b7b36567dd5de3e9171494186afdc8406cf6dc4e5a5c7b5b9eb0447bfa68390b",
-  "header_sha256": "dec7c320ab39e3054018ddac0efa3213815e10e9029a391f92bc185de56f23ea",
+  "header_sha256": "c5c620d24046e5f9f6c17cf6e29bffae321c1d0d11f67991a00e284caa181f2e",
   "map_sha256": "af787363388c606fa0c2a17521cbe5ccd35e90584eca4c89b5ed6c7eb9d7ac75",
-  "map_header_sha256": "1a2774e47ee9a99610a187f31135572f5cec7c60a842f42d62314d237ff548fa",
+  "map_header_sha256": "008c1503644d44d81ede11bb065f1113eb3cc0a5f676296296a390acc875aea1",
   "config": "s3",
   "max_features": 250
 }

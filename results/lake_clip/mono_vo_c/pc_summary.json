@@ -34,7 +34,7 @@
         "heading_max_deg": 48.170910895047136,
         "scale_drift_window_ratio_min": 0.14087500459434743,
         "scale_drift_window_ratio_max": 1.4142142984062056,
-        "ms_per_frame": 8.348059467489131
+        "ms_per_frame": 8.001617455618048
       },
       "c_over_seeds": {
         "seeds": [
@@ -131,7 +131,7 @@
         "heading_max_deg": 32.49975042581958,
         "scale_drift_window_ratio_min": 0.7413353406606515,
         "scale_drift_window_ratio_max": 1.3258236105193153,
-        "ms_per_frame": 11.822678106726759
+        "ms_per_frame": 10.691963905639417
       },
       "c_over_seeds": {
         "seeds": [
@@ -227,7 +227,7 @@
         "heading_max_deg": 48.27489671606369,
         "scale_drift_window_ratio_min": 0.27852481455045935,
         "scale_drift_window_ratio_max": 2.3040602962044843,
-        "ms_per_frame": 12.851719802134845
+        "ms_per_frame": 13.781771286261627
       },
       "c_over_seeds": {
         "seeds": [
@@ -305,6 +305,6 @@
     "steps": 338,
     "seed": 12345,
     "core_sha256": "b7b36567dd5de3e9171494186afdc8406cf6dc4e5a5c7b5b9eb0447bfa68390b",
-    "header_sha256": "dec7c320ab39e3054018ddac0efa3213815e10e9029a391f92bc185de56f23ea"
+    "header_sha256": "c5c620d24046e5f9f6c17cf6e29bffae321c1d0d11f67991a00e284caa181f2e"
   }
 }
