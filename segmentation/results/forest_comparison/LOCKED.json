@@ -1,0 +1,83 @@
+{
+  "chosen": {
+    "trees": 12,
+    "max_depth": 6,
+    "node_count": 1496,
+    "threshold_q": 57,
+    "macro_image_miou": 0.6824402646586265,
+    "calibration_fnr": 0.05879003161275763,
+    "calibration_fpr": 0.27545278210789953,
+    "calibration_dominates_baseline": true,
+    "train_seconds": 2.6939615000010235
+  },
+  "trials": [
+    {
+      "trees": 8,
+      "max_depth": 4,
+      "node_count": 248,
+      "threshold_q": 47,
+      "macro_image_miou": 0.6690315479989447,
+      "calibration_fnr": 0.050943479951651986,
+      "calibration_fpr": 0.30226390186833496,
+      "calibration_dominates_baseline": true,
+      "train_seconds": 1.6026168999997026
+    },
+    {
+      "trees": 12,
+      "max_depth": 6,
+      "node_count": 1496,
+      "threshold_q": 57,
+      "macro_image_miou": 0.6824402646586265,
+      "calibration_fnr": 0.05879003161275763,
+      "calibration_fpr": 0.27545278210789953,
+      "calibration_dominates_baseline": true,
+      "train_seconds": 2.6939615000010235
+    },
+    {
+      "trees": 16,
+      "max_depth": 8,
+      "node_count": 7222,
+      "threshold_q": 72,
+      "macro_image_miou": 0.674324624489247,
+      "calibration_fnr": 0.08082831070762937,
+      "calibration_fpr": 0.23696357152015543,
+      "calibration_dominates_baseline": true,
+      "train_seconds": 4.472868400000152
+    }
+  ],
+  "baseline_calibration_metrics": {
+    "tp": 14334200,
+    "fp": 3088475,
+    "fn": 5113961,
+    "tn": 5560884,
+    "foreground_iou": 0.6360399129666024,
+    "water_iou": 0.4040365260707446,
+    "miou": 0.5200382195186735,
+    "foreground_precision": 0.8227324449316766,
+    "foreground_recall": 0.7370465515994031,
+    "foreground_f1": 0.7775359365326027,
+    "water_false_positive_rate": 0.35707559369428415,
+    "pixel_accuracy": 0.7080725985780951
+  },
+  "train_images": 512,
+  "train_pixel_rows": 393216,
+  "training_pixel_class_counts": [
+    121238,
+    271978
+  ],
+  "calibration_images": 80,
+  "test_images": 110,
+  "model_array_bytes": 11992,
+  "float_vs_uint8_max_score_difference_on_train_probe": 0.7138577100803332,
+  "sklearn_version": "1.9.1",
+  "plan_sha256": "38e24799d807085f1b43c9c5520cd85e939b0d87fe7c45012cdbfb288a64e519",
+  "model_sha256": {
+    "pixel_forest_model.h": "fbd850ad5216660142357a7f7ac3991276dfea194f8257874cba3b3be8b57dc8",
+    "pixel_forest_model.json": "9d80f3a08b1e1d2932ff4be1a7678088153d8189b01d6a40332a80068cfffdfa"
+  },
+  "source_sha256": {
+    "pixel_forest.py": "f78b183cfa72ae0287505769f07c54e44368a946cd28d574fdd0b9456e573a10",
+    "train_pixel_forest.py": "b6b20b7fe567a292260c99b1b0fd1c4746a082fd3a19d1ebe684b2d21b472790",
+    "prepare_forest_training.py": "1419d7d11684249018411202274b2b13cdf9b844b1507b9990360394a3f7ff97"
+  }
+}

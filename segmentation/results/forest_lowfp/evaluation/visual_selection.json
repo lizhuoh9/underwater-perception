@@ -1,0 +1,12 @@
+{
+  "examples": [
+    "d_r_386_",
+    "d_r_144_"
+  ],
+  "rule": "Median positive per-image mIoU improvement, followed by worst regression; evaluation only",
+  "previous_failures": [
+    "f_r_604_",
+    "f_r_1992_",
+    "f_r_13_"
+  ]
+}

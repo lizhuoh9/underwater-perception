@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv*/
+/build/
+/dist/
+.ruff_cache/
+.pytest_cache/
+
+# Local package installs and scratch files
+/.deps/
+/.tmp/
+
+# The dataset: prepared by uwseg.prepare_data and the other prepare_* tools, never committed. The provenance notes,
+# the visual review record and the frozen near-duplicate audit are.
+/data/*
+!/data/SOURCES.md
+!/data/near_duplicate_review.json
+!/data/dedup_manifest.json
+
+# The pixel forest compiled for the PC, and test programs
+*.dll
+*.so
+*.dylib
+*.exe
+
+# ESP-IDF build output and generated configuration
+firmware/*/build*/
+firmware/*/sdkconfig
+firmware/*/sdkconfig.old
+firmware/*/managed_components/
+firmware/*/dependencies.lock

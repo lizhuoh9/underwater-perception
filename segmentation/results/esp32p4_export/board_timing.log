@@ -1,0 +1,169 @@
+I (174) esp_image: segment 4: paddr=000f9c48 vaddr=4ff02fI (16265) water_seg_demo: === round 2 ===
+I (16265) water_seg_demo: CPU 360 MHz, PSRAM 32768 KB, internal heap free 537 KB
+I (16265) water_seg_demo: Model config: threshold code 3, input/output exponent -5/-3, self-test frame f_r_1037_
+
+I (16295) dl::Model: Test max_error = 0.0005 (default)
+I (16345) dl::Model: Testing output logits.
+I (16345) dl::Model: Test Pass!
+I (16295) water_seg_demo: ESP-DL self-test against embedded ESP-PPQ values: pass
+I (20185) water_seg_demo: Frame f_r_1037_, 20 timed runs each (preprocess + inference + threshold):
+I (20185) water_seg_demo:   PSRAM maps, 1 core              47.0 ms  21.3 FPS (pre 4.8 + infer 42.2 + mask 0.1 ms) | mask diff LE 0 BE 0 | model RAM internal 8 KB, PSRAM 312 KB
+I (20185) water_seg_demo:   PSRAM maps, 2 cores             43.8 ms  22.8 FPS (pre 4.3 + infer 39.4 + mask 0.1 ms) | mask diff LE 0 BE 0 | model RAM internal 8 KB, PSRAM 312 KB
+I (20185) water_seg_demo:   <=128 KB internal, 1 core       20.4 ms  49.1 FPS (pre 2.8 + infer 17.5 + mask 0.1 ms) | mask diff LE 0 BE 0 | model RAM internal 136 KB, PSRAM 125 KB
+I (20185) water_seg_demo:   <=128 KB internal, 2 cores      15.1 ms  66.4 FPS (pre 2.8 + infer 12.2 + mask 0.1 ms) | mask diff LE 0 BE 0 | model RAM internal 136 KB, PSRAM 125 KB
+I (20185) water_seg_demo:   <=256 KB internal, 1 core       15.5 ms  64.6 FPS (pre 1.3 + infer 14.0 + mask 0.1 ms) | mask diff LE 0 BE 0 | model RAM internal 264 KB, PSRAM 50 KB
+I (20185) water_seg_demo:   <=256 KB internal, 2 cores      10.5 ms  95.2 FPS (pre 1.4 + infer 9.0 + mask 0.1 ms) | mask diff LE 0 BE 0 | model RAM internal 264 KB, PSRAM 50 KB
+I (20195) water_seg_demo: Per-layer profile of the fastest configuration (<=256 KB internal, 2 cores):
+
+I (20465) dl::Model: model:main_graph, version:0
+I (20465) dl::Model: MODEL LOCATION IN FLASH RODATA
+I (20465) dl::Model: +----------------+--------------+---------+-------------+
+I (20465) dl::Model: |                    memory summary                     |
+I (20465) dl::Model: +----------------+--------------+---------+-------------+
+I (20465) dl::Model: |                | internal RAM | PSRAM   | FLASH       |
+I (20465) dl::Model: +----------------+--------------+---------+-------------+
+I (20465) dl::Model: | fbs_model      |              |         | 128.94KB    |
+I (20465) dl::Model: |  -- parameter  |              |         |  -- 39.81KB |
+I (20465) dl::Model: +----------------+--------------+---------+-------------+
+I (20465) dl::Model: | parameter_copy |              | 39.81KB |             |
+I (20465) dl::Model: +----------------+--------------+---------+-------------+
+I (20465) dl::Model: | variable       | 256.00KB     |         |             |
+I (20465) dl::Model: +----------------+--------------+---------+-------------+
+I (20465) dl::Model: | others         | 7.91KB       | 10.27KB |             |
+I (20465) dl::Model: +----------------+--------------+---------+-------------+
+I (20475) dl::Model: | total          | 263.91KB     | 50.08KB | 128.94KB    |
+I (20475) dl::Model: +----------------+--------------+---------+-------------+
+
+I (20485) dl::Model: +----------------------------------+--------+---------+
+I (20485) dl::Model: |                   module summary                    |
+I (20485) dl::Model: +----------------------------------+--------+---------+
+I (20485) dl::Model: | name                             | type   | latency |
+I (20485) dl::Model: +----------------------------------+--------+---------+
+I (20485) dl::Model: | /stem/stem.0/Conv                | Conv   | 4438us  |
+I (20485) dl::Model: +----------------------------------+--------+---------+
+I (20485) dl::Model: | /down2/down2.0/Conv              | Conv   | 1666us  |
+I (20485) dl::Model: +----------------------------------+--------+---------+
+I (20485) dl::Model: | /block2/block2.0/Conv            | Conv   | 476us   |
+I (20485) dl::Model: +----------------------------------+--------+---------+
+I (20495) dl::Model: | /block2/block2.3/Conv            | Conv   | 508us   |
+I (20495) dl::Model: +----------------------------------+--------+---------+
+I (20495) dl::Model: | /down3/down3.0/Conv              | Conv   | 1443us  |
+I (20495) dl::Model: +----------------------------------+--------+---------+
+I (20495) dl::Model: | /block3/block3.0/block3.0.0/Conv | Conv   | 197us   |
+I (20495) dl::Model: +----------------------------------+--------+---------+
+I (20495) dl::Model: | /block3/block3.0/block3.0.3/Conv | Conv   | 428us   |
+I (20495) dl::Model: +----------------------------------+--------+---------+
+I (20495) dl::Model: | /block3/block3.1/block3.1.0/Conv | Conv   | 191us   |
+I (20495) dl::Model: +----------------------------------+--------+---------+
+I (20495) dl::Model: | /block3/block3.1/block3.1.3/Conv | Conv   | 375us   |
+I (20495) dl::Model: +----------------------------------+--------+---------+
+I (20495) dl::Model: | /lateral3/lateral3.0/Conv        | Conv   | 192us   |
+I (20495) dl::Model: +----------------------------------+--------+---------+
+I (20495) dl::Model: | /Resize                          | Resize | 110us   |
+I (20495) dl::Model: +----------------------------------+--------+---------+
+I (20495) dl::Model: | /Add                             | Add    | 160us   |
+I (20495) dl::Model: +----------------------------------+--------+---------+
+I (20495) dl::Model: | /fuse2/fuse2.0/Conv              | Conv   | 398us   |
+I (20495) dl::Model: +----------------------------------+--------+---------+
+I (20495) dl::Model: | /fuse2/fuse2.3/Conv              | Conv   | 506us   |
+I (20495) dl::Model: +----------------------------------+--------+---------+
+I (20495) dl::Model: | /lateral2/lateral2.0/Conv        | Conv   | 293us   |
+I (20495) dl::Model: +----------------------------------+--------+---------+
+I (20495) dl::Model: | /Resize_1                        | Resize | 207us   |
+I (20495) dl::Model: +----------------------------------+--------+---------+
+I (20495) dl::Model: | /Add_1                           | Add    | 163us   |
+I (20495) dl::Model: +----------------------------------+--------+---------+
+I (20495) dl::Model: | /fuse1/fuse1.0/Conv              | Conv   | 1012us  |
+I (20495) dl::Model: +----------------------------------+--------+---------+
+I (20495) dl::Model: | /fuse1/fuse1.3/Conv              | Conv   | 934us   |
+I (20495) dl::Model: +----------------------------------+--------+---------+
+I (20495) dl::Model: | /head/Conv                       | Conv   | 969us   |
+I (20495) dl::Model: +----------------------------------+--------+---------+
+I (20495) dl::Model: | total                            |        | 14666us |
+I (20495) dl::Model: +----------------------------------+--------+---------+
+
+I (25495) water_seg_demo: === round 3 ===
+I (25495) water_seg_demo: CPU 360 MHz, PSRAM 32768 KB, internal heap free 537 KB
+I (25495) water_seg_demo: Model config: threshold code 3, input/output exponent -5/-3, self-test frame f_r_1037_
+
+I (25525) dl::Model: Test max_error = 0.0005 (default)
+I (25575) dl::Model: Testing output logits.
+I (25575) dl::Model: Test Pass!
+I (25525) water_seg_demo: ESP-DL self-test against embedded ESP-PPQ values: pass
+I (29415) water_seg_demo: Frame f_r_1037_, 20 timed runs each (preprocess + inference + threshold):
+I (29415) water_seg_demo:   PSRAM maps, 1 core              47.0 ms  21.3 FPS (pre 4.8 + infer 42.2 + mask 0.1 ms) | mask diff LE 0 BE 0 | model RAM internal 8 KB, PSRAM 312 KB
+I (29415) water_seg_demo:   PSRAM maps, 2 cores             43.8 ms  22.8 FPS (pre 4.3 + infer 39.4 + mask 0.1 ms) | mask diff LE 0 BE 0 | model RAM internal 8 KB, PSRAM 312 KB
+I (29415) water_seg_demo:   <=128 KB internal, 1 core       20.4 ms  49.1 FPS (pre 2.8 + infer 17.5 + mask 0.1 ms) | mask diff LE 0 BE 0 | model RAM internal 136 KB, PSRAM 125 KB
+I (29415) water_seg_demo:   <=128 KB internal, 2 cores      15.1 ms  66.4 FPS (pre 2.8 + infer 12.2 + mask 0.1 ms) | mask diff LE 0 BE 0 | model RAM internal 136 KB, PSRAM 125 KB
+I (29425) water_seg_demo:   <=256 KB internal, 1 core       15.5 ms  64.7 FPS (pre 1.3 + infer 14.0 + mask 0.1 ms) | mask diff LE 0 BE 0 | model RAM internal 264 KB, PSRAM 50 KB
+I (29425) water_seg_demo:   <=256 KB internal, 2 cores      10.5 ms  95.1 FPS (pre 1.4 + infer 9.0 + mask 0.1 ms) | mask diff LE 0 BE 0 | model RAM internal 264 KB, PSRAM 50 KB
+I (29425) water_seg_demo: Per-layer profile of the fastest configuration (<=256 KB internal, 2 cores):
+
+I (29695) dl::Model: model:main_graph, version:0
+I (29695) dl::Model: MODEL LOCATION IN FLASH RODATA
+I (29695) dl::Model: +----------------+--------------+---------+-------------+
+I (29695) dl::Model: |                    memory summary                     |
+I (29695) dl::Model: +----------------+--------------+---------+-------------+
+I (29695) dl::Model: |                | internal RAM | PSRAM   | FLASH       |
+I (29695) dl::Model: +----------------+--------------+---------+-------------+
+I (29695) dl::Model: | fbs_model      |              |         | 128.94KB    |
+I (29695) dl::Model: |  -- parameter  |              |         |  -- 39.81KB |
+I (29695) dl::Model: +----------------+--------------+---------+-------------+
+I (29695) dl::Model: | parameter_copy |              | 39.81KB |             |
+I (29695) dl::Model: +----------------+--------------+---------+-------------+
+I (29695) dl::Model: | variable       | 256.00KB     |         |             |
+I (29705) dl::Model: +----------------+--------------+---------+-------------+
+I (29705) dl::Model: | others         | 7.91KB       | 10.27KB |             |
+I (29705) dl::Model: +----------------+--------------+---------+-------------+
+I (29705) dl::Model: | total          | 263.91KB     | 50.08KB | 128.94KB    |
+I (29705) dl::Model: +----------------+--------------+---------+-------------+
+
+I (29715) dl::Model: +----------------------------------+--------+---------+
+I (29715) dl::Model: |                   module summary                    |
+I (29715) dl::Model: +----------------------------------+--------+---------+
+I (29715) dl::Model: | name                             | type   | latency |
+I (29715) dl::Model: +----------------------------------+--------+---------+
+I (29715) dl::Model: | /stem/stem.0/Conv                | Conv   | 4442us  |
+I (29715) dl::Model: +----------------------------------+--------+---------+
+I (29725) dl::Model: | /down2/down2.0/Conv              | Conv   | 1674us  |
+I (29725) dl::Model: +----------------------------------+--------+---------+
+I (29725) dl::Model: | /block2/block2.0/Conv            | Conv   | 476us   |
+I (29725) dl::Model: +----------------------------------+--------+---------+
+I (29725) dl::Model: | /block2/block2.3/Conv            | Conv   | 514us   |
+I (29725) dl::Model: +----------------------------------+--------+---------+
+I (29725) dl::Model: | /down3/down3.0/Conv              | Conv   | 1436us  |
+I (29725) dl::Model: +----------------------------------+--------+---------+
+I (29725) dl::Model: | /block3/block3.0/block3.0.0/Conv | Conv   | 197us   |
+I (29725) dl::Model: +----------------------------------+--------+---------+
+I (29725) dl::Model: | /block3/block3.0/block3.0.3/Conv | Conv   | 432us   |
+I (29725) dl::Model: +----------------------------------+--------+---------+
+I (29725) dl::Model: | /block3/block3.1/block3.1.0/Conv | Conv   | 193us   |
+I (29725) dl::Model: +----------------------------------+--------+---------+
+I (29725) dl::Model: | /block3/block3.1/block3.1.3/Conv | Conv   | 374us   |
+I (29725) dl::Model: +----------------------------------+--------+---------+
+I (29725) dl::Model: | /lateral3/lateral3.0/Conv        | Conv   | 192us   |
+I (29725) dl::Model: +----------------------------------+--------+---------+
+I (29725) dl::Model: | /Resize                          | Resize | 109us   |
+I (29725) dl::Model: +----------------------------------+--------+---------+
+I (29725) dl::Model: | /Add                             | Add    | 161us   |
+I (29725) dl::Model: +----------------------------------+--------+---------+
+I (29725) dl::Model: | /fuse2/fuse2.0/Conv              | Conv   | 396us   |
+I (29725) dl::Model: +----------------------------------+--------+---------+
+I (29725) dl::Model: | /fuse2/fuse2.3/Conv              | Conv   | 504us   |
+I (29725) dl::Model: +----------------------------------+--------+---------+
+I (29725) dl::Model: | /lateral2/lateral2.0/Conv        | Conv   | 291us   |
+I (29725) dl::Model: +----------------------------------+--------+---------+
+I (29725) dl::Model: | /Resize_1                        | Resize | 207us   |
+I (29725) dl::Model: +----------------------------------+--------+---------+
+I (29725) dl::Model: | /Add_1                           | Add    | 162us   |
+I (29725) dl::Model: +----------------------------------+--------+---------+
+I (29725) dl::Model: | /fuse1/fuse1.0/Conv              | Conv   | 1008us  |
+I (29725) dl::Model: +----------------------------------+--------+---------+
+I (29725) dl::Model: | /fuse1/fuse1.3/Conv              | Conv   | 934us   |
+I (29725) dl::Model: +----------------------------------+--------+---------+
+I (29725) dl::Model: | /head/Conv                       | Conv   | 970us   |
+I (29725) dl::Model: +----------------------------------+--------+---------+
+I (29725) dl::Model: | total                            |        | 14672us |
+I (29725) dl::Model: +----------------------------------+--------+---------+
+
+I (34725) water_seg_demo: === round 4 ===

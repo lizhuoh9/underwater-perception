@@ -1,0 +1,35 @@
+{
+  "policy": "Post-hoc threshold variant: the locked run's calibration rule re-applied with FNR cap 0.05, chosen after the locked TEST evaluation was seen. Its TEST numbers are not an independent test; cnn_espdl_run_01/evaluation remains the reported result.",
+  "source_run": "cnn_espdl_run_01",
+  "fnr_cap": 0.05,
+  "threshold_q": 133,
+  "threshold_code": 5,
+  "locked_threshold_code": 11,
+  "calibration": {
+    "threshold_q": 133,
+    "calibration_fnr": 0.046192542318011454,
+    "calibration_fpr": 0.11185048510531242,
+    "macro_image_miou": 0.767515077758321,
+    "calibration_counts": [
+      18549801,
+      967435,
+      898360,
+      7681924
+    ]
+  },
+  "locked_sha256": "918b6546c35cf7b6dfecb8d02d816a311349691c252823ab32adc5ac87119ba7",
+  "locked_evaluation_summary_sha256": "4b9ea96b56a74e887b0d85292c8cca5b104f8acf75953a17eaaa01d4068f6b7e",
+  "byte_identical_to_locked": {
+    "water_seg.espdl": "829dd3eb068b7bd9c9046514c2cfaa7885faa5ef4d394d49f797aef2544fbafb",
+    "water_seg.compile_req.yml": "9c4ac1824ab9189d2de7404695a78dcee1ed69751b0359363d688eb35f377695"
+  },
+  "header_sha256": "65dccc2fea02bc99879019b11d4f06fe2c749d61aa85e496f02bd6829aaa5ca7",
+  "test_frame_sha256": "08eb06d6a33585072d133361ef0426841b9c526885604b6d9ab2ae2635905eb3",
+  "sources_changed_since_lock": {
+    "train_cnn_espdl.py": {
+      "locked": "466c0172101f50b7b137bffd54d3a48f5c1205390802145cf0d946faa04c502e",
+      "current": "3a7d799e446d0872fa0ad3c55afbe424f642487927306f64189bd3cb59fa8952"
+    }
+  },
+  "checks": "Locked artifacts, inputs, audit and lock values verified; calibration replay reproduced the locked counts; locked CNN and forest-71 per-image TEST counts reproduced exactly; self-test frame pixels equal the locked frame."
+}

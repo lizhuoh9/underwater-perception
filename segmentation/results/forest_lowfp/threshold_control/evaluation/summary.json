@@ -1,0 +1,53 @@
+{
+  "role": "Previously frozen threshold-only control; engineering recommendation made after paired comparison, not preselected primary",
+  "primary_experiment_goal_passed": false,
+  "threshold_q": 71,
+  "test_images": 110,
+  "methods": {
+    "forest_original": {
+      "tp": 21575439,
+      "fp": 4522037,
+      "fn": 1360539,
+      "tn": 11956241,
+      "foreground_iou": 0.7857610610235299,
+      "water_iou": 0.6702373257150404,
+      "miou": 0.7279991933692851,
+      "foreground_precision": 0.8267251208507673,
+      "foreground_recall": 0.9406810121635101,
+      "foreground_f1": 0.8800293367055072,
+      "water_false_positive_rate": 0.2744241236857395,
+      "pixel_accuracy": 0.8507500433345742,
+      "macro_image_miou": 0.6566358616475394
+    },
+    "forest_threshold_only": {
+      "tp": 21159938,
+      "fp": 3545700,
+      "fn": 1776040,
+      "tn": 12932578,
+      "foreground_iou": 0.7990406801260856,
+      "water_iou": 0.7084667857763846,
+      "miou": 0.7537537329512352,
+      "foreground_precision": 0.8564821519687126,
+      "foreground_recall": 0.9225653250975389,
+      "foreground_f1": 0.8882964003572003,
+      "water_false_positive_rate": 0.21517418264214258,
+      "pixel_accuracy": 0.8649793110391326,
+      "macro_image_miou": 0.6814040424425696
+    }
+  },
+  "control_goal_passed": true,
+  "fnr_increase_percentage_points": 1.811568706597122,
+  "fpr_change_percentage_points": -5.9249941043596905,
+  "paired_images": {
+    "improved": 71,
+    "regressed": 34,
+    "tied": 5
+  },
+  "model_arrays_bytes": 11992,
+  "total_image_buffers_bytes_160x120": 298404,
+  "pixel_score_and_mask_mismatches": 0,
+  "per_image_confusion_counts_match_frozen_control": true,
+  "dll_sha256": "9510262c474af7ae757b6f329c6f84f946626cf249222690acb1b22c51af1e7f",
+  "source_sha256": "eda5b831e1d868cf1fb580dee61c1369fa9eeb3267378fa7ff74ae9fdfe7cea5",
+  "calibration_lock_sha256": "d68aed767ec025b281b850d8b3ba6dcc402037e0710d9b11d255161e44d3f2b9"
+}

@@ -1,0 +1,6 @@
+description: ESP-DL water/non-water segmentation of 160x120 RGB565 camera frames
+version: "0.1.0"
+targets:
+  - esp32p4
+dependencies:
+  espressif/esp-dl: "3.3.12"

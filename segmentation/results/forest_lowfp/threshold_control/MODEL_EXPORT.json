@@ -1,0 +1,12 @@
+{
+  "policy": "Export the threshold-only control frozen before TEST, no new parameter selection",
+  "threshold_q": 71,
+  "model_arrays_bytes": 11992,
+  "original_threshold_q": 57,
+  "calibration_lock_sha256": "d68aed767ec025b281b850d8b3ba6dcc402037e0710d9b11d255161e44d3f2b9",
+  "original_model_json_sha256": "9d80f3a08b1e1d2932ff4be1a7678088153d8189b01d6a40332a80068cfffdfa",
+  "exported_header_sha256": "1d582189f62ddedf1c536e458d08f405992ea6644f21b5d6eee317856c0bafd7",
+  "exported_json_sha256": "9d80f3a08b1e1d2932ff4be1a7678088153d8189b01d6a40332a80068cfffdfa",
+  "feature_or_tree_change": false,
+  "test_retuning": false
+}

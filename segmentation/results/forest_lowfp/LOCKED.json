@@ -1,0 +1,152 @@
+{
+  "chosen": {
+    "threshold_q": 72,
+    "calibration_fnr": 0.07763304715546113,
+    "calibration_fpr": 0.2370235759667277,
+    "macro_image_miou": 0.670309336582529,
+    "calibration_counts": [
+      17938341,
+      2050102,
+      1509820,
+      6599257
+    ],
+    "name": "uniform_sqrt",
+    "trees": 16,
+    "max_depth": 8,
+    "node_count": 7858,
+    "train_seconds": 26.384522299998935
+  },
+  "trials": [
+    {
+      "threshold_q": 71,
+      "calibration_fnr": 0.07846952727304139,
+      "calibration_fpr": 0.23837119028126824,
+      "macro_image_miou": 0.6682518304410067,
+      "calibration_counts": [
+        17922073,
+        2061758,
+        1526088,
+        6587601
+      ],
+      "name": "threshold_only",
+      "trees": 12,
+      "max_depth": 6,
+      "node_count": 1496
+    },
+    {
+      "threshold_q": 70,
+      "calibration_fnr": 0.07733836633705367,
+      "calibration_fpr": 0.24274191879421353,
+      "macro_image_miou": 0.6742282346723918,
+      "calibration_counts": [
+        17944072,
+        2099562,
+        1504089,
+        6549797
+      ],
+      "name": "old_16_8",
+      "trees": 16,
+      "max_depth": 8,
+      "node_count": 7222
+    },
+    {
+      "threshold_q": 72,
+      "calibration_fnr": 0.07763304715546113,
+      "calibration_fpr": 0.2370235759667277,
+      "macro_image_miou": 0.670309336582529,
+      "calibration_counts": [
+        17938341,
+        2050102,
+        1509820,
+        6599257
+      ],
+      "name": "uniform_sqrt",
+      "trees": 16,
+      "max_depth": 8,
+      "node_count": 7858,
+      "train_seconds": 26.384522299998935
+    },
+    {
+      "threshold_q": 71,
+      "calibration_fnr": 0.07765130080936701,
+      "calibration_fpr": 0.2387772319312911,
+      "macro_image_miou": 0.6693353166583071,
+      "calibration_counts": [
+        17937986,
+        2065270,
+        1510175,
+        6584089
+      ],
+      "name": "uniform_8",
+      "trees": 16,
+      "max_depth": 8,
+      "node_count": 7796,
+      "train_seconds": 41.625231499998335
+    },
+    {
+      "threshold_q": 74,
+      "calibration_fnr": 0.0770422457938311,
+      "calibration_fpr": 0.24738954643922167,
+      "macro_image_miou": 0.6663819448430799,
+      "calibration_counts": [
+        17949831,
+        2139761,
+        1498330,
+        6509598
+      ],
+      "name": "hard_water_8",
+      "trees": 16,
+      "max_depth": 8,
+      "node_count": 7890,
+      "train_seconds": 49.10486040000251
+    }
+  ],
+  "original_calibration_counts": [
+    18304803,
+    2382490,
+    1143358,
+    6266869
+  ],
+  "original_calibration_fnr": 0.05879003161275763,
+  "calibration_fnr_cap": 0.07879003161275763,
+  "threshold_only_control": {
+    "threshold_q": 71,
+    "calibration_fnr": 0.07846952727304139,
+    "calibration_fpr": 0.23837119028126824,
+    "macro_image_miou": 0.6682518304410067,
+    "calibration_counts": [
+      17922073,
+      2061758,
+      1526088,
+      6587601
+    ],
+    "name": "threshold_only",
+    "trees": 12,
+    "max_depth": 6,
+    "node_count": 1496
+  },
+  "uniform_training_rows": 1428480,
+  "mined_training_rows": 1704056,
+  "uniform_class_counts": [
+    442094,
+    986386
+  ],
+  "mined_class_counts": [
+    717670,
+    986386
+  ],
+  "model_array_bytes": 62896,
+  "plan_sha256": "35b5c73c64eee3d59112068265a20c48b29c1c9521a081f2f6fbcd8761a07a96",
+  "model_sha256": {
+    "pixel_forest_model.h": "1fb1c3424dadddc8090e37bf0363e0a67a71990a429d6f558ab9f25c64c74d13",
+    "pixel_forest_model.json": "c14517338a5b0f562118688c858951d3cfb65fad884ba549dd19a8d76a7997d2"
+  },
+  "source_sha256": {
+    "optimize_pixel_forest.py": "8d70f43d0cb358bf3164f1eff6a449055c0cfe6a7ab88a1354881403e92d2e7b",
+    "pixel_forest.py": "f78b183cfa72ae0287505769f07c54e44368a946cd28d574fdd0b9456e573a10",
+    "train_pixel_forest.py": "b6b20b7fe567a292260c99b1b0fd1c4746a082fd3a19d1ebe684b2d21b472790",
+    "prepare_lowfp_training.py": "d1dfc19a4a548ad7b197d410e7b9112590ab7d1d9d47290712458606b7185a04",
+    "embedded/pixel_forest.c": "f2899efed80a5430393b6c9714e4ff0e69482bd8e9aea50fe51ac135b17c06b8",
+    "embedded/pixel_forest.h": "34efa88b71a950cd1fd0309a359675a0c5b9b416bfd7707656b142ffc11d95e4"
+  }
+}

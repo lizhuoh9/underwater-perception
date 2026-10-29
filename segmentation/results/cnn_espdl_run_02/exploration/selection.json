@@ -1,0 +1,157 @@
+{
+ "data": "80 calibration images only (device-exact int8 inputs through each ESP-PPQ graph); no TEST image or label was loaded by any exploration",
+ "rule": "Architecture selection rule for cnn_espdl_run_02 (written before variants2.json existed; calibration only, TEST never loaded).\nCandidates: baseline_rerun (run_01 architecture), lite, lite_dw_down, lite_wide; numbers are the int8 (ESP-PPQ, device-exact input codes) results on the 80 calibration images.\n1. Eligible: int8 FPR at 5% FNR <= baseline_rerun's + 0.010, and int8 FPR at 5% FNR within 0.005 of the same model's float value (quantization is not fragile).\n2. Among eligible candidates choose the fewest MACs per frame.\n3. If another eligible candidate has MACs within 25% of that one, choose the one with fewer convolution layers (esp-dl per-layer overhead and memory-bound depthwise layers make MACs an optimistic speed proxy); remaining ties: lower int8 FPR at 5% FNR.",
+ "rule_timing": "rule fixed at 2026-10-23T00:56:52+09:00, after variants.json (baseline_rerun, lite, obstacle_weighted) and before variants2.json (lite_dw_down, lite_wide, written 2026-10-23T01:01:23+09:00)",
+ "baseline_int8_fpr_at_fnr5": 0.1136,
+ "candidates": {
+  "baseline_rerun": {
+   "macs": 69734400,
+   "conv_layers": 11,
+   "parameters": 121249,
+   "espdl_bytes": 199136,
+   "float": {
+    "auc": 0.9745,
+    "fpr_at_fnr5": 0.1115,
+    "cap5_fnr": 0.05,
+    "cap5_fpr": 0.1116,
+    "cap5_recall": {
+     "diver": 0.8976,
+     "robot": 0.9226,
+     "fish": 0.9466,
+     "wreck": 0.9211,
+     "reef": 0.9768,
+     "seafloor": 0.9025
+    }
+   },
+   "int8": {
+    "auc": 0.9735,
+    "fpr_at_fnr5": 0.1136,
+    "cap5_fnr": 0.0493,
+    "cap5_fpr": 0.1148,
+    "cap5_recall": {
+     "diver": 0.8983,
+     "robot": 0.9288,
+     "fish": 0.9451,
+     "wreck": 0.927,
+     "reef": 0.977,
+     "seafloor": 0.903
+    }
+   },
+   "eligible": true
+  },
+  "lite": {
+   "macs": 22310400,
+   "conv_layers": 16,
+   "parameters": 39569,
+   "espdl_bytes": 123264,
+   "float": {
+    "auc": 0.9708,
+    "fpr_at_fnr5": 0.1202,
+    "cap5_fnr": 0.0499,
+    "cap5_fpr": 0.1202,
+    "cap5_recall": {
+     "diver": 0.8698,
+     "robot": 0.9504,
+     "fish": 0.9481,
+     "wreck": 0.9156,
+     "reef": 0.977,
+     "seafloor": 0.9042
+    }
+   },
+   "int8": {
+    "auc": 0.9708,
+    "fpr_at_fnr5": 0.1197,
+    "cap5_fnr": 0.048,
+    "cap5_fpr": 0.123,
+    "cap5_recall": {
+     "diver": 0.8763,
+     "robot": 0.9505,
+     "fish": 0.9492,
+     "wreck": 0.9171,
+     "reef": 0.9791,
+     "seafloor": 0.906
+    }
+   },
+   "eligible": true
+  },
+  "lite_dw_down": {
+   "macs": 12739200,
+   "conv_layers": 18,
+   "parameters": 19617,
+   "espdl_bytes": 106128,
+   "float": {
+    "auc": 0.968,
+    "fpr_at_fnr5": 0.1339,
+    "cap5_fnr": 0.0496,
+    "cap5_fpr": 0.1346,
+    "cap5_recall": {
+     "diver": 0.8725,
+     "robot": 0.9558,
+     "fish": 0.9331,
+     "wreck": 0.9248,
+     "reef": 0.9737,
+     "seafloor": 0.9168
+    }
+   },
+   "int8": {
+    "auc": 0.9648,
+    "fpr_at_fnr5": 0.1473,
+    "cap5_fnr": 0.0482,
+    "cap5_fpr": 0.1513,
+    "cap5_recall": {
+     "diver": 0.8663,
+     "robot": 0.9679,
+     "fish": 0.9298,
+     "wreck": 0.9378,
+     "reef": 0.9736,
+     "seafloor": 0.9185
+    }
+   },
+   "eligible": false
+  },
+  "lite_wide": {
+   "macs": 21595200,
+   "conv_layers": 18,
+   "parameters": 39601,
+   "espdl_bytes": 127312,
+   "float": {
+    "auc": 0.9705,
+    "fpr_at_fnr5": 0.1283,
+    "cap5_fnr": 0.0496,
+    "cap5_fpr": 0.1289,
+    "cap5_recall": {
+     "diver": 0.8748,
+     "robot": 0.9507,
+     "fish": 0.917,
+     "wreck": 0.9416,
+     "reef": 0.977,
+     "seafloor": 0.9049
+    }
+   },
+   "int8": {
+    "auc": 0.9705,
+    "fpr_at_fnr5": 0.1263,
+    "cap5_fnr": 0.0462,
+    "cap5_fpr": 0.1335,
+    "cap5_recall": {
+     "diver": 0.878,
+     "robot": 0.9518,
+     "fish": 0.9222,
+     "wreck": 0.9413,
+     "reef": 0.9821,
+     "seafloor": 0.9062
+    }
+   },
+   "eligible": false
+  }
+ },
+ "not_candidates": {
+  "obstacle_weighted": "loss change (class-weighted BCE) on the run_01 architecture, float only; mixed per-class recall (fish 0.929 vs 0.947), no speed gain"
+ },
+ "eligible": [
+  "baseline_rerun",
+  "lite"
+ ],
+ "chosen": "lite",
+ "metrics": "auc: ROC area of pooled native-resolution pixels; fpr_at_fnr5: water FPR interpolated at 5% miss rate; cap5_*: constrained_threshold with cap 0.05; cap5_recall: per-class non-water recall at that threshold"
+}

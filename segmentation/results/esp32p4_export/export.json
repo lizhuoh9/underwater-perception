@@ -1,0 +1,19 @@
+{
+  "onnx": "cnn_espdl_run_02/water_seg.onnx",
+  "target": "esp32p4",
+  "bits": 8,
+  "calibration": "128 evenly spaced training frames (as train_cnn_espdl.py)",
+  "input_exponent": -5,
+  "output_exponent": -3,
+  "threshold_code": 3,
+  "s3_threshold": "code 3 at output exponent -3",
+  "ops": [
+    "Add",
+    "Conv",
+    "RequantizeLinear",
+    "Resize"
+  ],
+  "kernels": 96,
+  "test_frame": "f_r_1037_",
+  "test_mask_non_water": 3567
+}

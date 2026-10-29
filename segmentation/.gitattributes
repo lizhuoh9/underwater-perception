@@ -1,0 +1,6 @@
+# LF for text everywhere, so the source SHA-256s new runs record do not change with a checkout's line endings.
+* text=auto eol=lf
+# Committed evidence stays byte for byte: locks, plans and summaries record the SHA-256 of these files as they were
+# written (with CRLF line ends where Windows wrote them).
+results/** -text
+data/** -text

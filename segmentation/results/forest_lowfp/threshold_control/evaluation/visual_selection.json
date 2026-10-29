@@ -1,0 +1,7 @@
+{
+  "ids": [
+    "f_r_24_",
+    "d_r_345_"
+  ],
+  "rule": "Median positive mIoU delta followed by worst regression; visualization only"
+}

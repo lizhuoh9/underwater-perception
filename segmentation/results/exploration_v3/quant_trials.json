@@ -1,0 +1,196 @@
+{
+ "note": "Calibration images only. 'int8' is the ESP-PPQ esp32s3 graph fed device-exact int8 input codes; trials with int16 first layers (mp_*) are not valid there because the board preprocessing only produces int8 inputs.",
+ "trials": [
+  {
+   "model": "mnv3s_nose seed 20261022",
+   "trial": "eq1",
+   "float_fpr_at_fnr5": 0.08,
+   "int8_fpr_at_fnr5": 0.5552,
+   "int8_auc": 0.8557,
+   "int16_ops": []
+  },
+  {
+   "model": "mnv3s_nose seed 20261022",
+   "trial": "eq1_minmax_wminmax",
+   "float_fpr_at_fnr5": 0.08,
+   "int8_fpr_at_fnr5": 0.6755,
+   "int8_auc": 0.7485,
+   "int16_ops": []
+  },
+  {
+   "model": "mnv3s_nose seed 20261022",
+   "trial": "eq1_wminmax",
+   "float_fpr_at_fnr5": 0.08,
+   "int8_fpr_at_fnr5": 0.6755,
+   "int8_auc": 0.7485,
+   "int16_ops": []
+  },
+  {
+   "model": "mnv3s_nose seed 20261022",
+   "trial": "eq2",
+   "float_fpr_at_fnr5": 0.08,
+   "int8_fpr_at_fnr5": 0.6771,
+   "int8_auc": 0.7467,
+   "int16_ops": []
+  },
+  {
+   "model": "mnv3s_nose seed 20261022",
+   "trial": "eq2_bnclamp",
+   "float_fpr_at_fnr5": 0.0859,
+   "int8_fpr_at_fnr5": 0.7438,
+   "int8_auc": 0.7148,
+   "int16_ops": []
+  },
+  {
+   "model": "mnv3s_nose seed 20261022",
+   "trial": "minmax",
+   "float_fpr_at_fnr5": 0.08,
+   "int8_fpr_at_fnr5": 0.4508,
+   "int8_auc": 0.8831,
+   "int16_ops": []
+  },
+  {
+   "model": "mnv3s_nose seed 20261022",
+   "trial": "wminmax",
+   "float_fpr_at_fnr5": 0.08,
+   "int8_fpr_at_fnr5": 0.4508,
+   "int8_auc": 0.8831,
+   "int16_ops": []
+  },
+  {
+   "model": "mnv3s_nose seed 20261022",
+   "trial": "eq1_lsq2000",
+   "float_fpr_at_fnr5": 0.08,
+   "int8_fpr_at_fnr5": 0.2629,
+   "int8_auc": 0.9543,
+   "int16_ops": []
+  },
+  {
+   "model": "mnv3s_nose seed 20261022",
+   "trial": "lsq2000",
+   "float_fpr_at_fnr5": 0.08,
+   "int8_fpr_at_fnr5": 0.4296,
+   "int8_auc": 0.9109,
+   "int16_ops": []
+  },
+  {
+   "model": "mnv3s_nose seed 20261022",
+   "trial": "mp_early",
+   "float_fpr_at_fnr5": 0.08,
+   "int8_fpr_at_fnr5": 0.8168,
+   "int8_auc": 0.6333,
+   "int16_ops": [
+    "/s2/s2.0/Conv",
+    "/s2/s2.2/HardSwish",
+    "/s4/block/block.0/block.0.0/Conv",
+    "/s4/block/block.0/block.0.2/Relu",
+    "/s4/block/block.2/block.2.0/Conv"
+   ]
+  },
+  {
+   "model": "mnv3s_nose seed 20261022",
+   "trial": "mp_top4",
+   "float_fpr_at_fnr5": 0.08,
+   "int8_fpr_at_fnr5": 0.8932,
+   "int8_auc": 0.6562,
+   "int16_ops": [
+    "/s4/block/block.0/block.0.0/Conv",
+    "/s2/s2.0/Conv",
+    "/s8/s8.2/block/block.1/block.1.0/Conv",
+    "/s16/s16.7/block/block.1/block.1.0/Conv"
+   ]
+  },
+  {
+   "model": "mnv3s_nose seed 20261022",
+   "trial": "mp_top8",
+   "float_fpr_at_fnr5": 0.08,
+   "int8_fpr_at_fnr5": 0.8872,
+   "int8_auc": 0.6597,
+   "int16_ops": [
+    "/s4/block/block.0/block.0.0/Conv",
+    "/s2/s2.0/Conv",
+    "/s8/s8.2/block/block.1/block.1.0/Conv",
+    "/s16/s16.7/block/block.1/block.1.0/Conv",
+    "/s16/s16.4/block/block.1/block.1.0/Conv",
+    "/s16/s16.5/block/block.1/block.1.0/Conv",
+    "/s16/s16.7/block/block.0/block.0.0/Conv",
+    "/s4/block/block.2/block.2.0/Conv"
+   ]
+  },
+  {
+   "model": "mnv3s_relu seed 20261022",
+   "trial": "default",
+   "float_fpr_at_fnr5": 0.0963,
+   "int8_fpr_at_fnr5": 0.783,
+   "int8_auc": 0.8168,
+   "int16_ops": []
+  },
+  {
+   "model": "mnv3s_relu seed 20261022",
+   "trial": "eq1",
+   "float_fpr_at_fnr5": 0.0963,
+   "int8_fpr_at_fnr5": 0.1977,
+   "int8_auc": 0.9587,
+   "int16_ops": []
+  },
+  {
+   "model": "mnv3s_relu seed 20261022",
+   "trial": "eq2",
+   "float_fpr_at_fnr5": 0.0963,
+   "int8_fpr_at_fnr5": 0.1662,
+   "int8_auc": 0.968,
+   "int16_ops": []
+  },
+  {
+   "model": "mnv3s_relu seed 20261022",
+   "trial": "eq2_brecq",
+   "float_fpr_at_fnr5": 0.0963,
+   "int8_fpr_at_fnr5": 0.1336,
+   "int8_auc": 0.9755,
+   "int16_ops": []
+  },
+  {
+   "model": "mnv3s_relu seed 20261022",
+   "trial": "eq2_lsq",
+   "float_fpr_at_fnr5": 0.0963,
+   "int8_fpr_at_fnr5": 0.1201,
+   "int8_auc": 0.9761,
+   "int16_ops": []
+  },
+  {
+   "model": "mnv3s_relu seed 20261022",
+   "trial": "eq2_lsq2000",
+   "float_fpr_at_fnr5": 0.0963,
+   "int8_fpr_at_fnr5": 0.114,
+   "int8_auc": 0.9759,
+   "int16_ops": []
+  },
+  {
+   "model": "mnv3s_relu seed 20261022",
+   "trial": "mp_early_eq2",
+   "float_fpr_at_fnr5": 0.0963,
+   "int8_fpr_at_fnr5": 0.9193,
+   "int8_auc": 0.6365,
+   "int16_ops": [
+    "/s2/s2.0/Conv",
+    "/s2/s2.2/Relu",
+    "/s4/block/block.0/block.0.0/Conv",
+    "/s4/block/block.0/block.0.2/Relu",
+    "/s4/block/block.2/block.2.0/Conv"
+   ]
+  },
+  {
+   "model": "mnv3s_relu seed 20261022",
+   "trial": "mp_top4_eq2",
+   "float_fpr_at_fnr5": 0.0963,
+   "int8_fpr_at_fnr5": 0.8758,
+   "int8_auc": 0.6463,
+   "int16_ops": [
+    "/skip2/skip2.0/Conv",
+    "/s4/block/block.0/block.0.0/Conv",
+    "/s4/block/block.2/block.2.0/Conv",
+    "/s2/s2.0/Conv"
+   ]
+  }
+ ]
+}

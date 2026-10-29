@@ -1,0 +1,58 @@
+{
+  "algorithm": "same uint8 color/texture features; larger training set, bounded deeper forest, train-only hard-water mining, recall-constrained threshold",
+  "seed": 20261022,
+  "training_images": 1395,
+  "uniform_rows_per_image": 1024,
+  "extra_hard_water_rows_max_per_image": 256,
+  "hard_water_rule": "Exclude uniform rows; training-GT water with original post-median score>=57, descending score, seeded ties; up to256/image",
+  "new_forest": {
+    "trees": 16,
+    "max_depth": 8,
+    "min_samples_leaf": 16,
+    "class_weight": "balanced_subsample",
+    "n_jobs": 2
+  },
+  "candidates": [
+    {
+      "name": "threshold_only",
+      "reuse": "model/pixel_forest_model.json"
+    },
+    {
+      "name": "old_16_8",
+      "reuse": "candidate_16_8.json"
+    },
+    {
+      "name": "uniform_sqrt",
+      "max_features": "sqrt",
+      "hard_water": false
+    },
+    {
+      "name": "uniform_8",
+      "max_features": 8,
+      "hard_water": false
+    },
+    {
+      "name": "hard_water_8",
+      "max_features": 8,
+      "hard_water": true
+    }
+  ],
+  "max_calibration_fnr_increase_absolute": 0.02,
+  "selection_rule": "For each candidate minimize aggregate calibration FPR subject to FNR <= original forest calibration FNR +0.02. Overall choose lowest FPR, then highest image-macro mIoU, then smallest model. Same FNR cap applies to the threshold-only control.",
+  "hardware_limits": {
+    "trees_max": 16,
+    "depth_max": 8,
+    "features": 16,
+    "work_buffer_change": false
+  },
+  "test_policy": "Reused same110-image benchmark; no test pixels/labels loaded during training/calibration. Lock primary model and threshold-only control before test. Report pass/failure of +2pp test FNR criterion without retuning.",
+  "manifest_sha256": {
+    "data/manifest.json": "e551591ce58dc3401af9bd31101bbaf44b4ffe7d8b90acc49d97928b751ddcf3",
+    "data/lowfp_training_manifest.json": "d4ff81ad6fd7e8915c17f0cd9f68af1c3bec0c2f7f87dd00fb980b17af043efb"
+  },
+  "original_locked_sha256": "178272b37dc308824408cb283caa7f73cc70c17ba2cd3aee71bf1efe164dbb88",
+  "reused_candidate_sha256": {
+    "model/pixel_forest_model.json": "9d80f3a08b1e1d2932ff4be1a7678088153d8189b01d6a40332a80068cfffdfa",
+    "candidate_16_8.json": "9b7a0147a2d549378a0416ae32c4a472761a684ac2cac077e560c6c0f143f1fa"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "algorithm": "random forest on uint8 RGB565 color and local texture features",
+  "candidate_tree_count_depth": [
+    [
+      8,
+      4
+    ],
+    [
+      12,
+      6
+    ],
+    [
+      16,
+      8
+    ]
+  ],
+  "seed": 20261022,
+  "training_pixels_per_image": 768,
+  "max_features": "sqrt",
+  "min_samples_leaf": 32,
+  "class_weight": "balanced_subsample",
+  "median_window": 3,
+  "score_quantization": "uint8 leaf probabilities, rounded integer soft vote",
+  "selection_rule": "Prefer thresholds with both aggregate calibration FNR and FPR <= UDCP-Otsu calibration; among these maximize per-image mean IoU. If none qualify, maximize that mean IoU and record failed dominance.",
+  "training_manifest_sha256": "897606addde07fc223709b40eb7c621a6bb9899b680f476fb7774b85cfeaae93",
+  "baseline_manifest_sha256": "e551591ce58dc3401af9bd31101bbaf44b4ffe7d8b90acc49d97928b751ddcf3",
+  "test_policy": "Same previously inspected 110-image comparison benchmark; no test image or label is loaded by this training script and no subsequent test-based retuning is allowed in this run.",
+  "feature_names": [
+    "red",
+    "green",
+    "blue",
+    "red_fraction",
+    "green_fraction",
+    "luma",
+    "saturation",
+    "red_minus_green",
+    "green_minus_blue",
+    "mean_luma_3",
+    "mean_luma_9",
+    "gradient",
+    "local_deviation",
+    "luma_range_5",
+    "mean_red_fraction_9",
+    "mean_green_fraction_9"
+  ]
+}

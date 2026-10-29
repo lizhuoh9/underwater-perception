@@ -1,0 +1,456 @@
+{
+  "task": "SUIM water vs non-water semantic proxy, not collision/metric-depth evaluation",
+  "evaluation": "native-resolution masks; nearest-neighbor upsample of <=160x120 predictions",
+  "dataset_source": {
+    "url": "https://huggingface.co/datasets/SatwikKambham/suim/resolve/0f07fb8db0e067f66061cdf18a04a87c7cf247d8/SUIM.zip",
+    "revision": "0f07fb8db0e067f66061cdf18a04a87c7cf247d8",
+    "sha256": "5ab7bd0763f7e674e5949cd2fa9b77023c40cdeb0ac2fca9924380dd664d7fba",
+    "archive_bytes": 173794160,
+    "official_url": "https://irvlab.cs.umn.edu/resources/suim-dataset",
+    "mirror_url": "https://huggingface.co/datasets/SatwikKambham/suim",
+    "paper_url": "https://arxiv.org/abs/2004.01241",
+    "mirror_discrepancy": "Official train_val count is 1525; this pinned mirror contains 1488 pairs."
+  },
+  "dataset_counts": {
+    "official_train_val": 1525,
+    "mirror_train_val": 1488,
+    "mirror_test": 110,
+    "calibration": 80,
+    "test": 110,
+    "excluded_train_val_exact_test_duplicates": 4,
+    "eligible_train_val_after_test_dedup": 1484
+  },
+  "calibration_count": 80,
+  "test_count": 110,
+  "config": {
+    "input_bounds": [
+      160,
+      120
+    ],
+    "preserve_aspect_ratio": true,
+    "ambient_candidate_fraction": 0.001,
+    "median_window": 3,
+    "foreground_rule": "uint8_score >= threshold_q",
+    "calibration_objective": "mean per-image mean IoU of water and non-water on native masks",
+    "udcp": {
+      "window": 9,
+      "threshold_q": 142,
+      "calibration_macro_miou": 0.48630719293207275
+    },
+    "udcp_candidates": [
+      {
+        "window": 3,
+        "threshold_q": 110,
+        "calibration_macro_miou": 0.4247902169193975
+      },
+      {
+        "window": 5,
+        "threshold_q": 143,
+        "calibration_macro_miou": 0.4536900693030345
+      },
+      {
+        "window": 9,
+        "threshold_q": 142,
+        "calibration_macro_miou": 0.48630719293207275
+      }
+    ],
+    "red_fraction": {
+      "threshold_q": 28,
+      "calibration_macro_miou": 0.5430039292466543
+    },
+    "calibration_ids": [
+      "f_r_1037_",
+      "f_r_1294_",
+      "f_r_90_",
+      "f_r_1317_",
+      "f_r_665_",
+      "w_r_49_",
+      "f_r_157_",
+      "n_l_20_",
+      "f_r_160_",
+      "f_r_358_",
+      "d_r_798_",
+      "w_r_88_",
+      "f_r_1507_",
+      "d_r_745_",
+      "f_r_1365_",
+      "f_r_1935_",
+      "f_r_569_",
+      "w_r_284_",
+      "f_r_1050_",
+      "f_r_1930_",
+      "f_r_845_",
+      "f_r_661_",
+      "d_r_404_",
+      "f_r_920_",
+      "f_r_658_",
+      "f_r_1534_",
+      "f_r_1531_",
+      "f_r_456_",
+      "f_r_1615_",
+      "f_r_1590_",
+      "w_r_190_",
+      "f_r_1375_",
+      "f_r_1853_",
+      "f_r_1719_",
+      "f_r_915_",
+      "w_r_45_",
+      "f_r_1685_",
+      "f_r_111_",
+      "f_r_70_",
+      "f_r_1000_",
+      "f_r_1781_",
+      "f_r_1937_",
+      "f_r_9_",
+      "w_r_110_",
+      "f_r_1347_",
+      "w_r_66_",
+      "f_r_704_",
+      "f_r_1131_",
+      "f_r_500_",
+      "f_r_30_",
+      "f_r_248_",
+      "d_r_112_",
+      "f_r_1695_",
+      "f_r_1650_",
+      "w_r_80_",
+      "d_r_662_",
+      "d_r_204_",
+      "f_r_772_",
+      "f_r_2017_",
+      "f_r_245_",
+      "w_r_76_",
+      "f_r_1512_",
+      "f_r_1682_",
+      "f_r_1026_",
+      "w_r_274_",
+      "f_r_1492_",
+      "f_r_171_",
+      "w_r_169_",
+      "n_l_71_",
+      "f_r_1766_",
+      "f_r_1332_",
+      "w_r_186_",
+      "f_r_1751_",
+      "f_r_473_",
+      "f_r_684_",
+      "f_r_359_",
+      "f_r_2012_",
+      "w_r_215_",
+      "f_r_382_",
+      "f_r_1192_"
+    ]
+  },
+  "methods": {
+    "udcp_fixed": {
+      "tp": 15232243,
+      "fp": 5612096,
+      "fn": 7703735,
+      "tn": 10866182,
+      "foreground_iou": 0.5335646460773501,
+      "water_iou": 0.4493497708400041,
+      "miou": 0.49145720845867713,
+      "foreground_precision": 0.7307616230958439,
+      "foreground_recall": 0.6641200562714178,
+      "foreground_f1": 0.6958489131086009,
+      "water_false_positive_rate": 0.34057539264721715,
+      "pixel_accuracy": 0.6621569870556481,
+      "macro_image_miou": 0.4746066240415871,
+      "per_class_predicted_foreground_rate": {
+        "water": {
+          "positive_pixels": 5612096,
+          "pixels": 16478278,
+          "rate": 0.34057539264721715
+        },
+        "diver": {
+          "positive_pixels": 992420,
+          "pixels": 1454049,
+          "rate": 0.6825217031888197
+        },
+        "plants": {
+          "positive_pixels": 1157013,
+          "pixels": 1215617,
+          "rate": 0.9517907367205296
+        },
+        "wreck": {
+          "positive_pixels": 2481434,
+          "pixels": 2871016,
+          "rate": 0.8643051797691131
+        },
+        "robot": {
+          "positive_pixels": 253524,
+          "pixels": 354299,
+          "rate": 0.7155651017925537
+        },
+        "reef": {
+          "positive_pixels": 5808913,
+          "pixels": 7674390,
+          "rate": 0.7569217879206035
+        },
+        "fish": {
+          "positive_pixels": 2226511,
+          "pixels": 2666704,
+          "rate": 0.8349299359808963
+        },
+        "seafloor_rocks": {
+          "positive_pixels": 2312428,
+          "pixels": 6699903,
+          "rate": 0.3451435043164058
+        }
+      },
+      "desktop_score_time_ms": {
+        "median": 2.3757000017212704,
+        "p95": 3.8193899988982594
+      }
+    },
+    "udcp_otsu": {
+      "tp": 16212521,
+      "fp": 5411658,
+      "fn": 6723457,
+      "tn": 11066620,
+      "foreground_iou": 0.5719179193637169,
+      "water_iou": 0.4769738125187621,
+      "miou": 0.5244458659412395,
+      "foreground_precision": 0.7497404178905475,
+      "foreground_recall": 0.7068598077657731,
+      "foreground_f1": 0.727668935277764,
+      "water_false_positive_rate": 0.32841162165124294,
+      "pixel_accuracy": 0.6921135591142453,
+      "macro_image_miou": 0.5211917239867272,
+      "per_class_predicted_foreground_rate": {
+        "water": {
+          "positive_pixels": 5411658,
+          "pixels": 16478278,
+          "rate": 0.32841162165124294
+        },
+        "diver": {
+          "positive_pixels": 1266266,
+          "pixels": 1454049,
+          "rate": 0.8708551087342998
+        },
+        "plants": {
+          "positive_pixels": 1064104,
+          "pixels": 1215617,
+          "rate": 0.8753612363104497
+        },
+        "wreck": {
+          "positive_pixels": 2484396,
+          "pixels": 2871016,
+          "rate": 0.8653368702926072
+        },
+        "robot": {
+          "positive_pixels": 247785,
+          "pixels": 354299,
+          "rate": 0.6993669189018316
+        },
+        "reef": {
+          "positive_pixels": 6594106,
+          "pixels": 7674390,
+          "rate": 0.8592351965433084
+        },
+        "fish": {
+          "positive_pixels": 2168830,
+          "pixels": 2666704,
+          "rate": 0.8132998638019068
+        },
+        "seafloor_rocks": {
+          "positive_pixels": 2387034,
+          "pixels": 6699903,
+          "rate": 0.356278889410787
+        }
+      }
+    },
+    "udcp_rgb565": {
+      "tp": 15218601,
+      "fp": 5710285,
+      "fn": 7717377,
+      "tn": 10767993,
+      "foreground_iou": 0.5312595573111928,
+      "water_iou": 0.4450382930323647,
+      "miou": 0.48814892517177877,
+      "foreground_precision": 0.7271577187624798,
+      "foreground_recall": 0.6635252702108452,
+      "foreground_f1": 0.6938857031450046,
+      "water_false_positive_rate": 0.34653408566113525,
+      "pixel_accuracy": 0.6593196634233055,
+      "macro_image_miou": 0.47311990530109344,
+      "per_class_predicted_foreground_rate": {
+        "water": {
+          "positive_pixels": 5710285,
+          "pixels": 16478278,
+          "rate": 0.34653408566113525
+        },
+        "diver": {
+          "positive_pixels": 974644,
+          "pixels": 1454049,
+          "rate": 0.6702965305845952
+        },
+        "plants": {
+          "positive_pixels": 1162065,
+          "pixels": 1215617,
+          "rate": 0.9559466509599652
+        },
+        "wreck": {
+          "positive_pixels": 2503958,
+          "pixels": 2871016,
+          "rate": 0.8721504860996944
+        },
+        "robot": {
+          "positive_pixels": 255860,
+          "pixels": 354299,
+          "rate": 0.7221584029308579
+        },
+        "reef": {
+          "positive_pixels": 5874179,
+          "pixels": 7674390,
+          "rate": 0.7654261771945392
+        },
+        "fish": {
+          "positive_pixels": 2236056,
+          "pixels": 2666704,
+          "rate": 0.8385092608703478
+        },
+        "seafloor_rocks": {
+          "positive_pixels": 2211839,
+          "pixels": 6699903,
+          "rate": 0.33013000337467574
+        }
+      },
+      "desktop_score_time_ms": {
+        "median": 2.1747499995399266,
+        "p95": 3.486265001083665
+      }
+    },
+    "red_fraction": {
+      "tp": 17678794,
+      "fp": 6721167,
+      "fn": 5257184,
+      "tn": 9757111,
+      "foreground_iou": 0.5961057276416863,
+      "water_iou": 0.44890285745939057,
+      "miou": 0.5225042925505384,
+      "foreground_precision": 0.7245418957841777,
+      "foreground_recall": 0.7707887581684985,
+      "foreground_f1": 0.7469501766934422,
+      "water_false_positive_rate": 0.40788042294225163,
+      "pixel_accuracy": 0.6960909017285523,
+      "macro_image_miou": 0.49689560819081163,
+      "per_class_predicted_foreground_rate": {
+        "water": {
+          "positive_pixels": 6721167,
+          "pixels": 16478278,
+          "rate": 0.40788042294225163
+        },
+        "diver": {
+          "positive_pixels": 891799,
+          "pixels": 1454049,
+          "rate": 0.6133211466738742
+        },
+        "plants": {
+          "positive_pixels": 1058406,
+          "pixels": 1215617,
+          "rate": 0.8706739046920206
+        },
+        "wreck": {
+          "positive_pixels": 1971015,
+          "pixels": 2871016,
+          "rate": 0.6865217748699415
+        },
+        "robot": {
+          "positive_pixels": 194136,
+          "pixels": 354299,
+          "rate": 0.5479439682302236
+        },
+        "reef": {
+          "positive_pixels": 5936695,
+          "pixels": 7674390,
+          "rate": 0.7735722317995306
+        },
+        "fish": {
+          "positive_pixels": 2190243,
+          "pixels": 2666704,
+          "rate": 0.8213296263852307
+        },
+        "seafloor_rocks": {
+          "positive_pixels": 5436500,
+          "pixels": 6699903,
+          "rate": 0.8114296580114667
+        }
+      },
+      "desktop_score_time_ms": {
+        "median": 0.22525000167661346,
+        "p95": 0.3816649992586462
+      }
+    },
+    "all_foreground": {
+      "tp": 22935978,
+      "fp": 16478278,
+      "fn": 0,
+      "tn": 0,
+      "foreground_iou": 0.5819208663992034,
+      "water_iou": 0.0,
+      "miou": 0.2909604331996017,
+      "foreground_precision": 0.5819208663992034,
+      "foreground_recall": 1.0,
+      "foreground_f1": 0.7357142556995054,
+      "water_false_positive_rate": 1.0,
+      "pixel_accuracy": 0.5819208663992034,
+      "macro_image_miou": 0.36740215468927107,
+      "per_class_predicted_foreground_rate": {
+        "water": {
+          "positive_pixels": 16478278,
+          "pixels": 16478278,
+          "rate": 1.0
+        },
+        "diver": {
+          "positive_pixels": 1454049,
+          "pixels": 1454049,
+          "rate": 1.0
+        },
+        "plants": {
+          "positive_pixels": 1215617,
+          "pixels": 1215617,
+          "rate": 1.0
+        },
+        "wreck": {
+          "positive_pixels": 2871016,
+          "pixels": 2871016,
+          "rate": 1.0
+        },
+        "robot": {
+          "positive_pixels": 354299,
+          "pixels": 354299,
+          "rate": 1.0
+        },
+        "reef": {
+          "positive_pixels": 7674390,
+          "pixels": 7674390,
+          "rate": 1.0
+        },
+        "fish": {
+          "positive_pixels": 2666704,
+          "pixels": 2666704,
+          "rate": 1.0
+        },
+        "seafloor_rocks": {
+          "positive_pixels": 6699903,
+          "pixels": 6699903,
+          "rate": 1.0
+        }
+      }
+    }
+  },
+  "flagged_test_frames": [],
+  "runtime": {
+    "python": "3.12.14",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "machine": "AMD64",
+    "numpy": "2.3.5",
+    "timing_scope": "desktop score calculation only; excludes camera capture, JPEG decode, resize, I/O, plotting, networking; not ESP32-S3 timing"
+  },
+  "source_code_sha256": {
+    "udcp.py": "8e230bcaed09cca0baae63b7c062828ddf6db9a24358f3dd2b8d754db20ab59a",
+    "validate.py": "762e532e50ba71c10186ac7c250520fcb0f59d21eac42f0b82f3ff57e9828299",
+    "prepare_data.py": "02910a2490ea47e9bd29d63df0a3c4e12a6155956e1c41ec4034aca6e24adada"
+  }
+}

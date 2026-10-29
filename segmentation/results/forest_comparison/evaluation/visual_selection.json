@@ -1,0 +1,22 @@
+{
+  "preview": [
+    "f_r_392_",
+    "n_l_79_",
+    "f_r_13_"
+  ],
+  "preview_rule": "Original UDCP contact sheet indices 0,4,8; unchanged selection",
+  "worst_forest_minus_udcp_deltas": [
+    {
+      "id": "f_r_604_",
+      "delta_miou": -0.5599366288488756
+    },
+    {
+      "id": "f_r_1992_",
+      "delta_miou": -0.5451450564437361
+    },
+    {
+      "id": "f_r_13_",
+      "delta_miou": -0.40538308996708805
+    }
+  ]
+}

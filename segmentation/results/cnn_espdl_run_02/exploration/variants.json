@@ -1,0 +1,89 @@
+{
+ "baseline_rerun": {
+  "macs": 69734400,
+  "params": 121249,
+  "train_seconds": 150.5,
+  "float": {
+   "auc": 0.9745,
+   "fpr_at_fnr5": 0.1115,
+   "cap5_fnr": 0.05,
+   "cap5_fpr": 0.1116,
+   "cap5_recall": {
+    "diver": 0.8976,
+    "robot": 0.9226,
+    "fish": 0.9466,
+    "wreck": 0.9211,
+    "reef": 0.9768,
+    "seafloor": 0.9025
+   }
+  },
+  "int8": {
+   "auc": 0.9735,
+   "fpr_at_fnr5": 0.1136,
+   "cap5_fnr": 0.0493,
+   "cap5_fpr": 0.1148,
+   "cap5_recall": {
+    "diver": 0.8983,
+    "robot": 0.9288,
+    "fish": 0.9451,
+    "wreck": 0.927,
+    "reef": 0.977,
+    "seafloor": 0.903
+   }
+  },
+  "espdl_bytes": 199136
+ },
+ "lite": {
+  "macs": 22310400,
+  "params": 39569,
+  "train_seconds": 110.2,
+  "float": {
+   "auc": 0.9708,
+   "fpr_at_fnr5": 0.1202,
+   "cap5_fnr": 0.0499,
+   "cap5_fpr": 0.1202,
+   "cap5_recall": {
+    "diver": 0.8698,
+    "robot": 0.9504,
+    "fish": 0.9481,
+    "wreck": 0.9156,
+    "reef": 0.977,
+    "seafloor": 0.9042
+   }
+  },
+  "int8": {
+   "auc": 0.9708,
+   "fpr_at_fnr5": 0.1197,
+   "cap5_fnr": 0.048,
+   "cap5_fpr": 0.123,
+   "cap5_recall": {
+    "diver": 0.8763,
+    "robot": 0.9505,
+    "fish": 0.9492,
+    "wreck": 0.9171,
+    "reef": 0.9791,
+    "seafloor": 0.906
+   }
+  },
+  "espdl_bytes": 123264
+ },
+ "obstacle_weighted": {
+  "macs": 69734400,
+  "params": 121249,
+  "train_seconds": 107.9,
+  "float": {
+   "auc": 0.9737,
+   "fpr_at_fnr5": 0.1106,
+   "cap5_fnr": 0.0497,
+   "cap5_fpr": 0.1112,
+   "cap5_recall": {
+    "diver": 0.8949,
+    "robot": 0.9469,
+    "fish": 0.9293,
+    "wreck": 0.9329,
+    "reef": 0.9795,
+    "seafloor": 0.8989
+   }
+  }
+ }
+}

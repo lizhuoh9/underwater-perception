@@ -1,0 +1,117 @@
+{
+  "task": "SUIM water/non-water semantic proxy; no collision distance ground truth",
+  "test_count": 110,
+  "methods": {
+    "udcp_otsu": {
+      "tp": 16212521,
+      "fp": 5411658,
+      "fn": 6723457,
+      "tn": 11066620,
+      "foreground_iou": 0.5719179193637169,
+      "water_iou": 0.4769738125187621,
+      "miou": 0.5244458659412395,
+      "foreground_precision": 0.7497404178905475,
+      "foreground_recall": 0.7068598077657731,
+      "foreground_f1": 0.727668935277764,
+      "water_false_positive_rate": 0.32841162165124294,
+      "pixel_accuracy": 0.6921135591142453,
+      "macro_image_miou": 0.5211917239867272,
+      "per_class_predicted_foreground_fraction": {
+        "water": 0.32841162165124294,
+        "diver": 0.8708551087342998,
+        "plants": 0.8753612363104497,
+        "wreck": 0.8653368702926072,
+        "robot": 0.6993669189018316,
+        "reef": 0.8592351965433084,
+        "fish": 0.8132998638019068,
+        "seafloor_rocks": 0.356278889410787
+      }
+    },
+    "udcp_otsu_rgb565": {
+      "tp": 16199530,
+      "fp": 5233170,
+      "fn": 6736448,
+      "tn": 11245108,
+      "foreground_iou": 0.5750805810669176,
+      "water_iou": 0.4843954651887772,
+      "miou": 0.5297380231278475,
+      "foreground_precision": 0.7558324429493251,
+      "foreground_recall": 0.7062934050599455,
+      "foreground_f1": 0.7302236951932622,
+      "water_false_positive_rate": 0.3175799073179855,
+      "pixel_accuracy": 0.696312471304799,
+      "macro_image_miou": 0.5225711820065293,
+      "per_class_predicted_foreground_fraction": {
+        "water": 0.3175799073179855,
+        "diver": 0.86975404542763,
+        "plants": 0.8540568287544514,
+        "wreck": 0.8693427692496315,
+        "robot": 0.7003717199314703,
+        "reef": 0.8555728859231808,
+        "fish": 0.8068615789378949,
+        "seafloor_rocks": 0.3634321273009475
+      }
+    },
+    "pixel_forest_rgb565": {
+      "tp": 21575439,
+      "fp": 4522037,
+      "fn": 1360539,
+      "tn": 11956241,
+      "foreground_iou": 0.7857610610235299,
+      "water_iou": 0.6702373257150404,
+      "miou": 0.7279991933692851,
+      "foreground_precision": 0.8267251208507673,
+      "foreground_recall": 0.9406810121635101,
+      "foreground_f1": 0.8800293367055072,
+      "water_false_positive_rate": 0.2744241236857395,
+      "pixel_accuracy": 0.8507500433345742,
+      "macro_image_miou": 0.6566358616475394,
+      "per_class_predicted_foreground_fraction": {
+        "water": 0.2744241236857395,
+        "diver": 0.9868800845088439,
+        "plants": 0.995407270546562,
+        "wreck": 0.9781530301468191,
+        "robot": 0.9249334601565344,
+        "reef": 0.9835357598454079,
+        "fish": 0.9738756157413796,
+        "seafloor_rocks": 0.8432005657395338
+      }
+    }
+  },
+  "paired_images": {
+    "improved": 85,
+    "regressed": 25,
+    "tied": 0
+  },
+  "parity": {
+    "synthetic_cases": 5,
+    "test_images": 110,
+    "feature_mismatches": 0,
+    "score_mismatches": 0,
+    "mask_mismatches": 0,
+    "old_baseline_counts_exact": true
+  },
+  "hardware": {
+    "model_array_bytes": 11992,
+    "workspace_bytes_160x120": 221604,
+    "total_image_buffers_bytes_160x120": 298404,
+    "board_fps_measured": false
+  },
+  "desktop_timing_only_ms": {
+    "median": 3.6845499998889863,
+    "p95": 3.890735001914436,
+    "max": 4.5796000013069715,
+    "includes": "ctypes, RGB565 packing, buffer allocation, C features + inference + median; excludes capture, I/O, and feature parity checks",
+    "platform": "Windows-11-10.0.26200-SP0"
+  },
+  "locked_sha256": "178272b37dc308824408cb283caa7f73cc70c17ba2cd3aee71bf1efe164dbb88",
+  "dll_sha256": "1824f628e63117372f4aa31418135804db1fd24c32b799ee20ca1faf476c4c82",
+  "source_sha256": {
+    "compare_pixel_forest.py": "9a45bbb9a3e6ebfc93f0627f1c412cd525708469a33f632298d2272c59c76dbf",
+    "forest_native.py": "18563d883797cbb51f6a411c3ef0303f5b2a76f0fdce6bc0e5bfa283bc62a42a",
+    "embedded/pixel_forest.c": "f2899efed80a5430393b6c9714e4ff0e69482bd8e9aea50fe51ac135b17c06b8",
+    "embedded/pixel_forest.h": "34efa88b71a950cd1fd0309a359675a0c5b9b416bfd7707656b142ffc11d95e4",
+    "udcp.py": "8e230bcaed09cca0baae63b7c062828ddf6db9a24358f3dd2b8d754db20ab59a",
+    "validate.py": "762e532e50ba71c10186ac7c250520fcb0f59d21eac42f0b82f3ff57e9828299"
+  }
+}

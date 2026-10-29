@@ -1,0 +1,3 @@
+# LF everywhere, on every platform: both projects record SHA-256 hashes of source files, which must not change with a
+# checkout's line endings. segmentation/.gitattributes keeps its committed evidence byte for byte.
+* text=auto eol=lf

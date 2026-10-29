@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "uwseg"
+version = "0.1.0"
+description = "Water / non-water pixel segmentation for a small underwater robot's OV2640 camera: a small int8 CNN that ESP-DL runs on an ESP32-P4, with the SUIM data preparation, baselines and locked evaluations behind it"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.26", "Pillow>=10"]
+
+[project.optional-dependencies]
+# Training the integer pixel-forest baseline (train_pixel_forest, optimize_pixel_forest).
+forest = [
+    "scikit-learn==1.9.1",
+    "scipy==1.18.1",
+    "joblib==1.6.0",
+    "threadpoolctl==3.7.0",
+    "cloudpickle==3.1.2",
+    "narwhals==2.27.1",
+]
+# Training, evaluating and exporting the ESP-DL CNN (Python 3.10-3.12). The committed runs used the CUDA 12.4 build of
+# torch 2.6.0 (index https://download.pytorch.org/whl/cu124); locks record these versions and the evaluations check them.
+cnn = [
+    "torch==2.6.0",
+    "esp-ppq==1.3.12",
+    "onnx==1.19.1",
+    "onnxruntime==1.31.0",
+    "onnxscript==0.7.2",
+    "onnxsim==0.7.3",
+    "numpy==2.5.4",
+    "pillow==13.0.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+src = ["src", "."]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP"]
+# E501: the formatter wraps code to the line length; long strings and URLs stay whole. B905: the zips pair sequences of
+# equal length by construction. B023: the report and threshold helpers that read a loop variable are called within the
+# same iteration.
+ignore = ["E501", "B905", "B023"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["uwseg"]

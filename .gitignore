@@ -1,0 +1,10 @@
+# Each project's own .gitignore (segmentation/, slam/) covers its builds, data and environments; this one covers what
+# editors and operating systems leave anywhere.
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+.ruff_cache/
+__pycache__/

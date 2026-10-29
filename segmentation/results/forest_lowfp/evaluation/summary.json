@@ -1,0 +1,172 @@
+{
+  "task": "Same110 SUIM non-water/water pixel comparison; no collision distance truth",
+  "test_images": 110,
+  "chosen": {
+    "threshold_q": 72,
+    "calibration_fnr": 0.07763304715546113,
+    "calibration_fpr": 0.2370235759667277,
+    "macro_image_miou": 0.670309336582529,
+    "calibration_counts": [
+      17938341,
+      2050102,
+      1509820,
+      6599257
+    ],
+    "name": "uniform_sqrt",
+    "trees": 16,
+    "max_depth": 8,
+    "node_count": 7858,
+    "train_seconds": 26.384522299998935
+  },
+  "methods": {
+    "udcp_rgb565": {
+      "tp": 16199530,
+      "fp": 5233170,
+      "fn": 6736448,
+      "tn": 11245108,
+      "foreground_iou": 0.5750805810669176,
+      "water_iou": 0.4843954651887772,
+      "miou": 0.5297380231278475,
+      "foreground_precision": 0.7558324429493251,
+      "foreground_recall": 0.7062934050599455,
+      "foreground_f1": 0.7302236951932622,
+      "water_false_positive_rate": 0.3175799073179855,
+      "pixel_accuracy": 0.696312471304799,
+      "fnr": 0.29370659494005447,
+      "macro_image_miou": 0.5225711820065293,
+      "per_class_foreground_fraction": {
+        "water": 0.3175799073179855,
+        "diver": 0.86975404542763,
+        "plants": 0.8540568287544514,
+        "wreck": 0.8693427692496315,
+        "robot": 0.7003717199314703,
+        "reef": 0.8555728859231808,
+        "fish": 0.8068615789378949,
+        "seafloor_rocks": 0.3634321273009475
+      }
+    },
+    "forest_original": {
+      "tp": 21575439,
+      "fp": 4522037,
+      "fn": 1360539,
+      "tn": 11956241,
+      "foreground_iou": 0.7857610610235299,
+      "water_iou": 0.6702373257150404,
+      "miou": 0.7279991933692851,
+      "foreground_precision": 0.8267251208507673,
+      "foreground_recall": 0.9406810121635101,
+      "foreground_f1": 0.8800293367055072,
+      "water_false_positive_rate": 0.2744241236857395,
+      "pixel_accuracy": 0.8507500433345742,
+      "fnr": 0.05931898783648992,
+      "macro_image_miou": 0.6566358616475394,
+      "per_class_foreground_fraction": {
+        "water": 0.2744241236857395,
+        "diver": 0.9868800845088439,
+        "plants": 0.995407270546562,
+        "wreck": 0.9781530301468191,
+        "robot": 0.9249334601565344,
+        "reef": 0.9835357598454079,
+        "fish": 0.9738756157413796,
+        "seafloor_rocks": 0.8432005657395338
+      }
+    },
+    "forest_threshold_only": {
+      "tp": 21159938,
+      "fp": 3545700,
+      "fn": 1776040,
+      "tn": 12932578,
+      "foreground_iou": 0.7990406801260856,
+      "water_iou": 0.7084667857763846,
+      "miou": 0.7537537329512352,
+      "foreground_precision": 0.8564821519687126,
+      "foreground_recall": 0.9225653250975389,
+      "foreground_f1": 0.8882964003572003,
+      "water_false_positive_rate": 0.21517418264214258,
+      "pixel_accuracy": 0.8649793110391326,
+      "fnr": 0.07743467490246114,
+      "macro_image_miou": 0.6814040424425696,
+      "per_class_foreground_fraction": {
+        "water": 0.21517418264214258,
+        "diver": 0.9811093023687647,
+        "plants": 0.9910300695037993,
+        "wreck": 0.971059025794353,
+        "robot": 0.9122746606679669,
+        "reef": 0.9759300739211846,
+        "fish": 0.9639701294181882,
+        "seafloor_rocks": 0.7995950090620715
+      }
+    },
+    "forest_lowfp": {
+      "tp": 21094179,
+      "fp": 3399457,
+      "fn": 1841799,
+      "tn": 13078821,
+      "foreground_iou": 0.8009808457692079,
+      "water_iou": 0.7139064426421352,
+      "miou": 0.7574436442056716,
+      "foreground_precision": 0.8612106018069347,
+      "foreground_recall": 0.9196982574712969,
+      "foreground_f1": 0.8894940194959209,
+      "water_false_positive_rate": 0.20629928685509494,
+      "pixel_accuracy": 0.867021313303491,
+      "fnr": 0.08030174252870315,
+      "macro_image_miou": 0.6867756340982215,
+      "per_class_foreground_fraction": {
+        "water": 0.20629928685509494,
+        "diver": 0.9555957192639313,
+        "plants": 0.9847879718694292,
+        "wreck": 0.9616651387522744,
+        "robot": 0.9204344353215786,
+        "reef": 0.9723869910181786,
+        "fish": 0.9628533950524693,
+        "seafloor_rocks": 0.8045465732862103
+      }
+    }
+  },
+  "delta_vs_previous": {
+    "fnr_percentage_points": 2.0982754692213224,
+    "fpr_percentage_points": -6.812483683064455
+  },
+  "test_goal_passed": false,
+  "calibration": {
+    "original_fnr": 0.05879003161275763,
+    "fnr_cap": 0.07879003161275763
+  },
+  "paired_images": {
+    "improved": 74,
+    "regressed": 32,
+    "tied": 4
+  },
+  "parity": {
+    "test_images": 110,
+    "feature_mismatches": 0,
+    "score_mismatches": 0,
+    "mask_mismatches": 0,
+    "previous_baseline_counts_exact": true
+  },
+  "hardware": {
+    "model_array_bytes": 62896,
+    "workspace_bytes_160x120": 221604,
+    "total_image_buffers_bytes_160x120": 298404,
+    "board_fps_measured": false
+  },
+  "desktop_only_timing_ms": {
+    "median": 5.408049999459763,
+    "p95": 6.899664998491062,
+    "max": 8.032900001126109,
+    "includes": "ctypes,packing,allocation,C features/prediction/median; no camera"
+  },
+  "locked_sha256": "d68aed767ec025b281b850d8b3ba6dcc402037e0710d9b11d255161e44d3f2b9",
+  "dll_sha256": "e96f834b26b13ef28c4079f3979003e94001c9b0d868c47645554d164e63c07d",
+  "source_sha256": {
+    "compare_lowfp.py": "b936369d2d91411a83fbdd6cb82efd352a6704c257a6106ae7fde5cdc9c1c1d1",
+    "compare_pixel_forest.py": "9a45bbb9a3e6ebfc93f0627f1c412cd525708469a33f632298d2272c59c76dbf",
+    "forest_native.py": "18563d883797cbb51f6a411c3ef0303f5b2a76f0fdce6bc0e5bfa283bc62a42a",
+    "pixel_forest.py": "f78b183cfa72ae0287505769f07c54e44368a946cd28d574fdd0b9456e573a10",
+    "embedded/pixel_forest.c": "f2899efed80a5430393b6c9714e4ff0e69482bd8e9aea50fe51ac135b17c06b8",
+    "embedded/pixel_forest.h": "34efa88b71a950cd1fd0309a359675a0c5b9b416bfd7707656b142ffc11d95e4",
+    "udcp.py": "8e230bcaed09cca0baae63b7c062828ddf6db9a24358f3dd2b8d754db20ab59a",
+    "validate.py": "762e532e50ba71c10186ac7c250520fcb0f59d21eac42f0b82f3ff57e9828299"
+  }
+}
