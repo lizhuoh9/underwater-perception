@@ -85,6 +85,25 @@ static void finish(mvo_t *s, mvo_step_t *out, const float rotation_ab[9], const 
     ++s->steps;
 }
 
+/* The depth ratios of the points the previous step left in this frame pair's A, into mvo_values; returns their count.
+ * A point counts when it is an inlier of the pose (r, t) and this pair puts it in front of both cameras nearer than
+ * MVO_RATIO_DEPTH baselines (see mono_vo.h for why that limit is not MVO_MAX_DEPTH). */
+static int shared_ratios(const mvo_t *s, int n, const float r[9], const float t[3])
+{
+    int k, shared = 0;
+    for (k = 0; k < n; ++k) {
+        float p[3], q[3];
+        if (mvo_epipolar[k] && s->feature[k].has_point && s->feature[k].point[2] > 0.0f
+            && mvo_triangulate(r, t, mvo_ra[k], mvo_rb[k], p) && p[2] > 0.0f && p[2] < MVO_RATIO_DEPTH) {
+            mat3_vec(r, p, q);
+            if (q[2] + t[2] > 0.0f && q[2] + t[2] < MVO_RATIO_DEPTH) {
+                mvo_values[shared++] = s->feature[k].point[2] / p[2];
+            }
+        }
+    }
+    return shared;
+}
+
 float mvo_step_length(mvo_t *s, float *ratios, int count)
 {
     float recent[MVO_SPEED_STEPS], speed = 1.0f, length;
@@ -126,14 +145,7 @@ float mvo_step_length(mvo_t *s, float *ratios, int count)
 int mvo_carry_depths(mvo_t *s, int n, const float r[9], const float t[3])
 {
     float recent[MVO_SPEED_STEPS], speed, length;
-    int k, shared = 0;
-    for (k = 0; k < n; ++k) { /* depth ratios against the points the previous step left in this frame pair's A */
-        float p[3];
-        if (mvo_best[k] && s->feature[k].has_point && s->feature[k].point[2] > 0.0f
-            && mvo_triangulate(r, t, mvo_ra[k], mvo_rb[k], p) && p[2] > 0.0f) {
-            mvo_values[shared++] = s->feature[k].point[2] / p[2];
-        }
-    }
+    int k, shared = shared_ratios(s, n, r, t);
     if (shared < MVO_MIN_SCALE_POINTS) {
         return 0;
     }
@@ -262,13 +274,7 @@ void mvo_step(mvo_t *s, mvo_step_t *out)
     {
         float length, rt[9];
         int kept = 0;
-        for (k = 0; k < n; ++k) { /* depth ratios against the points the previous step left in this frame pair's A */
-            float p[3];
-            if (mvo_best[k] && s->feature[k].has_point && s->feature[k].point[2] > 0.0f
-                && mvo_triangulate(r, t, mvo_ra[k], mvo_rb[k], p) && p[2] > 0.0f) {
-                mvo_values[shared++] = s->feature[k].point[2] / p[2];
-            }
-        }
+        shared = shared_ratios(s, n, r, t);
         length = mvo_step_length(s, mvo_values, shared);
         /* Every epipolar inlier stays tracked, far ones too: dropping the points beyond MVO_MAX_DEPTH baselines threw
          * away most features on short steps and broke the chain of depths that carries the scale. Only those in front

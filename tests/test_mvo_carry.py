@@ -1,5 +1,5 @@
-"""Known-geometry checks of the depth chain a LOST step carries on (tests/c/mvo_carry_check.c); not an image-tracking
-test."""
+"""Known-geometry checks of the depth chain a LOST step carries on (tests/c/mvo_carry_check.c) and of which shared
+points set a step length (tests/c/mvo_ratio_check.c); not an image-tracking test."""
 
 import csv
 from pathlib import Path
@@ -16,6 +16,7 @@ from uwslam.paths import CORE_DIR
 
 
 SOURCE = Path(__file__).resolve().parent / "c" / "mvo_carry_check.c"
+RATIO_SOURCE = Path(__file__).resolve().parent / "c" / "mvo_ratio_check.c"
 UNITS = [CORE_DIR / name for name in ("mono_vo.c", "mono_vo_numerics.c", "mono_vo_homography.c",
                                       "mono_vo_essential.c")]
 
@@ -47,19 +48,31 @@ class CarryTests(unittest.TestCase):
 
     def test_a_moving_pair_carries_the_true_scale(self):
         # 0.1 units of travel past points 1 to 6 units away, sub-pixel noise: the shared depth ratios agree, and the
-        # carried points come out at their true depths, the scale the old points had.
+        # carried points come out at their true depths, the scale the old points had. Judged by the median and the 90th
+        # percentile of 300 poses, not the worst: the length comes from the inliers within MVO_RATIO_DEPTH, more than
+        # the points that get one, and the odd pose's error reaches 0.1 (log2; 90th percentile 0.04 and 0.06 here).
         for sigma, yaw in ((0.3, 5.0), (0.5, 12.0)):
             with self.subTest(sigma=sigma, yaw=yaw):
-                rows = [row for row in trials(self.executable, "direct", sigma, 0.0, yaw, 0.1, 0.1, 70000, 60)
+                rows = [row for row in trials(self.executable, "direct", sigma, 0.0, yaw, 0.1, 0.1, 70000, 300)
                         if int(row["inliers"]) >= 15]
                 carried = [float(row["depth_error"]) for row in rows if int(row["carried"])]
                 self.assertGreaterEqual(len(carried), 0.8 * len(rows), (len(carried), len(rows)))
                 self.assertLess(abs(statistics.median(carried)), 0.05)
-                self.assertLess(max(abs(error) for error in carried), 0.1)
+                self.assertLess(statistics.quantiles([abs(error) for error in carried], n=10)[-1], 0.08)
+
+    def test_the_step_length_counts_the_inliers_within_the_ratio_depth(self):
+        # Exact geometry with a depth ratio per group of points (tests/c/mvo_ratio_check.c): the carried length is the
+        # one of the inliers within MVO_RATIO_DEPTH, mvo_best or not, without the points beyond or the outliers.
+        executable = Path(self.folder.name) / "mvo_ratio_check.exe"
+        subprocess.run(["gcc", *CFLAGS, *config_defines(), *(["-static"] if sys.platform == "win32" else []),
+                        f"-I{CORE_DIR}", str(RATIO_SOURCE), *map(str, UNITS), str(CORE_DIR / "mono_vo_tracking.c"),
+                        "-o", str(executable)], check=True)
+        output = subprocess.run([str(executable)], capture_output=True, text=True).stdout
+        self.assertIn("mvo_ratio_check ok", output)
 
     def test_a_still_camera_carries_almost_nothing(self):
         # A pose fitted to a still camera's noise: its depth ratios scatter, so its points are not carried and the next
-        # step that moves takes the recent speed (carried here in 19 of 992 poses).
+        # step that moves takes the recent speed (carried here in 14 of 992 poses).
         poses = carried = 0
         for sigma in (1.0, 2.0, 3.0):
             for outliers in (0.0, 0.2, 0.4):

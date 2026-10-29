@@ -1,6 +1,6 @@
 {
   "task": "C monocular visual odometry (pairwise method) on the lake clip's 320x240 robot frames, scored against the reference poses and set beside the OpenCV prototype",
-  "core_sha256": "b7b36567dd5de3e9171494186afdc8406cf6dc4e5a5c7b5b9eb0447bfa68390b",
+  "core_sha256": "cd7a2e21e3b1657789bf0159e657c8b2a48c8c515f418c5d6794501dee9d9a48",
   "config": "p4",
   "max_features": 300,
   "state_bytes": 9824,
@@ -27,21 +27,21 @@
           "rotation": 10
         },
         "median_tracks": 190.0,
-        "ate_rmse": 0.3931833639696728,
-        "ate_max": 1.215843228078767,
-        "final_error": 0.5373000884234178,
+        "ate_rmse": 0.35681694264595676,
+        "ate_max": 0.8716578641672382,
+        "final_error": 0.6917144701972788,
         "path_length_reference": 8.932997424309496,
-        "alignment_scale": 0.014085802630850389,
+        "alignment_scale": 0.023634728485518536,
         "pair_rotation_median_deg": 1.1255155086346078,
         "pair_rotation_p90_deg": 2.5923384991138847,
         "zero_rotation_median_deg": 0.9340647366841479,
-        "direction_median_deg": 13.97804773250441,
+        "direction_median_deg": 13.978048219830555,
         "direction_pairs": 196,
         "heading_rmse_deg": 33.00815396580514,
         "heading_max_deg": 58.6361621019836,
-        "scale_drift_window_ratio_min": 0.21994276939860155,
-        "scale_drift_window_ratio_max": 1.5833676602017301,
-        "ms_per_frame": 13.415527514859857
+        "scale_drift_window_ratio_min": 0.1553056552510553,
+        "scale_drift_window_ratio_max": 1.430087533751375,
+        "ms_per_frame": 13.611321301700977
       },
       "c_over_seeds": {
         "seeds": [
@@ -63,9 +63,9 @@
           15
         ],
         "ate_rmse": {
-          "median": 0.3935203999644399,
-          "min": 0.35855715365364627,
-          "max": 0.4340667206888695
+          "median": 0.3273896064178117,
+          "min": 0.25684862021468474,
+          "max": 0.3659883430182445
         },
         "heading_rmse_deg": {
           "median": 39.479914759438564,
@@ -73,9 +73,9 @@
           "max": 45.58307921057324
         },
         "scale_spread": {
-          "median": 8.265353163185997,
-          "min": 4.011760820765265,
-          "max": 16.488974396136555
+          "median": 5.291566149636229,
+          "min": 2.3580656692657693,
+          "max": 9.208212871833961
         },
         "lost": {
           "median": 2.0,
@@ -124,21 +124,21 @@
           "rotation": 5
         },
         "median_tracks": 150.0,
-        "ate_rmse": 0.18987458012818098,
-        "ate_max": 0.44031842085489925,
-        "final_error": 0.2220851853840987,
+        "ate_rmse": 0.17406301671351862,
+        "ate_max": 0.37724528112208294,
+        "final_error": 0.19218543682725703,
         "path_length_reference": 8.881177235471185,
-        "alignment_scale": 0.12041747934803733,
+        "alignment_scale": 0.1270951732248922,
         "pair_rotation_median_deg": 1.8866641760097917,
         "pair_rotation_p90_deg": 4.022001257118719,
         "zero_rotation_median_deg": 1.7379290340112632,
-        "direction_median_deg": 12.156946762160247,
+        "direction_median_deg": 12.156946838285942,
         "direction_pairs": 143,
         "heading_rmse_deg": 11.851744090763852,
         "heading_max_deg": 21.528414181348914,
-        "scale_drift_window_ratio_min": 0.7337395949871954,
-        "scale_drift_window_ratio_max": 1.3527014363666066,
-        "ms_per_frame": 17.849828994188172
+        "scale_drift_window_ratio_min": 0.7717230219922715,
+        "scale_drift_window_ratio_max": 1.3044800481380143,
+        "ms_per_frame": 16.709783432051847
       },
       "c_over_seeds": {
         "seeds": [
@@ -160,9 +160,9 @@
           15
         ],
         "ate_rmse": {
-          "median": 0.21352794085980115,
-          "min": 0.1483871693742926,
-          "max": 0.2748320653505884
+          "median": 0.18965664463060383,
+          "min": 0.156860054397688,
+          "max": 0.25661089779488766
         },
         "heading_rmse_deg": {
           "median": 19.44425092592406,
@@ -170,9 +170,9 @@
           "max": 25.899355807450217
         },
         "scale_spread": {
-          "median": 2.0018657253170318,
-          "min": 1.442755418274666,
-          "max": 2.93778912570771
+          "median": 1.8452859115290163,
+          "min": 1.4402914156219344,
+          "max": 2.6058004138423496
         },
         "lost": {
           "median": 13.0,
@@ -221,21 +221,21 @@
           "rotation": 1
         },
         "median_tracks": 96.0,
-        "ate_rmse": 0.36069581237807097,
-        "ate_max": 1.1557381878515411,
-        "final_error": 0.45909812357219476,
+        "ate_rmse": 0.3559548764108431,
+        "ate_max": 1.1346238656544634,
+        "final_error": 0.4554808243788279,
         "path_length_reference": 8.755011057619953,
-        "alignment_scale": 0.08033267621743351,
+        "alignment_scale": 0.08307090545154745,
         "pair_rotation_median_deg": 2.8887853156649115,
         "pair_rotation_p90_deg": 14.012948623609097,
         "zero_rotation_median_deg": 2.426079879772317,
-        "direction_median_deg": 9.940580055754484,
+        "direction_median_deg": 9.940579603981408,
         "direction_pairs": 82,
         "heading_rmse_deg": 26.222108847282612,
         "heading_max_deg": 51.43812607573178,
-        "scale_drift_window_ratio_min": 0.3058876620093064,
-        "scale_drift_window_ratio_max": 1.4663450358725338,
-        "ms_per_frame": 13.228537624305353
+        "scale_drift_window_ratio_min": 0.31546011314587097,
+        "scale_drift_window_ratio_max": 1.4551407902757552,
+        "ms_per_frame": 18.94399306925917
       },
       "c_over_seeds": {
         "seeds": [
@@ -257,9 +257,9 @@
           15
         ],
         "ate_rmse": {
-          "median": 0.38378347221556397,
-          "min": 0.3446984106858721,
-          "max": 0.5566394131780591
+          "median": 0.38097049818389084,
+          "min": 0.34252303188642047,
+          "max": 0.5558948111503877
         },
         "heading_rmse_deg": {
           "median": 39.06262700699672,
@@ -267,9 +267,9 @@
           "max": 66.06361088438837
         },
         "scale_spread": {
-          "median": 4.244288471656443,
-          "min": 1.6164326487512348,
-          "max": 8.609342910736528
+          "median": 4.1390178505639055,
+          "min": 1.6155401825863926,
+          "max": 8.160980216014934
         },
         "lost": {
           "median": 17.0,
@@ -312,7 +312,7 @@
     "frames": 339,
     "steps": 338,
     "seed": 12345,
-    "core_sha256": "b7b36567dd5de3e9171494186afdc8406cf6dc4e5a5c7b5b9eb0447bfa68390b",
-    "header_sha256": "ddffb01256a7fa77e56465cd0143ab1d325dd128d0f4c461d4cd80cdc32318f6"
+    "core_sha256": "cd7a2e21e3b1657789bf0159e657c8b2a48c8c515f418c5d6794501dee9d9a48",
+    "header_sha256": "9ca8196d148f1629a87d87332b34a35f91688aa46fc1a044da12ce1c3c511f61"
   }
 }

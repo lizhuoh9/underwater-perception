@@ -27,7 +27,12 @@
  * tracked; those triangulated in front of both cameras within MVO_MAX_DEPTH baselines carry a point to the next step.
  * The step length comes from the median depth ratio of points the previous step also triangulated, kept within
  * MVO_SPEED_LIMIT times the recent speed (the median of the last MVO_SPEED_STEPS lengths): on a fast turn a few shared
- * points can give a median far off, and the chain of shared depths would carry that scale on. With fewer than
+ * points can give a median far off, and the chain of shared depths would carry that scale on. A shared point counts
+ * when it is the pose's inlier in front of both cameras nearer than MVO_RATIO_DEPTH baselines, not MVO_MAX_DEPTH: a
+ * ratio grows with the new pair's parallax, so cutting at the pair's own noisy depths dropped the points whose noise
+ * put them far and, on short steps, where many sit near that limit, biased the median. On the lake clip the path
+ * after one alignment came out 0.190 m off in the median of 16 seeds instead of 0.214 m at 5 Hz, and 0.327 instead of
+ * 0.394 m at 10 Hz; with no limit at all, points too noisy to help made 10 Hz worse. With fewer than
  * MVO_MIN_SCALE_POINTS shared points the length is the recent speed (1 for the first). A step with fewer than
  * MVO_MIN_INLIERS counts as lost and keeps the position; a lost step still takes a rotation supported by at least
  * MVO_MIN_TURN_INLIERS and half of the tracks. Where only the homography has that support and the essential pose had
@@ -105,6 +110,7 @@
 #define MVO_SPEED_LIMIT 3.0f /* a step length stays within this factor of the recent speed */
 #define MVO_CARRY_SPREAD 0.5f /* a lost step's shared depth ratios agree: interquartile range at most this x median */
 #define MVO_MAX_DEPTH 50.0f /* cheirality: points farther than this many baselines get no point (but stay tracked) */
+#define MVO_RATIO_DEPTH 60.0f /* shared points this pair puts farther than this many baselines give no depth ratio */
 #define MVO_UNDISTORT_STEPS 5 /* Newton steps inverting the lens model: within 1e-3 px of OpenCV's in the tests */
 #define MVO_TURN_GATE 0.0038053019f /* 1 - cos 5 degrees: a step either rotation turns less does not pull */
 #define MVO_TURN_FULL 0.0151922470f /* 1 - cos 10 degrees: where the pull is MVO_TURN_PULL */

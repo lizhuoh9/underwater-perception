@@ -65,6 +65,21 @@ class MvoStreamTests(unittest.TestCase):
             text = (results / "RESULTS.md").read_text(encoding="utf-8")
         self.assertIn("| `unknown` | 240 MHz | s3 | unknown |", text)
 
+    def test_board_section_notes_the_usb_serial_jtag_records(self):
+        with tempfile.TemporaryDirectory() as folder:
+            results = Path(folder)
+            (results / "board").mkdir()
+            (results / "board" / "p4_360mhz.json").write_text(json.dumps(record(2, [], False, False)), encoding="utf-8")
+            mvo_stream.write_board_section(results)
+            without = (results / "RESULTS.md").read_text(encoding="utf-8")
+            (results / "board" / "p4_360mhz_usj.json").write_text(json.dumps(record(2, [], False, False)),
+                                                                  encoding="utf-8")
+            mvo_stream.write_board_section(results)
+            text = (results / "RESULTS.md").read_text(encoding="utf-8")
+        self.assertNotIn("USB-Serial-JTAG port, not its USB-UART bridge", without)
+        self.assertEqual(text.count("Records named `*_usj*` were streamed over the ESP32-P4's own USB-Serial-JTAG port"),
+                         1)
+
     def test_board_section_preserves_other_sections_after_it(self):
         with tempfile.TemporaryDirectory() as folder:
             results = Path(folder)

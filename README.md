@@ -366,13 +366,16 @@ configurations:
 
 | Lake clip, 16 seeds | default | p4 |
 |---|---:|---:|
-| 5 Hz, 10 s windows (192 paired runs): position RMSE, median | 0.077 m | 0.066 m (lower in 67%) |
+| 5 Hz, 10 s windows (192 paired runs): position RMSE, median | 0.077 m | 0.064 m (lower in 67%) |
 | 5 Hz, 10 s windows: heading RMSE, median | 7.7° | 6.2° (lower in 64%) |
-| 5 Hz, full clip: position RMSE | 0.28 m [0.20–0.38] | 0.21 m [0.15–0.27] |
-| 5 Hz, full clip: scale spread | 2.2× | 2.0× |
-| 10 Hz, 10 s windows: position / heading RMSE, median | 0.092 m / 12.8° | 0.088 m / 14.2° |
-| 5 Hz voxel map: local / global median distance, obstacles held | 0.065 / 0.15 m, 704 | 0.065 / 0.072 m, 1016.5 |
+| 5 Hz, full clip: position RMSE | 0.28 m [0.20–0.38] | 0.19 m [0.16–0.26] |
+| 5 Hz, full clip: scale spread | 2.2× | 1.8× |
+| 10 Hz, 10 s windows: position / heading RMSE, median | 0.092 m / 12.8° | 0.076 m / 14.2° |
+| 5 Hz voxel map: local / global median distance, obstacles held | 0.065 / 0.15 m, 704 | 0.068 / 0.070 m, 1067.5 |
 | 5 Hz plan: steps with a known range straight ahead | 71% | 83% |
+
+The default column is the frozen s3 set, made before the step length's choice of points below (which both
+configurations now share).
 
 Each part was scored against the configuration before it. Of the ways tried, with the pinhole camera, to spend the
 P4's time on accuracy, more features helped, and only at 5 Hz: 300 instead of 250 brought the 10 s windows from 0.079 to
@@ -403,6 +406,36 @@ clip came out 0.34–0.38 m instead of 0.21. A sliding-window fit of the last
 five frames (their poses, positions or step lengths, with the points tracked through them), prototyped on the PC, let
 the scale collapse: at 5 Hz 49% of the tracks survive a step and about a third two, and over tracks that short the
 window's scale drifted more than the odometry's chain.
+
+The scale itself had a bias. The step length is the median ratio of each shared point's earlier depth to its depth in
+the new pair, and the points counted were those the new pair put within 50 baselines (`MVO_MAX_DEPTH`). A ratio grows
+with the new pair's parallax, so cutting at the pair's own noisy depths dropped the points whose noise put them far and,
+on short steps, where many sit near that limit, biased the median. Counting the points the new pair puts within 60
+baselines instead (`MVO_RATIO_DEPTH` in [core/mono_vo.h](core/mono_vo.h)), against the configuration before it (16
+seeds):
+
+| | before | now |
+|---|---:|---:|
+| 5 Hz, full clip: position RMSE / scale spread | 0.214 m [0.148–0.275] / 2.0× | 0.190 m [0.157–0.257] / 1.8× |
+| 10 Hz, full clip: position RMSE / scale spread | 0.394 m [0.359–0.434] / 8.3× | 0.327 m [0.257–0.366] / 5.3× |
+| 5 Hz, 10 s windows: position RMSE, median | 0.066 m | 0.064 m (lower in 66%) |
+| 10 Hz, 10 s windows: position RMSE, median | 0.088 m | 0.076 m (lower in 47%) |
+| 5 Hz voxel map: local / global median distance | 0.065 / 0.072 m | 0.068 / 0.070 m |
+| 10 Hz voxel map: local / global median distance | 0.057 / 0.055 m | 0.055 / 0.045 m |
+| 5 Hz plan: the chosen direction's known range within twice the reference's | 71% | 81% |
+
+The headings and the lost steps do not change. The plan row rests on few steps: the chosen direction had a known range
+in 12 of the 169 steps on the default seed (14 before). The limit of 60 was chosen from a scan of 50, 60, 75 and 100
+baselines and none on this one clip; it should be checked again on the robot's own footage. A wider limit gave the 5 Hz
+path more (0.173 m at 100 baselines) for a worse local map (0.076 m) and worse 10 Hz windows (0.105 m); with none, the
+points too noisy to help made 10 Hz worse. Also tried and dropped: tracking lost features again from their neighbours'
+displacement (fewer lost steps, 13 to 11, but the 5 Hz full clip came out 0.38 m: started from one guess, both
+directions of the forward-backward check agree on wrong tracks too), also with new corners kept 12 px from the border; a
+pull of each step length towards the last (0.24–0.37 m: the diver's speed changes, and the ratios carry it); the length
+that best reprojects the shared points (0.55 m) and a median weighted by the inverse of the earlier depth (0.24 m); and
+the window fit above at 10 Hz, where tracks live longer (1.0–1.3 m against 0.39, 4 seeds). The tracks are short mostly
+because new corners die: just detected, they survive a step in 29% of the cases; tracked through four steps or more, in
+80%.
 
 The extra features triangulate less well, so the map's points lie a little farther from the reference. With the
 pinhole camera, filing only points from rays at least 1.5° apart instead of 1°, as first tried, kept the local error at

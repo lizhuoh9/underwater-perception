@@ -646,13 +646,18 @@ def write_board_section(results: Path) -> None:
                "mean / median / max | Tracking | Motion | Detection | Map update | Voxel map / directions / plan "
                "(update) |",
                "|---|---:|---|---:|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---|",
-               *rows, "",
-               "Re-run (after `uwslam.mvo compare --board-frames` and `uwslam.mono_map --board-masks`):", "", "```bash",
-               "idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_240 -p <port> flash",
-               "idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_p4 -D SDKCONFIG=build_p4/sdkconfig "
-               "-D IDF_TARGET=esp32p4 -p <port> flash   # an ESP32-P4: the p4 configuration (UWSLAM_CONFIG=p4 on the PC)",
-               "python -m uwslam.mvo_stream --port <port> --frames <frames file> --masks <masks file> --label <name>",
-               "```", ""]
+               *rows, ""]
+    if any("_usj" in path.stem for path in sorted((results / "board").glob("*.json"))):
+        section += ["Records named `*_usj*` were streamed over the ESP32-P4's own USB-Serial-JTAG port, not its USB-UART "
+                    "bridge: the firmware was built as in the P4 line below with `CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y` "
+                    "added after `sdkconfig.defaults.esp32p4` (`-D \"SDKCONFIG_DEFAULTS=sdkconfig.defaults;<that file>\"`, "
+                    "in a build folder of its own), which changes only the console.", ""]
+    section += ["Re-run (after `uwslam.mvo compare --board-frames` and `uwslam.mono_map --board-masks`):", "", "```bash",
+                "idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_240 -p <port> flash",
+                "idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_p4 -D SDKCONFIG=build_p4/sdkconfig "
+                "-D IDF_TARGET=esp32p4 -p <port> flash   # an ESP32-P4: the p4 configuration (UWSLAM_CONFIG=p4 on the PC)",
+                "python -m uwslam.mvo_stream --port <port> --frames <frames file> --masks <masks file> --label <name>",
+                "```", ""]
     report = results / "RESULTS.md"
     text = report.read_text(encoding="utf-8") if report.exists() else ""
     heading = re.search(r"(?m)^## (?:ESP32-S3|ESP32 boards)[ \t]*$", text)
