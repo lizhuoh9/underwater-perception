@@ -1,4 +1,4 @@
-"""Streams 320x240 grayscale frames (and optional water masks) to firmware/esp32s3_mono_vo over its
+"""Streams 320x240 grayscale frames (and optional water masks) to firmware/mono_vo_stream over its
 USB-Serial-JTAG port and checks the board against the PC build of the same C code (core/mono_vo*.c, core/mono_map.c).
 Needs pyserial and no numpy, so it also runs in the ESP-IDF Python environment. With --expected-cloud it also checks
 the mask-independent 3D point cloud, verifies every exported float's bits and can save that cloud to a PLY file. With
@@ -23,7 +23,6 @@ beside the expected file, and the board's raw lines to board/<label>_serial.log.
 """
 
 import argparse
-from contextlib import ExitStack
 import hashlib
 import json
 import math
@@ -31,21 +30,32 @@ import re
 import statistics
 import struct
 import time
+from contextlib import ExitStack
 from pathlib import Path
 
-from uwslam.paths import LAKE_CLIP_RESULTS
+from uwslam.paths import CLIP_RESULTS
 
 FRAME_BYTES = 320 * 240
 MASK_RECORD = 1 + 60 * 80 // 8  # a flag byte, then the packed cells
 FNV_OFFSET, FNV_PRIME = 2166136261, 16777619
-RESULTS = LAKE_CLIP_RESULTS / "mono_vo_c"
+RESULTS = CLIP_RESULTS / "mono_vo_c"
 READY_TIMEOUT_S = 20.0
 REPLY_TIMEOUT_S = 30.0
 LINK_BAUD = 921_600  # a UART link's rate (the firmware's LINK_BAUD); a USB-Serial-JTAG port ignores it. A CH340
 # bridge's link at 2 Mbaud lost single bytes of the board's replies in two of three lake runs.
 CONFIG_FEATURES = {"s3": 250, "p4": 300}  # uwslam.mvo.CONFIGS: MVO_MAX_FEATURES of each build configuration
-STEP_FIELDS = ("index", "kind", "tracks", "inliers", "scale_points", "hash", "detect_us", "track_us",
-               "motion_us", "total_us")  # every step line carries these
+STEP_FIELDS = (
+    "index",
+    "kind",
+    "tracks",
+    "inliers",
+    "scale_points",
+    "hash",
+    "detect_us",
+    "track_us",
+    "motion_us",
+    "total_us",
+)  # every step line carries these
 SELFTEST_CASES, SELFTEST_SEED = 2000, 12345
 SELFTEST_TIMEOUT_S = 120.0
 SOURCES = ("core_sha256", "header_sha256")
@@ -100,10 +110,14 @@ def validate_expected_map(expected_map: dict, expected: dict) -> None:
         raise ValueError("The map run and the odometry run disagree on the steps: re-run both on the same sources")
     steps = expected.get("step_hashes")
     continuity = expected_map.get("map_continuity")
-    if (not isinstance(steps, list) or len(steps) != expected.get("frames", 0) - 1
-            or not isinstance(continuity, list) or len(continuity) != len(steps)
-            or any(type(value) is not int or value not in (0, 1) for value in continuity)
-            or any(a < b for a, b in zip(continuity, continuity[1:]))):
+    if (
+        not isinstance(steps, list)
+        or len(steps) != expected.get("frames", 0) - 1
+        or not isinstance(continuity, list)
+        or len(continuity) != len(steps)
+        or any(type(value) is not int or value not in (0, 1) for value in continuity)
+        or any(a < b for a, b in zip(continuity, continuity[1:]))
+    ):
         raise ValueError("The map expectation needs one non-recovering 0/1 map_continuity value per step")
     final = expected_map.get("map_continuous")
     if type(final) is not int or final not in (0, 1) or final != (continuity[-1] if continuity else 1):
@@ -120,8 +134,11 @@ def expectation_config(expected: dict) -> str:
     """The build configuration an expectation was made with: "s3" (the default) or "p4" (uwslam.mvo.CONFIGS);
     expectations from before configurations existed are "s3"."""
     config = expected.get("config", "s3")
-    if (not isinstance(config, str) or config not in CONFIG_FEATURES
-            or expected.get("max_features", CONFIG_FEATURES[config]) != CONFIG_FEATURES[config]):
+    if (
+        not isinstance(config, str)
+        or config not in CONFIG_FEATURES
+        or expected.get("max_features", CONFIG_FEATURES[config]) != CONFIG_FEATURES[config]
+    ):
         raise ValueError(f"Unknown build configuration {config!r} with {expected.get('max_features')} features")
     return config
 
@@ -146,13 +163,19 @@ def check_same_config(name: str, auxiliary: dict, expected: dict) -> None:
     """Refuse a map, cloud, voxel or plan expectation made in another build configuration than the odometry's (the
     obstacle directions come from the masks alone and are the same in both)."""
     if expectation_config(auxiliary) != expectation_config(expected):
-        raise ValueError(f"The {name} expectation was made in the {expectation_config(auxiliary)!r} build "
-                         f"configuration, the odometry's in {expectation_config(expected)!r}")
+        raise ValueError(
+            f"The {name} expectation was made in the {expectation_config(auxiliary)!r} build "
+            f"configuration, the odometry's in {expectation_config(expected)!r}"
+        )
 
 
 def validate_expected_cloud(cloud: dict, expected: dict) -> None:
     """Check the complete PC cloud run before opening a serial port."""
-    if not isinstance(cloud, dict) or type(cloud.get("cloud_policy")) is not int or cloud["cloud_policy"] != CLOUD_POLICY:
+    if (
+        not isinstance(cloud, dict)
+        or type(cloud.get("cloud_policy")) is not int
+        or cloud["cloud_policy"] != CLOUD_POLICY
+    ):
         raise ValueError("The cloud expectation needs cloud_policy=1")
     for key in (*CLOUD_SOURCES, "source_sha256", "frames_sha256"):
         value = cloud.get(key)
@@ -161,31 +184,55 @@ def validate_expected_cloud(cloud: dict, expected: dict) -> None:
         if not is_sha256(value):
             raise ValueError(f"Invalid {key} in cloud expectation")
     steps, progress = expected.get("step_hashes"), cloud.get("cloud_progress")
-    if (type(expected.get("frames")) is not int or expected["frames"] < 1
-            or type(cloud.get("frames")) is not int or cloud["frames"] != expected["frames"]
-            or cloud.get("step_hashes") != steps
-            or not isinstance(steps, list) or len(steps) != expected["frames"] - 1
-            or not isinstance(progress, list) or len(progress) != len(steps)):
+    if (
+        type(expected.get("frames")) is not int
+        or expected["frames"] < 1
+        or type(cloud.get("frames")) is not int
+        or cloud["frames"] != expected["frames"]
+        or cloud.get("step_hashes") != steps
+        or not isinstance(steps, list)
+        or len(steps) != expected["frames"] - 1
+        or not isinstance(progress, list)
+        or len(progress) != len(steps)
+    ):
         raise ValueError("The cloud expectation and VO run must cover the same frames and steps")
     frame_hashes = cloud.get("frame_sha256")
-    if not isinstance(frame_hashes, list) or len(frame_hashes) != expected["frames"] or not all(map(is_sha256, frame_hashes)):
+    if (
+        not isinstance(frame_hashes, list)
+        or len(frame_hashes) != expected["frames"]
+        or not all(map(is_sha256, frame_hashes))
+    ):
         raise ValueError("The cloud expectation needs one SHA-256 per streamed frame")
     previous = {"count": 0, "dropped": 0, "continuous": 1}
     for item in progress:
-        if not isinstance(item, dict) or any(type(item.get(key)) is not int for key in ("count", "accepted", "dropped", "continuous")):
+        if not isinstance(item, dict) or any(
+            type(item.get(key)) is not int for key in ("count", "accepted", "dropped", "continuous")
+        ):
             raise ValueError("Invalid cloud progress")
-        if (not previous["count"] <= item["count"] <= CLOUD_CAPACITY or not 0 <= item["accepted"] <= max_features(expected)
-                or not previous["dropped"] <= item["dropped"] <= 0xffffffff
-                or item["continuous"] not in (0, 1) or item["continuous"] > previous["continuous"]
-                or item["count"] - previous["count"] > item["accepted"]
-                or (not item["continuous"] and (item["accepted"] != 0 or item["count"] != previous["count"]
-                                                or item["dropped"] != previous["dropped"]))):
+        if (
+            not previous["count"] <= item["count"] <= CLOUD_CAPACITY
+            or not 0 <= item["accepted"] <= max_features(expected)
+            or not previous["dropped"] <= item["dropped"] <= 0xFFFFFFFF
+            or item["continuous"] not in (0, 1)
+            or item["continuous"] > previous["continuous"]
+            or item["count"] - previous["count"] > item["accepted"]
+            or (
+                not item["continuous"]
+                and (
+                    item["accepted"] != 0
+                    or item["count"] != previous["count"]
+                    or item["dropped"] != previous["dropped"]
+                )
+            )
+        ):
             raise ValueError("Inconsistent cloud progress")
         previous = item
-    if any(type(cloud.get("cloud_" + key)) is not int or cloud["cloud_" + key] != previous[key]
-           for key in ("count", "dropped", "continuous")):
+    if any(
+        type(cloud.get("cloud_" + key)) is not int or cloud["cloud_" + key] != previous[key]
+        for key in ("count", "dropped", "continuous")
+    ):
         raise ValueError("Final cloud state does not match its progress")
-    if type(cloud.get("cloud_hash")) is not int or not 0 <= cloud["cloud_hash"] <= 0xffffffff:
+    if type(cloud.get("cloud_hash")) is not int or not 0 <= cloud["cloud_hash"] <= 0xFFFFFFFF:
         raise ValueError("Invalid cloud hash")
 
 
@@ -194,11 +241,19 @@ def validate_expected_voxels(voxels: dict, expected: dict) -> None:
     if not isinstance(voxels, dict) or voxels.get("step_hashes") != expected.get("step_hashes"):
         raise ValueError("The voxel run and the odometry run disagree on the steps: re-run both on the same sources")
     progress = voxels.get("voxel_progress")
-    if (voxels.get("frames") != expected.get("frames") or not isinstance(progress, list)
-            or len(progress) != len(expected["step_hashes"])
-            or any(not isinstance(item, dict) or type(item.get("count")) is not int or type(item.get("filed")) is not int
-                   or not 0 <= item["count"] <= voxel_capacity(expected) or not 0 <= item["filed"] <= max_features(expected)
-                   for item in progress)):
+    if (
+        voxels.get("frames") != expected.get("frames")
+        or not isinstance(progress, list)
+        or len(progress) != len(expected["step_hashes"])
+        or any(
+            not isinstance(item, dict)
+            or type(item.get("count")) is not int
+            or type(item.get("filed")) is not int
+            or not 0 <= item["count"] <= voxel_capacity(expected)
+            or not 0 <= item["filed"] <= max_features(expected)
+            for item in progress
+        )
+    ):
         raise ValueError("The voxel expectation needs one voxel count and filed number per step")
     if type(voxels.get("voxel_hash")) is not int or not all(is_sha256(voxels.get(key)) for key in VOXEL_SOURCES):
         raise ValueError("The voxel expectation needs the map's hash and its sources' SHA-256")
@@ -210,13 +265,18 @@ def validate_expected_dirs(dirs: dict, expected: dict) -> None:
     if not isinstance(dirs, dict) or dirs.get("frames") != frames:
         raise ValueError("The direction expectation must cover the odometry run's frames")
     lists = [dirs.get(key) for key in ("choices", "blocked_bits", "with_mask")]
-    if (any(not isinstance(values, list) or len(values) != frames for values in lists)
-            or any(type(c) is not int or not -1 <= c < DIRECTIONS for c in dirs["choices"])
-            or any(type(b) is not int or not 0 <= b < 1 << DIRECTIONS for b in dirs["blocked_bits"])
-            or any(type(m) is not bool for m in dirs["with_mask"])
-            or type(dirs.get("dir_hash")) is not int or not all(is_sha256(dirs.get(key)) for key in DIR_SOURCES)):
-        raise ValueError("The direction expectation needs one choice, blocked set and mask flag per frame, the state's "
-                         "hash and its sources' SHA-256")
+    if (
+        any(not isinstance(values, list) or len(values) != frames for values in lists)
+        or any(type(c) is not int or not -1 <= c < DIRECTIONS for c in dirs["choices"])
+        or any(type(b) is not int or not 0 <= b < 1 << DIRECTIONS for b in dirs["blocked_bits"])
+        or any(type(m) is not bool for m in dirs["with_mask"])
+        or type(dirs.get("dir_hash")) is not int
+        or not all(is_sha256(dirs.get(key)) for key in DIR_SOURCES)
+    ):
+        raise ValueError(
+            "The direction expectation needs one choice, blocked set and mask flag per frame, the state's "
+            "hash and its sources' SHA-256"
+        )
 
 
 def validate_expected_plan(plan: dict, expected: dict) -> None:
@@ -225,11 +285,18 @@ def validate_expected_plan(plan: dict, expected: dict) -> None:
         raise ValueError("The plan run and the odometry run disagree on the steps: re-run both on the same sources")
     steps = len(expected["step_hashes"])
     lists = [plan.get(key) for key in ("actions", "directions", "turns", "plan_hashes")]
-    if (any(not isinstance(values, list) or len(values) != steps
-            or any(type(v) is not int for v in values) for values in lists)
-            or type(plan.get("plan_hash")) is not int or not all(is_sha256(plan.get(key)) for key in PLAN_SOURCES)):
-        raise ValueError("The plan expectation needs one action, direction, turn and hash per step, the final hash and "
-                         "its sources' SHA-256")
+    if (
+        any(
+            not isinstance(values, list) or len(values) != steps or any(type(v) is not int for v in values)
+            for values in lists
+        )
+        or type(plan.get("plan_hash")) is not int
+        or not all(is_sha256(plan.get(key)) for key in PLAN_SOURCES)
+    ):
+        raise ValueError(
+            "The plan expectation needs one action, direction, turn and hash per step, the final hash and "
+            "its sources' SHA-256"
+        )
 
 
 def check_dirs(reply: dict, dirs: dict, index: int, mismatches: list[int]) -> None:
@@ -245,15 +312,23 @@ def read_cloud(board, end: dict) -> dict:
     for key in ("count", "dropped", "continuous", "hash"):
         if type(header.get(key)) is not int or header[key] != end.get("cloud_" + key):
             raise RuntimeError(f"Cloud export disagrees with end: {key}")
-    if (not 0 <= header["count"] <= CLOUD_CAPACITY or header["continuous"] not in (0, 1)
-            or not 0 <= header["dropped"] <= 0xffffffff or not 0 <= header["hash"] <= 0xffffffff):
+    if (
+        not 0 <= header["count"] <= CLOUD_CAPACITY
+        or header["continuous"] not in (0, 1)
+        or not 0 <= header["dropped"] <= 0xFFFFFFFF
+        or not 0 <= header["hash"] <= 0xFFFFFFFF
+    ):
         raise RuntimeError("Invalid cloud export size or continuity")
     raw, points, ids = bytearray(CLOUD_BYTES), [], set()
     for index in range(header["count"]):
         item = fields(board.reply(("point ",), REPLY_TIMEOUT_S))
         names = ("x_bits", "y_bits", "z_bits", "id", "spread_bits", "observations")
-        if (item.get("index") != index or any(type(item.get(key)) is not int or not 0 <= item[key] <= 0xffffffff for key in names)
-                or item["id"] in ids or item["observations"] == 0):
+        if (
+            item.get("index") != index
+            or any(type(item.get(key)) is not int or not 0 <= item[key] <= 0xFFFFFFFF for key in names)
+            or item["id"] in ids
+            or item["observations"] == 0
+        ):
             raise RuntimeError(f"Invalid cloud point {index}")
         bits = [item[key] for key in names]
         struct.pack_into("<6I", raw, index * CLOUD_POINT_BYTES, *bits)
@@ -266,8 +341,9 @@ def read_cloud(board, end: dict) -> dict:
     footer = fields(board.reply(("cloud_end ",), REPLY_TIMEOUT_S))
     if footer.get("count") != header["count"]:
         raise RuntimeError("Cloud export ended with a different count")
-    struct.pack_into("<IIi", raw, CLOUD_CAPACITY * CLOUD_POINT_BYTES,
-                     header["count"], header["dropped"], header["continuous"])
+    struct.pack_into(
+        "<IIi", raw, CLOUD_CAPACITY * CLOUD_POINT_BYTES, header["count"], header["dropped"], header["continuous"]
+    )
     if fnv(raw) != header["hash"]:
         raise RuntimeError("Cloud export does not match the board's map hash")
     return {**header, "points": points}
@@ -281,7 +357,9 @@ def write_cloud_ply(path: Path, cloud: dict) -> None:
         out.write("comment Sparse rolling monocular cloud; arbitrary odometry units, not free space\n")
         out.write("comment First camera axes: x right, y down, z forward\n")
         out.write(f"comment continuous {cloud['continuous']} evicted {cloud['dropped']} cloud_hash {cloud['hash']}\n")
-        verdict = "matched" if cloud["match"] is True else "not_compared_partial" if cloud["match"] is None else "different"
+        verdict = (
+            "matched" if cloud["match"] is True else "not_compared_partial" if cloud["match"] is None else "different"
+        )
         out.write(f"comment pc_match {verdict}\n")
         for name in ("cloud_sha256", "cloud_header_sha256", "source_sha256"):
             if cloud.get(name) is not None:
@@ -301,6 +379,7 @@ class Board:
 
     def __init__(self, port_name: str, baud: int = LINK_BAUD):
         import serial
+
         self.port = serial.Serial()
         self.port.port, self.port.baudrate, self.port.timeout = port_name, baud, 0.5
         self.port.dtr = False  # opening must not reset the chip
@@ -332,15 +411,29 @@ class Board:
 
 def summarise(values: list[float]) -> dict:
     ordered = sorted(values)
-    return {"mean": statistics.fmean(ordered), "median": statistics.median(ordered),
-            "p90": ordered[int(0.9 * (len(ordered) - 1))], "max": ordered[-1]}
+    return {
+        "mean": statistics.fmean(ordered),
+        "median": statistics.median(ordered),
+        "p90": ordered[int(0.9 * (len(ordered) - 1))],
+        "max": ordered[-1],
+    }
 
 
-def stream(port_name: str, frames_path: Path, expected_path: Path, limit: int | None = None, cores: int = 2,
-           masks_path: Path | None = None, expected_map_path: Path | None = None,
-           simd: bool = True, expected_cloud_path: Path | None = None, expected_voxels_path: Path | None = None,
-           expected_dirs_path: Path | None = None, expected_plan_path: Path | None = None,
-           baud: int = LINK_BAUD) -> tuple[dict, list[str]]:
+def stream(
+    port_name: str,
+    frames_path: Path,
+    expected_path: Path,
+    limit: int | None = None,
+    cores: int = 2,
+    masks_path: Path | None = None,
+    expected_map_path: Path | None = None,
+    simd: bool = True,
+    expected_cloud_path: Path | None = None,
+    expected_voxels_path: Path | None = None,
+    expected_dirs_path: Path | None = None,
+    expected_plan_path: Path | None = None,
+    baud: int = LINK_BAUD,
+) -> tuple[dict, list[str]]:
     """Runs the frames (the first `limit` of them, when given) through the board on `cores` cores, tracking with the
     vector kernels or (simd False) the portable ones and, with masks, building the map; the record and the board's
     lines."""
@@ -352,7 +445,9 @@ def stream(port_name: str, frames_path: Path, expected_path: Path, limit: int | 
     if expected_map is not None:
         check_same_config("map", expected_map, expected)
         validate_expected_map(expected_map, expected)
-    expected_cloud = json.loads(expected_cloud_path.read_text(encoding="utf-8")) if expected_cloud_path is not None else None
+    expected_cloud = (
+        json.loads(expected_cloud_path.read_text(encoding="utf-8")) if expected_cloud_path is not None else None
+    )
     if expected_cloud is not None:
         check_same_config("cloud", expected_cloud, expected)
         validate_expected_cloud(expected_cloud, expected)
@@ -384,13 +479,15 @@ def stream(port_name: str, frames_path: Path, expected_path: Path, limit: int | 
         raise ValueError("The frame file SHA-256 differs from the PC cloud run")
     count = (total + every - 1) // every
     if count != expected["frames"]:
-        raise ValueError(f"{frames_path.name} gives {count} frames at this rate; the expected run has {expected['frames']}")
+        raise ValueError(
+            f"{frames_path.name} gives {count} frames at this rate; the expected run has {expected['frames']}"
+        )
     if count < 1:
         raise ValueError("The run must contain at least one frame")
     full_run = limit is None or limit >= count
     count = min(count, limit) if limit is not None else count
-    wanted = expected["step_hashes"][:count - 1]
-    wanted_continuity = expected_map["map_continuity"][:count - 1] if expected_map is not None else []
+    wanted = expected["step_hashes"][: count - 1]
+    wanted_continuity = expected_map["map_continuity"][: count - 1] if expected_map is not None else []
     wanted_final = wanted_continuity[-1] if wanted_continuity else 1
     resources = ExitStack()
     try:
@@ -402,15 +499,21 @@ def stream(port_name: str, frames_path: Path, expected_path: Path, limit: int | 
         if expected_map is not None and (type(ready.get("map_policy")) is not int or ready["map_policy"] != MAP_POLICY):
             raise RuntimeError("The board needs map_policy=1: rebuild and flash the current firmware")
         if expected_cloud is not None:
-            if (type(ready.get("cloud_policy")) is not int or ready["cloud_policy"] != CLOUD_POLICY
-                    or ready.get("cloud_capacity") != CLOUD_CAPACITY or ready.get("cloud_bytes") != CLOUD_BYTES):
+            if (
+                type(ready.get("cloud_policy")) is not int
+                or ready["cloud_policy"] != CLOUD_POLICY
+                or ready.get("cloud_capacity") != CLOUD_CAPACITY
+                or ready.get("cloud_bytes") != CLOUD_BYTES
+            ):
                 raise RuntimeError("The board needs the current cloud policy and memory layout")
             for key in CLOUD_SOURCES:
                 if key not in expected_cloud or ready.get(key) != expected_cloud[key]:
                     raise RuntimeError(f"The board's {key} differs from the PC run's")
-        for key, source in ([(key, expected_voxels) for key in VOXEL_SOURCES] if expected_voxels is not None else []) + \
-                ([(key, expected_dirs) for key in DIR_SOURCES] if expected_dirs is not None else []) + \
-                ([(key, expected_plan) for key in PLAN_SOURCES] if expected_plan is not None else []):
+        for key, source in (
+            ([(key, expected_voxels) for key in VOXEL_SOURCES] if expected_voxels is not None else [])
+            + ([(key, expected_dirs) for key in DIR_SOURCES] if expected_dirs is not None else [])
+            + ([(key, expected_plan) for key in PLAN_SOURCES] if expected_plan is not None else [])
+        ):
             if ready.get(key) != source[key]:
                 raise RuntimeError(f"The board's {key} differs from the PC run's: rebuild and flash the firmware")
         if expected_voxels is not None and ready.get("voxel_bytes") != voxel_bytes(expected):
@@ -418,17 +521,28 @@ def stream(port_name: str, frames_path: Path, expected_path: Path, limit: int | 
         for key in SOURCES + (MAP_SOURCES if expected_map is not None else ()):
             source = expected_map if expected_map is not None else expected
             if key not in ready or key not in source or ready[key] != source[key]:
-                raise RuntimeError(f"The board's {key} differs from the PC run's: rebuild and flash the firmware, or "
-                                   "re-run the PC side on the current sources")
+                raise RuntimeError(
+                    f"The board's {key} differs from the PC run's: rebuild and flash the firmware, or "
+                    "re-run the PC side on the current sources"
+                )
         if ready.get("config") != expectation_config(expected) or ready.get("max_features") != max_features(expected):
-            raise RuntimeError(f"The board runs the {ready.get('config')!r} build configuration with "
-                               f"{ready.get('max_features')} features, the PC run {expectation_config(expected)!r}: flash the "
-                               "matching firmware, or re-run the PC side with UWSLAM_CONFIG set to the board's")
+            raise RuntimeError(
+                f"The board runs the {ready.get('config')!r} build configuration with "
+                f"{ready.get('max_features')} features, the PC run {expectation_config(expected)!r}: flash the "
+                "matching firmware, or re-run the PC side with UWSLAM_CONFIG set to the board's"
+            )
         camera = expected["camera_bits"]  # fx fy cx cy, then the lens's k1 k2 p1 p2 k3 (none: a pinhole)
-        if len(camera) not in (4, 9) or not all(type(bits) is int and 0 <= bits <= 0xffffffff for bits in camera):
+        if len(camera) not in (4, 9) or not all(type(bits) is int and 0 <= bits <= 0xFFFFFFFF for bits in camera):
             raise RuntimeError("The expectation's camera_bits must be 4 or 9 float bit patterns")
-        board.send(("start " + " ".join(str(bits) for bits in camera[:4]) + f" {expected['seed']} {cores} {int(simd)}"
-                    + "".join(f" {bits}" for bits in camera[4:]) + "\n").encode())
+        board.send(
+            (
+                "start "
+                + " ".join(str(bits) for bits in camera[:4])
+                + f" {expected['seed']} {cores} {int(simd)}"
+                + "".join(f" {bits}" for bits in camera[4:])
+                + "\n"
+            ).encode()
+        )
         started = fields(board.reply(("started",), REPLY_TIMEOUT_S))
         board.send(f"selftest {SELFTEST_CASES} {SELFTEST_SEED}\n".encode())
         selftest = fields(board.reply(("selftest",), SELFTEST_TIMEOUT_S))
@@ -436,8 +550,13 @@ def stream(port_name: str, frames_path: Path, expected_path: Path, limit: int | 
             raise RuntimeError(f"The board's vector kernels differ from the portable ones: {selftest}")
         steps, first, continuous_from_kind = [], None, 1
         voxel_mismatches, dir_mismatches, plan_mismatches = [], [], []
-        checked = expected_map is not None or expected_cloud is not None or expected_voxels is not None \
-            or expected_dirs is not None or expected_plan is not None
+        checked = (
+            expected_map is not None
+            or expected_cloud is not None
+            or expected_voxels is not None
+            or expected_dirs is not None
+            or expected_plan is not None
+        )
         began = time.monotonic()
         for index in range(count):
             frame_stream.seek(index * every * FRAME_BYTES)
@@ -453,8 +572,10 @@ def stream(port_name: str, frames_path: Path, expected_path: Path, limit: int | 
                 if len(record) != MASK_RECORD:
                     raise RuntimeError(f"Mask {index} became incomplete during replay")
             if expected_dirs is not None and bool(record and record[0]) != expected_dirs["with_mask"][index]:
-                raise RuntimeError(f"Mask {index} is {'present' if record and record[0] else 'absent'}, unlike in the "
-                                   "direction expectation")
+                raise RuntimeError(
+                    f"Mask {index} is {'present' if record and record[0] else 'absent'}, unlike in the "
+                    "direction expectation"
+                )
             if record and record[0]:
                 board.send(f"frame {index} {fnv(data)} {fnv(record[1:])}\n".encode() + data + record[1:])
             else:
@@ -472,8 +593,10 @@ def stream(port_name: str, frames_path: Path, expected_path: Path, limit: int | 
                 step = fields(line)
                 missing = [key for key in STEP_FIELDS if type(step.get(key)) is not int]
                 if missing:  # a UART link that drops a byte loses a field's "=" or digits
-                    raise RuntimeError(f"Board step line for frame {index} arrived damaged (no valid {missing[0]}); "
-                                       f"on a UART link try a lower --baud: {line[:160]}")
+                    raise RuntimeError(
+                        f"Board step line for frame {index} arrived damaged (no valid {missing[0]}); "
+                        f"on a UART link try a lower --baud: {line[:160]}"
+                    )
                 if checked:
                     if index == 0 or step.get("index") != index or step.get("kind") not in (0, 1, 2):
                         raise RuntimeError(f"Board sent an invalid step for frame {index}: {line}")
@@ -487,14 +610,21 @@ def stream(port_name: str, frames_path: Path, expected_path: Path, limit: int | 
                     for key in ("count", "accepted", "dropped", "continuous"):
                         actual = step.get("cloud_" + key)
                         if type(actual) is not int or actual != wanted_cloud[key]:
-                            raise RuntimeError(f"Board step {index} cloud_{key}={actual!r}; expected {wanted_cloud[key]}")
+                            raise RuntimeError(
+                                f"Board step {index} cloud_{key}={actual!r}; expected {wanted_cloud[key]}"
+                            )
                     if step["cloud_continuous"] != continuous_from_kind:
                         raise RuntimeError(f"Board step {index} cloud continuity disagrees with LOST history")
-                    if any(type(step.get(key)) is not int or step[key] < 0 for key in ("total_us", "map_us", "cloud_us")):
+                    if any(
+                        type(step.get(key)) is not int or step[key] < 0 for key in ("total_us", "map_us", "cloud_us")
+                    ):
                         raise RuntimeError(f"Board step {index} has invalid timing")
                 if expected_voxels is not None:
                     wanted_voxels = expected_voxels["voxel_progress"][index - 1]
-                    if (step.get("voxels") != wanted_voxels["count"] or step.get("voxel_filed") != wanted_voxels["filed"]):
+                    if (
+                        step.get("voxels") != wanted_voxels["count"]
+                        or step.get("voxel_filed") != wanted_voxels["filed"]
+                    ):
                         voxel_mismatches.append(index)
                     if type(step.get("voxel_us")) is not int or step["voxel_us"] < 0:
                         raise RuntimeError(f"Board step {index} has invalid voxel timing")
@@ -503,10 +633,12 @@ def stream(port_name: str, frames_path: Path, expected_path: Path, limit: int | 
                     if type(step.get("dir_us")) is not int or step["dir_us"] < 0:
                         raise RuntimeError(f"Board step {index} has invalid direction timing")
                 if expected_plan is not None:
-                    if (step.get("plan") != expected_plan["actions"][index - 1]
-                            or step.get("plan_dir") != expected_plan["directions"][index - 1]
-                            or step.get("plan_turn") != expected_plan["turns"][index - 1]
-                            or step.get("plan_hash") != expected_plan["plan_hashes"][index - 1]):
+                    if (
+                        step.get("plan") != expected_plan["actions"][index - 1]
+                        or step.get("plan_dir") != expected_plan["directions"][index - 1]
+                        or step.get("plan_turn") != expected_plan["turns"][index - 1]
+                        or step.get("plan_hash") != expected_plan["plan_hashes"][index - 1]
+                    ):
                         plan_mismatches.append(index)
                     if type(step.get("plan_us")) is not int or step["plan_us"] < 0:
                         raise RuntimeError(f"Board step {index} has invalid plan timing")
@@ -524,8 +656,11 @@ def stream(port_name: str, frames_path: Path, expected_path: Path, limit: int | 
             check_continuity(memory, wanted_final, "end")
         cloud = None
         if expected_cloud is not None:
-            wanted_state = (expected_cloud["cloud_progress"][count - 2] if count > 1
-                            else {"count": 0, "dropped": 0, "continuous": 1})
+            wanted_state = (
+                expected_cloud["cloud_progress"][count - 2]
+                if count > 1
+                else {"count": 0, "dropped": 0, "continuous": 1}
+            )
             for key in ("count", "dropped", "continuous"):
                 actual = memory.get("cloud_" + key)
                 if type(actual) is not int or actual != wanted_state[key]:
@@ -541,54 +676,108 @@ def stream(port_name: str, frames_path: Path, expected_path: Path, limit: int | 
         resources.close()
     hashes = [step["hash"] for step in steps]
     mismatches = [k for k, (got, want) in enumerate(zip(hashes, wanted)) if got != want]
-    kinds = {name: sum(step["kind"] == code for step in steps) for code, name in enumerate(("lost", "rotation", "essential"))}
-    stages = (("total", "track", "motion", "detect") + (("map",) if expected_map is not None or expected_cloud is not None else ())
-              + (("cloud",) if expected_cloud is not None else ()) + (("voxel",) if expected_voxels is not None else ())
-              + (("dir",) if expected_dirs is not None else ()) + (("plan",) if expected_plan is not None else ()))
-    timing = {f"{stage}_ms": summarise([step[f"{stage}_us"] / 1000 for step in steps]) for stage in stages} if steps else {}
+    kinds = {
+        name: sum(step["kind"] == code for step in steps) for code, name in enumerate(("lost", "rotation", "essential"))
+    }
+    stages = (
+        ("total", "track", "motion", "detect")
+        + (("map",) if expected_map is not None or expected_cloud is not None else ())
+        + (("cloud",) if expected_cloud is not None else ())
+        + (("voxel",) if expected_voxels is not None else ())
+        + (("dir",) if expected_dirs is not None else ())
+        + (("plan",) if expected_plan is not None else ())
+    )
+    timing = (
+        {f"{stage}_ms": summarise([step[f"{stage}_us"] / 1000 for step in steps]) for stage in stages} if steps else {}
+    )
     if expected_cloud is not None and steps:
-        timing["vo_cloud_map_ms"] = summarise([(step["total_us"] + step["cloud_us"] + step["map_us"]) / 1000
-                                               for step in steps])
-    record = {"task": "Monocular VO" + (" and obstacle grid" if expected_map is not None else "")
-                      + (" and sparse cloud" if expected_cloud is not None else "")
-                      + " on an ESP32 board, replayed over its serial link against the PC build",
-              "frames_file": frames_path.name, "expected_file": expected_path.name, "rate_hz": expected.get("rate_hz", 10.0),
-              "cpu_mhz": ready["cpu_mhz"], "config": ready["config"],
-              **{key: ready[key] for key in SOURCES + (MAP_SOURCES if expected_map is not None else ())},
-              "state_bytes": started["state_bytes"], "cores": started["cores"], "simd": bool(started["simd"]),
-              "kernel_selftest": selftest, "frames": count,
-              "steps": len(steps), "steps_expected": len(wanted),
-              "all_match": not mismatches and len(steps) == len(wanted),
-              "mismatched_steps": mismatches, "kinds": kinds, "first_frame": first, "timing": timing, "memory": memory,
-              "wall_seconds": wall}
+        timing["vo_cloud_map_ms"] = summarise(
+            [(step["total_us"] + step["cloud_us"] + step["map_us"]) / 1000 for step in steps]
+        )
+    record = {
+        "task": "Monocular VO"
+        + (" and obstacle grid" if expected_map is not None else "")
+        + (" and sparse cloud" if expected_cloud is not None else "")
+        + " on an ESP32 board, replayed over its serial link against the PC build",
+        "frames_file": frames_path.name,
+        "expected_file": expected_path.name,
+        "rate_hz": expected.get("rate_hz", 10.0),
+        "cpu_mhz": ready["cpu_mhz"],
+        "config": ready["config"],
+        **{key: ready[key] for key in SOURCES + (MAP_SOURCES if expected_map is not None else ())},
+        "state_bytes": started["state_bytes"],
+        "cores": started["cores"],
+        "simd": bool(started["simd"]),
+        "kernel_selftest": selftest,
+        "frames": count,
+        "steps": len(steps),
+        "steps_expected": len(wanted),
+        "all_match": not mismatches and len(steps) == len(wanted),
+        "mismatched_steps": mismatches,
+        "kinds": kinds,
+        "first_frame": first,
+        "timing": timing,
+        "memory": memory,
+        "wall_seconds": wall,
+    }
     if expected_map is not None:
-        record["map"] = {"masks_file": masks_path.name, "expected_file": expected_map_path.name, **board_map,
-                         "policy": MAP_POLICY, "continuous_expected": wanted_final,
-                         "observations_expected": expected_map["map_observations"] if full_run else None,
-                         "hash_expected": expected_map["map_hash"] if full_run else None,
-                         "match": board_map["hash"] == expected_map["map_hash"] if full_run else None}
+        record["map"] = {
+            "masks_file": masks_path.name,
+            "expected_file": expected_map_path.name,
+            **board_map,
+            "policy": MAP_POLICY,
+            "continuous_expected": wanted_final,
+            "observations_expected": expected_map["map_observations"] if full_run else None,
+            "hash_expected": expected_map["map_hash"] if full_run else None,
+            "match": board_map["hash"] == expected_map["map_hash"] if full_run else None,
+        }
     if cloud is not None:
-        record["cloud"] = {"policy": CLOUD_POLICY, "expected_file": expected_cloud_path.name, "frames": count,
-                           **{key: expected_cloud.get(key) for key in (*CLOUD_SOURCES, "source_sha256")}, **cloud}
+        record["cloud"] = {
+            "policy": CLOUD_POLICY,
+            "expected_file": expected_cloud_path.name,
+            "frames": count,
+            **{key: expected_cloud.get(key) for key in (*CLOUD_SOURCES, "source_sha256")},
+            **cloud,
+        }
     if expected_voxels is not None:
-        record["voxels"] = {"expected_file": expected_voxels_path.name, **board_voxels,
-                            "hash_expected": expected_voxels["voxel_hash"] if full_run else None,
-                            "match": False if voxel_mismatches
-                            else board_voxels.get("hash") == expected_voxels["voxel_hash"] if full_run else None,
-                            "mismatched_steps": voxel_mismatches,
-                            **{key: expected_voxels[key] for key in VOXEL_SOURCES}}
+        record["voxels"] = {
+            "expected_file": expected_voxels_path.name,
+            **board_voxels,
+            "hash_expected": expected_voxels["voxel_hash"] if full_run else None,
+            "match": False
+            if voxel_mismatches
+            else board_voxels.get("hash") == expected_voxels["voxel_hash"]
+            if full_run
+            else None,
+            "mismatched_steps": voxel_mismatches,
+            **{key: expected_voxels[key] for key in VOXEL_SOURCES},
+        }
     if expected_dirs is not None:
-        record["dirs"] = {"expected_file": expected_dirs_path.name, **board_dirs,
-                          "hash_expected": expected_dirs["dir_hash"] if full_run else None,
-                          "match": False if dir_mismatches else board_dirs.get("hash") == expected_dirs["dir_hash"]
-                          if full_run else None, "mismatched_frames": dir_mismatches,
-                          **{key: expected_dirs[key] for key in DIR_SOURCES}}
+        record["dirs"] = {
+            "expected_file": expected_dirs_path.name,
+            **board_dirs,
+            "hash_expected": expected_dirs["dir_hash"] if full_run else None,
+            "match": False
+            if dir_mismatches
+            else board_dirs.get("hash") == expected_dirs["dir_hash"]
+            if full_run
+            else None,
+            "mismatched_frames": dir_mismatches,
+            **{key: expected_dirs[key] for key in DIR_SOURCES},
+        }
     if expected_plan is not None:
-        record["plan"] = {"expected_file": expected_plan_path.name, **board_plan,
-                          "hash_expected": expected_plan["plan_hash"] if full_run else None,
-                          "match": False if plan_mismatches else board_plan.get("hash") == expected_plan["plan_hash"]
-                          if full_run else None, "mismatched_steps": plan_mismatches,
-                          **{key: expected_plan[key] for key in PLAN_SOURCES}}
+        record["plan"] = {
+            "expected_file": expected_plan_path.name,
+            **board_plan,
+            "hash_expected": expected_plan["plan_hash"] if full_run else None,
+            "match": False
+            if plan_mismatches
+            else board_plan.get("hash") == expected_plan["plan_hash"]
+            if full_run
+            else None,
+            "mismatched_steps": plan_mismatches,
+            **{key: expected_plan[key] for key in PLAN_SOURCES},
+        }
     record["per_step"] = steps
     return record, board.lines
 
@@ -607,66 +796,96 @@ def write_board_section(results: Path) -> None:
         if board_map is None:
             map_cell = "—"
         else:
-            verdict = {True: "equal to the PC's", False: "differs from the PC's", None: "not compared (part of the run)"}
+            verdict = {
+                True: "equal to the PC's",
+                False: "differs from the PC's",
+                None: "not compared (part of the run)",
+            }
             map_cell = f"{board_map['observations']} observations, hash {verdict[board_map['match']]}"
         map_time = f"{t['map_ms']['mean']:.1f} ms" if "map_ms" in t else "—"
         verdict = {True: "equal to the PC's", False: "differs from the PC's", None: "not compared (part of the run)"}
         extra = []
         if record.get("voxels"):
-            extra.append(f"{record['voxels']['count']} voxels, hash {verdict[record['voxels']['match']]}"
-                         + (f" ({t['voxel_ms']['mean']:.1f} ms)" if "voxel_ms" in t else ""))
+            extra.append(
+                f"{record['voxels']['count']} voxels, hash {verdict[record['voxels']['match']]}"
+                + (f" ({t['voxel_ms']['mean']:.1f} ms)" if "voxel_ms" in t else "")
+            )
         if record.get("dirs"):
-            extra.append(f"directions {verdict[record['dirs']['match']]}"
-                         + (f" ({t['dir_ms']['mean']:.2f} ms)" if "dir_ms" in t else ""))
+            extra.append(
+                f"directions {verdict[record['dirs']['match']]}"
+                + (f" ({t['dir_ms']['mean']:.2f} ms)" if "dir_ms" in t else "")
+            )
         if record.get("plan"):
-            extra.append(f"plans {verdict[record['plan']['match']]}"
-                         + (f" ({t['plan_ms']['mean']:.2f} ms)" if "plan_ms" in t else ""))
+            extra.append(
+                f"plans {verdict[record['plan']['match']]}"
+                + (f" ({t['plan_ms']['mean']:.2f} ms)" if "plan_ms" in t else "")
+            )
         extra_cell = "; ".join(extra) if extra else "—"
-        step_time = (f"{t['total_ms']['mean']:.0f} / {t['total_ms']['median']:.0f} / {t['total_ms']['max']:.0f} ms"
-                     if "total_ms" in t else "—")
-        stage_times = [f"{t[f'{stage}_ms']['mean']:.0f} ms" if f"{stage}_ms" in t else "—"
-                       for stage in ("track", "motion", "detect")]
+        step_time = (
+            f"{t['total_ms']['mean']:.0f} / {t['total_ms']['median']:.0f} / {t['total_ms']['max']:.0f} ms"
+            if "total_ms" in t
+            else "—"
+        )
+        stage_times = [
+            f"{t[f'{stage}_ms']['mean']:.0f} ms" if f"{stage}_ms" in t else "—"
+            for stage in ("track", "motion", "detect")
+        ]
         kernels = "vector" if record.get("simd") else "C"
         rate = record.get("rate_hz", 10.0)
         rate_text = f"{rate:g} Hz" if isinstance(rate, (int, float)) and math.isfinite(rate) and rate > 0 else "unknown"
         clock = f"{record['cpu_mhz']} MHz" if "cpu_mhz" in record else "—"
-        rows.append(f"| `{path.stem}` | {clock} | {record.get('config', 's3')} | {rate_text} | {record['cores']} | {kernels} | "
-                    f"{record['frames']} | "
-                    f"{record['steps'] - len(record['mismatched_steps'])} of {record['steps']} | {map_cell} | "
-                    f"{step_time} | {' | '.join(stage_times)} | {map_time} | {extra_cell} |")
-    section = [BOARD_HEADING, "",
-               "The host streams grayscale frames and optional masks over the board's serial link (`python -m "
-               "uwslam.mvo_stream`): the ESP32-S3's USB-Serial-JTAG port, or an ESP32-P4 board's USB-UART bridge. The "
-               "board reports each step's hash and stage times. These timings exclude capture and transfer. Each record "
-               "provides its own clock, build configuration (core/mono_vo.h: s3, the default, or p4), rate, core count "
-               "and kernel choice (the vector kernels are mvo_pie.S on the S3 and mvo_pie_p4.S on the P4). Before "
-               "streaming, the board checks its vector dispatch against C on random windows. Records and raw serial "
-               "lines are in `board/`.", "",
-               "| Record | Clock | Config | Rate | Cores | Kernels | Frames | Steps equal to the PC | Map | Per step, "
-               "mean / median / max | Tracking | Motion | Detection | Map update | Voxel map / directions / plan "
-               "(update) |",
-               "|---|---:|---|---:|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---|",
-               *rows, ""]
+        rows.append(
+            f"| `{path.stem}` | {clock} | {record.get('config', 's3')} | {rate_text} | {record['cores']} | {kernels} | "
+            f"{record['frames']} | "
+            f"{record['steps'] - len(record['mismatched_steps'])} of {record['steps']} | {map_cell} | "
+            f"{step_time} | {' | '.join(stage_times)} | {map_time} | {extra_cell} |"
+        )
+    section = [
+        BOARD_HEADING,
+        "",
+        "The host streams grayscale frames and optional masks over the board's serial link (`python -m "
+        "uwslam.mvo_stream`): the ESP32-S3's USB-Serial-JTAG port, or an ESP32-P4 board's USB-UART bridge. The "
+        "board reports each step's hash and stage times. These timings exclude capture and transfer. Each record "
+        "provides its own clock, build configuration (core/mono_vo.h: s3, the default, or p4), rate, core count "
+        "and kernel choice (the vector kernels are mvo_pie.S on the S3 and mvo_pie_p4.S on the P4). Before "
+        "streaming, the board checks its vector dispatch against C on random windows. Records and raw serial "
+        "lines are in `board/`.",
+        "",
+        "| Record | Clock | Config | Rate | Cores | Kernels | Frames | Steps equal to the PC | Map | Per step, "
+        "mean / median / max | Tracking | Motion | Detection | Map update | Voxel map / directions / plan "
+        "(update) |",
+        "|---|---:|---|---:|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---|",
+        *rows,
+        "",
+    ]
     if any("_usj" in path.stem for path in sorted((results / "board").glob("*.json"))):
-        section += ["Records named `*_usj*` were streamed over the ESP32-P4's own USB-Serial-JTAG port, not its USB-UART "
-                    "bridge: the firmware was built as in the P4 line below with `CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y` "
-                    "added after `sdkconfig.defaults.esp32p4` (`-D \"SDKCONFIG_DEFAULTS=sdkconfig.defaults;<that file>\"`, "
-                    "in a build folder of its own), which changes only the console.", ""]
-    section += ["Re-run (after `uwslam.mvo compare --board-frames` and `uwslam.mono_map --board-masks`):", "", "```bash",
-                "idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_240 -p <port> flash",
-                "idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_p4 -D SDKCONFIG=build_p4/sdkconfig "
-                "-D IDF_TARGET=esp32p4 -p <port> flash   # an ESP32-P4: the p4 configuration (UWSLAM_CONFIG=p4 on the PC)",
-                "python -m uwslam.mvo_stream --port <port> --frames <frames file> --masks <masks file> --label <name>",
-                "```", ""]
+        section += [
+            "Records named `*_usj*` were streamed over the ESP32-P4's own USB-Serial-JTAG port, not its USB-UART "
+            "bridge: the firmware was built as in the P4 line below with `CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y` "
+            'added after `sdkconfig.defaults.esp32p4` (`-D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;<that file>"`, '
+            "in a build folder of its own), which changes only the console.",
+            "",
+        ]
+    section += [
+        "Re-run (after `uwslam.mvo compare --board-frames` and `uwslam.mono_map --board-masks`):",
+        "",
+        "```bash",
+        "idf.py -C firmware/mono_vo_stream -B firmware/mono_vo_stream/build_240 -p <port> flash",
+        "idf.py -C firmware/mono_vo_stream -B firmware/mono_vo_stream/build_p4 -D SDKCONFIG=build_p4/sdkconfig "
+        "-D IDF_TARGET=esp32p4 -p <port> flash   # an ESP32-P4: the p4 configuration (UWSLAM_CONFIG=p4 on the PC)",
+        "python -m uwslam.mvo_stream --port <port> --frames <frames file> --masks <masks file> --label <name>",
+        "```",
+        "",
+    ]
     report = results / "RESULTS.md"
     text = report.read_text(encoding="utf-8") if report.exists() else ""
     heading = re.search(r"(?m)^## (?:ESP32-S3|ESP32 boards)[ \t]*$", text)
     prefix, suffix = text, ""
     if heading:
-        prefix = text[:heading.start()]
-        later = re.search(r"(?m)^## [^\n]+", text[heading.end():])
+        prefix = text[: heading.start()]
+        later = re.search(r"(?m)^## [^\n]+", text[heading.end() :])
         if later:
-            suffix = text[heading.end() + later.start():]
+            suffix = text[heading.end() + later.start() :]
     prefix = prefix.rstrip("\n") + "\n\n" if prefix.strip() else ""
     report.write_text(prefix + "\n".join(section) + ("\n" + suffix if suffix else ""), encoding="utf-8", newline="\n")
 
@@ -674,24 +893,46 @@ def write_board_section(results: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--port", required=True, help="Serial port of the board")
-    parser.add_argument("--frames", type=Path, required=True, help="Raw grayscale frames from uwslam.mvo or uwslam.mono_cloud")
+    parser.add_argument(
+        "--frames", type=Path, required=True, help="Raw grayscale frames from uwslam.mvo or uwslam.mono_cloud"
+    )
     parser.add_argument("--expected", type=Path, default=RESULTS / "board_expected_10hz.json")
-    parser.add_argument("--masks", type=Path, help="The masks uwslam.mono_map wrote with --board-masks: build the map too")
-    parser.add_argument("--expected-map", type=Path, help="Default: board_expected_map_<rate>hz.json in the lake map results")
+    parser.add_argument(
+        "--masks", type=Path, help="The masks uwslam.mono_map wrote with --board-masks: build the map too"
+    )
+    parser.add_argument(
+        "--expected-map", type=Path, help="Default: board_expected_map_<rate>hz.json in the lake map results"
+    )
     parser.add_argument("--expected-cloud", type=Path, help="Cloud expectation from uwslam.mono_cloud --board-files")
     parser.add_argument("--cloud-output", type=Path, help="Save the verified board cloud as a new PLY file")
-    parser.add_argument("--expected-voxels", type=Path, help="Voxel-map expectation from uwslam.voxel_map "
-                        "(board_expected_voxels_<rate>hz.json)")
-    parser.add_argument("--expected-dirs", type=Path, help="Obstacle-direction expectation from uwslam.obstacle_dir "
-                        "(board_expected_dirs_<rate>hz.json); needs --masks")
-    parser.add_argument("--expected-plan", type=Path, help="Plan expectation from uwslam.path_plan "
-                        "(board_expected_plan_<rate>hz.json); give the masks and directions it was made with")
+    parser.add_argument(
+        "--expected-voxels",
+        type=Path,
+        help="Voxel-map expectation from uwslam.voxel_map (board_expected_voxels_<rate>hz.json)",
+    )
+    parser.add_argument(
+        "--expected-dirs",
+        type=Path,
+        help="Obstacle-direction expectation from uwslam.obstacle_dir "
+        "(board_expected_dirs_<rate>hz.json); needs --masks",
+    )
+    parser.add_argument(
+        "--expected-plan",
+        type=Path,
+        help="Plan expectation from uwslam.path_plan "
+        "(board_expected_plan_<rate>hz.json); give the masks and directions it was made with",
+    )
     parser.add_argument("--label", required=True, help="Name of the saved record, e.g. 240mhz")
     parser.add_argument("--frames-limit", type=int, help="Stream only the first this many frames")
     parser.add_argument("--cores", type=int, choices=(1, 2), default=2, help="Run on one core or on both")
     parser.add_argument("--no-simd", action="store_true", help="Track with the portable C kernels, not the vector ones")
-    parser.add_argument("--baud", type=int, default=LINK_BAUD, help="A UART link's rate (a USB-Serial-JTAG port ignores "
-                        "it); the firmware switches its console UART to this once it runs")
+    parser.add_argument(
+        "--baud",
+        type=int,
+        default=LINK_BAUD,
+        help="A UART link's rate (a USB-Serial-JTAG port ignores "
+        "it); the firmware switches its console UART to this once it runs",
+    )
     args = parser.parse_args()
     if args.cloud_output is not None and args.expected_cloud is None:
         parser.error("--cloud-output requires --expected-cloud")
@@ -700,8 +941,16 @@ def main() -> None:
     folder = args.expected.parent / "board"
     target, log = folder / f"{args.label}.json", folder / f"{args.label}_serial.log"
     if args.cloud_output is not None:
-        reserved = (target, log, args.expected, args.frames, args.expected_cloud, args.masks,
-                    args.expected_map, args.expected.parent / "RESULTS.md")
+        reserved = (
+            target,
+            log,
+            args.expected,
+            args.frames,
+            args.expected_cloud,
+            args.masks,
+            args.expected_map,
+            args.expected.parent / "RESULTS.md",
+        )
         if any(path is not None and args.cloud_output.resolve() == path.resolve() for path in reserved):
             raise ValueError("The cloud output must be distinct from replay inputs and records")
     if target.exists() or log.exists():
@@ -711,10 +960,22 @@ def main() -> None:
     if args.masks is not None and expected_map is None:
         if not isinstance(rate, (int, float)) or not math.isfinite(rate) or rate <= 0:
             parser.error("--expected-map is required with masks when the input frame rate is unknown")
-        expected_map = LAKE_CLIP_RESULTS / "mono_map" / f"board_expected_map_{rate:g}hz.json"
-    record, lines = stream(args.port, args.frames, args.expected, args.frames_limit, args.cores, args.masks,
-                           expected_map, not args.no_simd, args.expected_cloud, args.expected_voxels, args.expected_dirs,
-                           args.expected_plan, args.baud)
+        expected_map = CLIP_RESULTS / "mono_map" / f"board_expected_map_{rate:g}hz.json"
+    record, lines = stream(
+        args.port,
+        args.frames,
+        args.expected,
+        args.frames_limit,
+        args.cores,
+        args.masks,
+        expected_map,
+        not args.no_simd,
+        args.expected_cloud,
+        args.expected_voxels,
+        args.expected_dirs,
+        args.expected_plan,
+        args.baud,
+    )
     if args.cloud_output is not None:
         write_cloud_ply(args.cloud_output, record["cloud"])
     folder.mkdir(parents=True, exist_ok=True)
@@ -732,31 +993,45 @@ def main() -> None:
             print(f"cloud: {record['cloud']['count']} points, continuous = {record['cloud']['continuous']}")
         return
     total = record["timing"]["total_ms"]
-    print(f"{record['steps']} steps at {record['cpu_mhz']} MHz on {record['cores']} core(s), "
-          f"{'vector' if record['simd'] else 'C'} kernels: all hashes match = "
-          f"{record['all_match']} ({len(record['mismatched_steps'])} mismatched); {total['mean']:.0f} ms per step (median "
-          f"{total['median']:.0f}, max {total['max']:.0f}); track {record['timing']['track_ms']['mean']:.0f} ms, motion "
-          f"{record['timing']['motion_ms']['mean']:.0f} ms, detect {record['timing']['detect_ms']['mean']:.0f} ms")
+    print(
+        f"{record['steps']} steps at {record['cpu_mhz']} MHz on {record['cores']} core(s), "
+        f"{'vector' if record['simd'] else 'C'} kernels: all hashes match = "
+        f"{record['all_match']} ({len(record['mismatched_steps'])} mismatched); {total['mean']:.0f} ms per step (median "
+        f"{total['median']:.0f}, max {total['max']:.0f}); track {record['timing']['track_ms']['mean']:.0f} ms, motion "
+        f"{record['timing']['motion_ms']['mean']:.0f} ms, detect {record['timing']['detect_ms']['mean']:.0f} ms"
+    )
     if "map" in record:
         expected_observations = record["map"]["observations_expected"]
-        comparison = "not compared for a partial run" if expected_observations is None else f"PC {expected_observations}"
-        print(f"map: {record['map']['observations']} observations filed ({comparison}), "
-              f"hash match = {record['map']['match']}, {record['timing']['map_ms']['mean']:.1f} ms per update")
+        comparison = (
+            "not compared for a partial run" if expected_observations is None else f"PC {expected_observations}"
+        )
+        print(
+            f"map: {record['map']['observations']} observations filed ({comparison}), "
+            f"hash match = {record['map']['match']}, {record['timing']['map_ms']['mean']:.1f} ms per update"
+        )
     if "voxels" in record:
-        print(f"voxels: {record['voxels']['count']} held, hash match = {record['voxels']['match']}, "
-              f"{len(record['voxels']['mismatched_steps'])} steps differ, {record['timing']['voxel_ms']['mean']:.2f} ms "
-              "per update")
+        print(
+            f"voxels: {record['voxels']['count']} held, hash match = {record['voxels']['match']}, "
+            f"{len(record['voxels']['mismatched_steps'])} steps differ, {record['timing']['voxel_ms']['mean']:.2f} ms "
+            "per update"
+        )
     if "dirs" in record:
-        print(f"directions: hash match = {record['dirs']['match']}, {len(record['dirs']['mismatched_frames'])} frames "
-              f"differ, {record['timing']['dir_ms']['mean']:.2f} ms per update")
+        print(
+            f"directions: hash match = {record['dirs']['match']}, {len(record['dirs']['mismatched_frames'])} frames "
+            f"differ, {record['timing']['dir_ms']['mean']:.2f} ms per update"
+        )
     if "plan" in record:
-        print(f"plans: hash match = {record['plan']['match']}, {len(record['plan']['mismatched_steps'])} steps differ, "
-              f"{record['timing']['plan_ms']['mean']:.2f} ms per plan")
+        print(
+            f"plans: hash match = {record['plan']['match']}, {len(record['plan']['mismatched_steps'])} steps differ, "
+            f"{record['timing']['plan_ms']['mean']:.2f} ms per plan"
+        )
     if "cloud" in record:
-        print(f"cloud: {record['cloud']['count']} points, {record['cloud']['dropped']} historical points evicted, "
-              f"continuous = {record['cloud']['continuous']}, hash match = {record['cloud']['match']}; "
-              f"VO + cloud + obstacle map {record['timing']['vo_cloud_map_ms']['mean']:.1f} ms/step "
-              "(excludes capture, segmentation and USB)")
+        print(
+            f"cloud: {record['cloud']['count']} points, {record['cloud']['dropped']} historical points evicted, "
+            f"continuous = {record['cloud']['continuous']}, hash match = {record['cloud']['match']}; "
+            f"VO + cloud + obstacle map {record['timing']['vo_cloud_map_ms']['mean']:.1f} ms/step "
+            "(excludes capture, segmentation and USB)"
+        )
 
 
 if __name__ == "__main__":

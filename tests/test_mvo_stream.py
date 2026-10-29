@@ -1,16 +1,16 @@
 """The board host's pure parts (uwslam.mvo_stream): parsing the board's lines, the frame hash, and the ESP32-S3 section
 it writes into RESULTS.md. No board or serial port needed."""
 
-import json
 import hashlib
+import json
 import os
-from pathlib import Path
 import shutil
 import struct
 import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from uwslam import mvo_stream
@@ -18,10 +18,20 @@ from uwslam.mvo import config_defines
 
 
 def record(cores: int, mismatched: list[int], with_map: bool, simd: bool) -> dict:
-    timing = {f"{stage}_ms": {"mean": 10.0 * k, "median": 9.0 * k, "p90": 12.0 * k, "max": 15.0 * k}
-              for k, stage in enumerate(("total", "track", "motion", "detect"), start=1)}
-    entry = {"cores": cores, "simd": simd, "frames": 5, "steps": 4, "mismatched_steps": mismatched, "timing": timing,
-             "cpu_mhz": 240 if simd else 360, **({} if simd else {"config": "p4"})}
+    timing = {
+        f"{stage}_ms": {"mean": 10.0 * k, "median": 9.0 * k, "p90": 12.0 * k, "max": 15.0 * k}
+        for k, stage in enumerate(("total", "track", "motion", "detect"), start=1)
+    }
+    entry = {
+        "cores": cores,
+        "simd": simd,
+        "frames": 5,
+        "steps": 4,
+        "mismatched_steps": mismatched,
+        "timing": timing,
+        "cpu_mhz": 240 if simd else 360,
+        **({} if simd else {"config": "p4"}),
+    }
     if with_map:
         entry["timing"]["map_ms"] = {"mean": 0.25, "median": 0.2, "p90": 0.3, "max": 0.4}
         entry["map"] = {"observations": 42, "match": True}
@@ -31,8 +41,9 @@ def record(cores: int, mismatched: list[int], with_map: bool, simd: bool) -> dic
 class MvoStreamTests(unittest.TestCase):
     def test_fields_reads_key_values_and_numbers(self):
         line = "step index=3 kind=2 hash=4294967295 total_us=-1 core_sha256=ab12"
-        self.assertEqual(mvo_stream.fields(line), {"index": 3, "kind": 2, "hash": 4294967295, "total_us": -1,
-                                                   "core_sha256": "ab12"})
+        self.assertEqual(
+            mvo_stream.fields(line), {"index": 3, "kind": 2, "hash": 4294967295, "total_us": -1, "core_sha256": "ab12"}
+        )
 
     def test_fnv_matches_the_reference_values(self):
         self.assertEqual(mvo_stream.fnv(b""), 2166136261)
@@ -50,8 +61,9 @@ class MvoStreamTests(unittest.TestCase):
             text = (results / "RESULTS.md").read_text(encoding="utf-8")
         self.assertTrue(text.startswith("# Report\n\nBody.\n"))
         self.assertEqual(text.count(mvo_stream.BOARD_HEADING), 1)
-        self.assertIn("| `a` | 240 MHz | s3 | 10 Hz | 2 | vector | 5 | 4 of 4 | 42 observations, hash equal to the "
-                      "PC's |", text)  # a record from before configurations: the default build's
+        self.assertIn(
+            "| `a` | 240 MHz | s3 | 10 Hz | 2 | vector | 5 | 4 of 4 | 42 observations, hash equal to the PC's |", text
+        )  # a record from before configurations: the default build's
         self.assertIn("| `b` | 360 MHz | p4 | 10 Hz | 1 | C | 5 | 3 of 4 | — |", text)
 
     def test_board_section_does_not_invent_an_unknown_frame_rate(self):
@@ -72,19 +84,23 @@ class MvoStreamTests(unittest.TestCase):
             (results / "board" / "p4_360mhz.json").write_text(json.dumps(record(2, [], False, False)), encoding="utf-8")
             mvo_stream.write_board_section(results)
             without = (results / "RESULTS.md").read_text(encoding="utf-8")
-            (results / "board" / "p4_360mhz_usj.json").write_text(json.dumps(record(2, [], False, False)),
-                                                                  encoding="utf-8")
+            (results / "board" / "p4_360mhz_usj.json").write_text(
+                json.dumps(record(2, [], False, False)), encoding="utf-8"
+            )
             mvo_stream.write_board_section(results)
             text = (results / "RESULTS.md").read_text(encoding="utf-8")
         self.assertNotIn("USB-Serial-JTAG port, not its USB-UART bridge", without)
-        self.assertEqual(text.count("Records named `*_usj*` were streamed over the ESP32-P4's own USB-Serial-JTAG port"),
-                         1)
+        self.assertEqual(
+            text.count("Records named `*_usj*` were streamed over the ESP32-P4's own USB-Serial-JTAG port"), 1
+        )
 
     def test_board_section_preserves_other_sections_after_it(self):
         with tempfile.TemporaryDirectory() as folder:
             results = Path(folder)
             (results / "board").mkdir()
-            (results / "RESULTS.md").write_text("# Report\n\n## ESP32-S3\n\nOld table.\n\n## Personal notes\n\nKeep this.\n", encoding="utf-8")
+            (results / "RESULTS.md").write_text(
+                "# Report\n\n## ESP32-S3\n\nOld table.\n\n## Personal notes\n\nKeep this.\n", encoding="utf-8"
+            )
             mvo_stream.write_board_section(results)
             text = (results / "RESULTS.md").read_text(encoding="utf-8")
         self.assertIn("## Personal notes\n\nKeep this.", text)
@@ -101,9 +117,21 @@ class MvoStreamTests(unittest.TestCase):
                 log.write_text("other session evidence", encoding="utf-8")
                 return record(2, [], False, True), ["stream log"]
 
-            argv = ["mvo_stream", "--port", "unused", "--frames", str(root / "frames.bin"),
-                    "--expected", str(expected), "--label", "shared"]
-            with mock.patch.object(sys, "argv", argv), mock.patch.object(mvo_stream, "stream", side_effect=concurrent_stream):
+            argv = [
+                "mvo_stream",
+                "--port",
+                "unused",
+                "--frames",
+                str(root / "frames.bin"),
+                "--expected",
+                str(expected),
+                "--label",
+                "shared",
+            ]
+            with (
+                mock.patch.object(sys, "argv", argv),
+                mock.patch.object(mvo_stream, "stream", side_effect=concurrent_stream),
+            ):
                 with self.assertRaises(FileExistsError):
                     mvo_stream.main()
             self.assertEqual(log.read_text(encoding="utf-8"), "other session evidence")
@@ -113,9 +141,21 @@ class MvoStreamTests(unittest.TestCase):
             root = Path(folder)
             expected = root / "vo.json"
             expected.write_text("{}", encoding="utf-8")
-            argv = ["mvo_stream", "--port", "unused", "--frames", str(root / "frames.bin"),
-                    "--expected", str(expected), "--expected-cloud", str(root / "cloud.json"),
-                    "--cloud-output", str(root / "board" / "same.json"), "--label", "same"]
+            argv = [
+                "mvo_stream",
+                "--port",
+                "unused",
+                "--frames",
+                str(root / "frames.bin"),
+                "--expected",
+                str(expected),
+                "--expected-cloud",
+                str(root / "cloud.json"),
+                "--cloud-output",
+                str(root / "board" / "same.json"),
+                "--label",
+                "same",
+            ]
             with mock.patch.object(sys, "argv", argv), mock.patch.object(mvo_stream, "stream") as replay:
                 with self.assertRaisesRegex(ValueError, "distinct"):
                     mvo_stream.main()
@@ -150,8 +190,10 @@ class FakeBoard:
             else:
                 kind = (1, 0, 2)[index - 1]
                 continuity = int(index < 2)
-                line = (f"step index={index} kind={kind} tracks=3 inliers=2 scale_points=0 hash={100 + index} "
-                        "detect_us=10 track_us=20 motion_us=30 total_us=60 observed=0 mapped=0 map_us=5")
+                line = (
+                    f"step index={index} kind={kind} tracks=3 inliers=2 scale_points=0 hash={100 + index} "
+                    "detect_us=10 track_us=20 motion_us=30 total_us=60 observed=0 mapped=0 map_us=5"
+                )
                 self.pending.append(self.add_continuity(line, continuity, f"step {index}"))
         elif command == "end":
             continuity = int(self.frame_index < 2)
@@ -170,8 +212,10 @@ class FakeBoard:
     def reply(self, prefixes, timeout):
         if not self.lines:
             built = "" if self.config is None else f"config={self.config} max_features={self.max_features} "
-            line = (f"ready cpu_mhz=240 {built}core_sha256=core "
-                    "header_sha256=header map_sha256=map map_header_sha256=mapheader")
+            line = (
+                f"ready cpu_mhz=240 {built}core_sha256=core "
+                "header_sha256=header map_sha256=map map_header_sha256=mapheader"
+            )
             if self.ready_policy is not None:
                 line += f" map_policy={self.ready_policy}"
         else:
@@ -192,12 +236,18 @@ class MapProtocolTests(unittest.TestCase):
         self.expected = self.folder / "vo.json"
         self.expected_map = self.folder / "map.json"
         self.frames.write_bytes(bytes(mvo_stream.FRAME_BYTES * 4))
-        self.masks.write_bytes(b"".join(bytes([flag]) + bytes(mvo_stream.MASK_RECORD - 1)
-                                        for flag in (1, 1, 0, 1)))
+        self.masks.write_bytes(b"".join(bytes([flag]) + bytes(mvo_stream.MASK_RECORD - 1) for flag in (1, 1, 0, 1)))
         sources = dict(core_sha256="core", header_sha256="header", map_sha256="map", map_header_sha256="mapheader")
         self.vo = dict(frames=4, step_hashes=[101, 102, 103], camera_bits=[1, 2, 3, 4], seed=1, **sources)
-        self.map = dict(step_hashes=self.vo["step_hashes"], map_policy=1, map_continuity=[1, 0, 0],
-                        map_continuous=0, map_hash=451, map_observations=0, **sources)
+        self.map = dict(
+            step_hashes=self.vo["step_hashes"],
+            map_policy=1,
+            map_continuity=[1, 0, 0],
+            map_continuous=0,
+            map_hash=451,
+            map_observations=0,
+            **sources,
+        )
         self.write_expectations()
 
     def write_expectations(self):
@@ -206,8 +256,14 @@ class MapProtocolTests(unittest.TestCase):
 
     def replay(self, board, limit=None, masks=True):
         with mock.patch.object(mvo_stream, "Board", return_value=board), mock.patch("builtins.print"):
-            return mvo_stream.stream("no-port", self.frames, self.expected, limit=limit,
-                                     masks_path=self.masks if masks else None, expected_map_path=self.expected_map)
+            return mvo_stream.stream(
+                "no-port",
+                self.frames,
+                self.expected,
+                limit=limit,
+                masks_path=self.masks if masks else None,
+                expected_map_path=self.expected_map,
+            )
 
     def test_start_line_carries_the_lens(self):
         board = FakeBoard()
@@ -268,8 +324,14 @@ class MapProtocolTests(unittest.TestCase):
         self.assertEqual(mvo_stream.expectation_config({}), "s3")
 
     def test_caps_follow_the_configuration(self):
-        voxels = dict(step_hashes=self.vo["step_hashes"], frames=self.vo["frames"], voxel_hash=1,
-                      voxel_progress=[{"count": 1, "filed": 300}] * 3, voxel_sha256="a" * 64, voxel_header_sha256="b" * 64)
+        voxels = dict(
+            step_hashes=self.vo["step_hashes"],
+            frames=self.vo["frames"],
+            voxel_hash=1,
+            voxel_progress=[{"count": 1, "filed": 300}] * 3,
+            voxel_sha256="a" * 64,
+            voxel_header_sha256="b" * 64,
+        )
         with self.assertRaisesRegex(ValueError, "voxel count and filed"):
             mvo_stream.validate_expected_voxels(voxels, self.vo)  # the default build files at most 250
         mvo_stream.validate_expected_voxels(voxels, {**self.vo, "config": "p4", "max_features": 300})
@@ -278,6 +340,7 @@ class MapProtocolTests(unittest.TestCase):
 
     def test_config_features_follow_the_binding(self):
         from uwslam import mvo
+
         self.assertEqual(mvo_stream.CONFIG_FEATURES, {name: c["max_features"] for name, c in mvo.CONFIGS.items()})
 
     def test_full_replay_checks_states_independent_of_equal_map_hash(self):
@@ -313,10 +376,17 @@ class MapProtocolTests(unittest.TestCase):
                     self.assertIn("0 of 0", (self.folder / "RESULTS.md").read_text(encoding="utf-8"))
 
     def test_old_or_invalid_expectation_fails_before_opening_board(self):
-        for field, value in (("map_policy", None), ("map_policy", 2), ("map_policy", True),
-                             ("map_continuity", None), ("map_continuity", [1, 0]),
-                             ("map_continuity", [1, 0, 1]), ("map_continuity", [1, False, 0]),
-                             ("map_continuous", None), ("map_continuous", 1)):
+        for field, value in (
+            ("map_policy", None),
+            ("map_policy", 2),
+            ("map_policy", True),
+            ("map_continuity", None),
+            ("map_continuity", [1, 0]),
+            ("map_continuity", [1, 0, 1]),
+            ("map_continuity", [1, False, 0]),
+            ("map_continuous", None),
+            ("map_continuous", 1),
+        ):
             with self.subTest(field=field, value=value):
                 original = self.map[field]
                 if value is None:
@@ -326,8 +396,13 @@ class MapProtocolTests(unittest.TestCase):
                 self.write_expectations()
                 with mock.patch.object(mvo_stream, "Board") as constructor:
                     with self.assertRaisesRegex(ValueError, "map_(policy|continuity|continuous)"):
-                        mvo_stream.stream("no-port", self.frames, self.expected,
-                                          masks_path=self.masks, expected_map_path=self.expected_map)
+                        mvo_stream.stream(
+                            "no-port",
+                            self.frames,
+                            self.expected,
+                            masks_path=self.masks,
+                            expected_map_path=self.expected_map,
+                        )
                     constructor.assert_not_called()
                 self.map[field] = original
         self.write_expectations()
@@ -359,20 +434,49 @@ class MapProtocolTests(unittest.TestCase):
     def test_firmware_freezes_every_map_byte_and_resets_only_on_start(self):
         project = Path(__file__).resolve().parents[1]
         include = self.folder / "include"
-        for name in ("driver/usb_serial_jtag.h", "driver/usb_serial_jtag_vfs.h", "esp_cpu.h", "esp_heap_caps.h",
-                     "esp_timer.h", "freertos/FreeRTOS.h", "freertos/semphr.h", "freertos/task.h", "sdkconfig.h"):
+        for name in (
+            "driver/usb_serial_jtag.h",
+            "driver/usb_serial_jtag_vfs.h",
+            "esp_cpu.h",
+            "esp_heap_caps.h",
+            "esp_timer.h",
+            "freertos/FreeRTOS.h",
+            "freertos/semphr.h",
+            "freertos/task.h",
+            "sdkconfig.h",
+        ):
             header = include / name
             header.parent.mkdir(parents=True, exist_ok=True)
             header.write_text("", encoding="ascii")
         program = self.folder / "firmware_check.exe"
         env = dict(os.environ, TMP=str(self.folder), TEMP=str(self.folder))
-        subprocess.run(["gcc", "-std=c99", "-O1", "-Wall", "-Wextra", "-Werror", "-Wno-unused-function", *config_defines(),
-                        "-ffunction-sections", "-fdata-sections", "-Wl,--gc-sections",
-                        *(["-static"] if sys.platform == "win32" else []), f"-I{include}", f"-I{project / 'core'}",
-                        str(project / "tests/c/mvo_map_continuity_check.c"),
-                        str(project / "core/mono_cloud.c"), str(project / "core/voxel_map.c"),
-                        str(project / "core/obstacle_dir.c"), str(project / "core/path_plan.c"), "-o", str(program)],
-                       check=True, env=env)
+        subprocess.run(
+            [
+                "gcc",
+                "-std=c99",
+                "-O1",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-Wno-unused-function",
+                *config_defines(),
+                "-ffunction-sections",
+                "-fdata-sections",
+                "-Wl,--gc-sections",
+                *(["-static"] if sys.platform == "win32" else []),
+                f"-I{include}",
+                f"-I{project / 'core'}",
+                str(project / "tests/c/mvo_map_continuity_check.c"),
+                str(project / "core/mono_cloud.c"),
+                str(project / "core/voxel_map.c"),
+                str(project / "core/obstacle_dir.c"),
+                str(project / "core/path_plan.c"),
+                "-o",
+                str(program),
+            ],
+            check=True,
+            env=env,
+        )
         output = subprocess.run([str(program)], check=True, env=env, capture_output=True, text=True).stdout.splitlines()
         steps = [mvo_stream.fields(line)["map_continuous"] for line in output if line.startswith("step ")]
         maps = [mvo_stream.fields(line)["map_continuous"] for line in output if line.startswith("map ")]
@@ -394,7 +498,7 @@ class FakeCloudBoard(FakeBoard):
         count = int(self.frame_index > 0)
         continuous = int(self.frame_index < 2)
         if count:
-            struct.pack_into("<6I", raw, 0, 0x3f800000, 0x40000000, 0x40400000, 17, 0x3f000000, 1)
+            struct.pack_into("<6I", raw, 0, 0x3F800000, 0x40000000, 0x40400000, 17, 0x3F000000, 1)
         struct.pack_into("<IIi", raw, 512 * 24, count, 0, continuous)
         return bytes(raw)
 
@@ -403,11 +507,15 @@ class FakeCloudBoard(FakeBoard):
         if command == "cloud":
             self.sent.append(data)
             count, continuous = int(self.frame_index > 0), int(self.frame_index < 2)
-            self.pending.append(f"cloud count={count} dropped=0 continuous={continuous} hash={mvo_stream.fnv(self.cloud_bytes())}")
+            self.pending.append(
+                f"cloud count={count} dropped=0 continuous={continuous} hash={mvo_stream.fnv(self.cloud_bytes())}"
+            )
             if count:
-                x = 0x3f800001 if self.bad_point else 0x3f800000
-                self.pending.append(f"point index=0 id=17 x_bits={x} y_bits=1073741824 z_bits=1077936128 "
-                                    "spread_bits=1056964608 observations=1")
+                x = 0x3F800001 if self.bad_point else 0x3F800000
+                self.pending.append(
+                    f"point index=0 id=17 x_bits={x} y_bits=1073741824 z_bits=1077936128 "
+                    "spread_bits=1056964608 observations=1"
+                )
             self.pending.append(f"cloud_end count={count}")
             return
         super().send(data)
@@ -417,18 +525,24 @@ class FakeCloudBoard(FakeBoard):
             if self.bad_step and index == 2:
                 continuous = 1
             line = self.pending[-1].replace("kind=1 ", "kind=2 ")
-            self.pending[-1] = (f"{line} cloud_count={count} cloud_accepted={accepted} cloud_dropped=0 "
-                                f"cloud_continuous={continuous} cloud_us=10")
+            self.pending[-1] = (
+                f"{line} cloud_count={count} cloud_accepted={accepted} cloud_dropped=0 "
+                f"cloud_continuous={continuous} cloud_us=10"
+            )
         elif command == "end":
             count, continuous = int(self.frame_index > 0), int(self.frame_index < 2)
-            self.pending[-1] += (f" cloud_count={count} cloud_dropped=0 cloud_continuous={continuous} "
-                                 f"cloud_hash={mvo_stream.fnv(self.cloud_bytes())}")
+            self.pending[-1] += (
+                f" cloud_count={count} cloud_dropped=0 cloud_continuous={continuous} "
+                f"cloud_hash={mvo_stream.fnv(self.cloud_bytes())}"
+            )
 
     def reply(self, prefixes, timeout):
         line = super().reply(prefixes, timeout)
         if line.startswith("ready") and self.cloud_policy is not None:
-            line += (f" cloud_policy={self.cloud_policy} cloud_sha256={'a' * 64} cloud_header_sha256={'b' * 64}"
-                     " cloud_capacity=512 cloud_bytes=12300")
+            line += (
+                f" cloud_policy={self.cloud_policy} cloud_sha256={'a' * 64} cloud_header_sha256={'b' * 64}"
+                " cloud_capacity=512 cloud_bytes=12300"
+            )
             self.lines[-1] = line
         return line
 
@@ -438,17 +552,38 @@ class CloudProtocolTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         folder = Path(self.temp.name)
-        self.frames, self.expected, self.expected_cloud = folder / "frames.bin", folder / "vo.json", folder / "cloud.json"
+        self.frames, self.expected, self.expected_cloud = (
+            folder / "frames.bin",
+            folder / "vo.json",
+            folder / "cloud.json",
+        )
         self.frames.write_bytes(bytes(mvo_stream.FRAME_BYTES * 4))
-        vo = dict(frames=4, every=1, step_hashes=[101, 102, 103], camera_bits=[1, 2, 3, 4], seed=1,
-                  core_sha256="core", header_sha256="header")
-        cloud = dict(frames=4, step_hashes=vo["step_hashes"], cloud_policy=1, cloud_sha256="a" * 64,
-                     cloud_header_sha256="b" * 64, source_sha256="c" * 64, cloud_progress=[
-                         dict(count=1, accepted=1, dropped=0, continuous=1),
-                         dict(count=1, accepted=0, dropped=0, continuous=0),
-                         dict(count=1, accepted=0, dropped=0, continuous=0)],
-                     cloud_count=1, cloud_dropped=0, cloud_continuous=0,
-                     cloud_hash=mvo_stream.fnv(FakeCloudBoard().cloud_bytes()))
+        vo = dict(
+            frames=4,
+            every=1,
+            step_hashes=[101, 102, 103],
+            camera_bits=[1, 2, 3, 4],
+            seed=1,
+            core_sha256="core",
+            header_sha256="header",
+        )
+        cloud = dict(
+            frames=4,
+            step_hashes=vo["step_hashes"],
+            cloud_policy=1,
+            cloud_sha256="a" * 64,
+            cloud_header_sha256="b" * 64,
+            source_sha256="c" * 64,
+            cloud_progress=[
+                dict(count=1, accepted=1, dropped=0, continuous=1),
+                dict(count=1, accepted=0, dropped=0, continuous=0),
+                dict(count=1, accepted=0, dropped=0, continuous=0),
+            ],
+            cloud_count=1,
+            cloud_dropped=0,
+            cloud_continuous=0,
+            cloud_hash=mvo_stream.fnv(FakeCloudBoard().cloud_bytes()),
+        )
         cloud["frames_sha256"] = hashlib.sha256(bytes(mvo_stream.FRAME_BYTES * 4)).hexdigest()
         cloud["frame_sha256"] = [hashlib.sha256(bytes(mvo_stream.FRAME_BYTES)).hexdigest()] * 4
         # Hash of the final state has one point and interrupted continuity.
@@ -460,8 +595,9 @@ class CloudProtocolTests(unittest.TestCase):
 
     def replay(self, board, limit=None):
         with mock.patch.object(mvo_stream, "Board", return_value=board), mock.patch("builtins.print"):
-            return mvo_stream.stream("no-port", self.frames, self.expected, limit=limit,
-                                     expected_cloud_path=self.expected_cloud)
+            return mvo_stream.stream(
+                "no-port", self.frames, self.expected, limit=limit, expected_cloud_path=self.expected_cloud
+            )
 
     def test_cloud_replay_checks_and_exports_real_point_bits(self):
         board = FakeCloudBoard()

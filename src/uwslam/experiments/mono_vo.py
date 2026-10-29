@@ -31,9 +31,15 @@ from pathlib import Path
 
 import numpy as np
 
-from uwslam.experiments.mask_motion import (REFERENCE_TIME_SCALE, TIME_SLACK, Camera, angle_deg, reference_poses,
-                                            rotation_vector)
-from uwslam.paths import LAKE_CLIP_RESULTS
+from uwslam.experiments.mask_motion import (
+    REFERENCE_TIME_SCALE,
+    TIME_SLACK,
+    Camera,
+    angle_deg,
+    reference_poses,
+    rotation_vector,
+)
+from uwslam.paths import CLIP_RESULTS
 from uwslam.utils import dump_json
 
 ASPECT = 544 / 960  # the lake clip's source frame
@@ -62,6 +68,7 @@ DRIFT_WINDOW_S = 5.0
 @dataclass
 class Step:
     """One processed pair: R_AB (a ray in B is R_AB d_B in A), B's centre in A's frame, and how it was found."""
+
     rotation: np.ndarray
     centre: np.ndarray
     kind: str  # "essential", "rotation", "lost"
@@ -73,8 +80,10 @@ class Step:
 def robot_grey(rgb: np.ndarray, size: tuple[int, int]) -> np.ndarray:
     """Any RGB frame -> the robot camera's grey frame at 320x240, or 2x2-averaged to 160x120."""
     import cv2
-    from uwslam.experiments.segmenter import RGB565_KEEP, WORK_HEIGHT, WORK_WIDTH, model_frame
     from PIL import Image
+
+    from uwslam.experiments.segmenter import RGB565_KEEP, WORK_HEIGHT, WORK_WIDTH, model_frame
+
     work = np.array(Image.fromarray(rgb).resize((WORK_WIDTH, WORK_HEIGHT), Image.Resampling.BILINEAR)) & RGB565_KEEP
     frame = work if size == (WORK_WIDTH, WORK_HEIGHT) else model_frame(work)
     if frame.shape[1::-1] != size:
@@ -85,33 +94,46 @@ def robot_grey(rgb: np.ndarray, size: tuple[int, int]) -> np.ndarray:
 def detect(grey: np.ndarray, existing: np.ndarray, scale: float, count: int) -> np.ndarray:
     """Up to `count` new Shi-Tomasi corners at least MIN_DISTANCE from each other and from the existing points."""
     import cv2
+
     mask = np.full(grey.shape, 255, dtype=np.uint8)
     for x, y in existing.reshape(-1, 2):
         cv2.circle(mask, (int(round(x)), int(round(y))), int(round(MIN_DISTANCE * scale)), 0, -1)
-    corners = cv2.goodFeaturesToTrack(grey, maxCorners=count, qualityLevel=QUALITY, minDistance=MIN_DISTANCE * scale,
-                                      mask=mask, blockSize=3)
+    corners = cv2.goodFeaturesToTrack(
+        grey, maxCorners=count, qualityLevel=QUALITY, minDistance=MIN_DISTANCE * scale, mask=mask, blockSize=3
+    )
     return np.zeros((0, 2), np.float32) if corners is None else corners.reshape(-1, 2).astype(np.float32)
 
 
-def track(first: np.ndarray, second: np.ndarray, points: np.ndarray, scale: float,
-          predicted: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
+def track(
+    first: np.ndarray, second: np.ndarray, points: np.ndarray, scale: float, predicted: np.ndarray | None = None
+) -> tuple[np.ndarray, np.ndarray]:
     """Pyramidal Lucas-Kanade forward and back, starting from `predicted` positions when given; returns the kept
     points' positions in `second` and the keep mask."""
     import cv2
+
     if not len(points):
         return np.zeros((0, 2), np.float32), np.zeros(0, bool)
     window = (max(7, int(LK_WINDOW * scale) | 1),) * 2
     levels = LK_LEVELS if scale >= 1 else LK_LEVELS - 1
     criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01)
     if predicted is None:
-        forward, ok, _ = cv2.calcOpticalFlowPyrLK(first, second, points.reshape(-1, 1, 2), None, winSize=window,
-                                                 maxLevel=levels, criteria=criteria)
+        forward, ok, _ = cv2.calcOpticalFlowPyrLK(
+            first, second, points.reshape(-1, 1, 2), None, winSize=window, maxLevel=levels, criteria=criteria
+        )
     else:
-        forward, ok, _ = cv2.calcOpticalFlowPyrLK(first, second, points.reshape(-1, 1, 2),
-                                                 predicted.reshape(-1, 1, 2).astype(np.float32).copy(), winSize=window,
-                                                 maxLevel=levels, criteria=criteria, flags=cv2.OPTFLOW_USE_INITIAL_FLOW)
-    back, ok_back, _ = cv2.calcOpticalFlowPyrLK(second, first, forward, None, winSize=window, maxLevel=levels,
-                                               criteria=criteria)
+        forward, ok, _ = cv2.calcOpticalFlowPyrLK(
+            first,
+            second,
+            points.reshape(-1, 1, 2),
+            predicted.reshape(-1, 1, 2).astype(np.float32).copy(),
+            winSize=window,
+            maxLevel=levels,
+            criteria=criteria,
+            flags=cv2.OPTFLOW_USE_INITIAL_FLOW,
+        )
+    back, ok_back, _ = cv2.calcOpticalFlowPyrLK(
+        second, first, forward, None, winSize=window, maxLevel=levels, criteria=criteria
+    )
     error = np.linalg.norm(back.reshape(-1, 2) - points.reshape(-1, 2), axis=1)
     height, width = first.shape
     moved = forward.reshape(-1, 2)
@@ -120,10 +142,12 @@ def track(first: np.ndarray, second: np.ndarray, points: np.ndarray, scale: floa
     return moved[keep], keep
 
 
-def triangulate(points_a: np.ndarray, points_b: np.ndarray, rotation_cv: np.ndarray, translation_cv: np.ndarray,
-                matrix: np.ndarray) -> np.ndarray:
+def triangulate(
+    points_a: np.ndarray, points_b: np.ndarray, rotation_cv: np.ndarray, translation_cv: np.ndarray, matrix: np.ndarray
+) -> np.ndarray:
     """3D points in A's camera frame from two views with X_B = R X_A + t (OpenCV's convention)."""
     import cv2
+
     first = matrix @ np.hstack([np.eye(3), np.zeros((3, 1))])
     second = matrix @ np.hstack([rotation_cv, translation_cv.reshape(3, 1)])
     homogeneous = cv2.triangulatePoints(first, second, points_a.T.astype(np.float64), points_b.T.astype(np.float64))
@@ -133,6 +157,7 @@ def triangulate(points_a: np.ndarray, points_b: np.ndarray, rotation_cv: np.ndar
 def pure_rotation(points_a: np.ndarray, points_b: np.ndarray, matrix: np.ndarray) -> tuple[np.ndarray | None, int]:
     """R_AB of a pure rotation from a RANSAC homography H = K R K^-1 (X_B = R X_A), and its inlier count."""
     import cv2
+
     homography, inliers = cv2.findHomography(points_a, points_b, cv2.RANSAC, 2.0 * RANSAC_PIXELS)
     if homography is None:
         return None, 0
@@ -173,6 +198,7 @@ class MonoVO:
 
     def step(self, grey: np.ndarray) -> Step:
         import cv2
+
         moved, keep = track(self.grey, grey, self.points, self.scale)
         before, ids = self.points[keep], self.ids[keep]
         self.grey, self.points, self.ids = grey, moved, ids
@@ -184,17 +210,26 @@ class MonoVO:
             self.depths = {key: rotation.T @ point for key, point in self.depths.items() if key in kept}
             result = Step(rotation, np.zeros(3), "rotation", len(moved), inliers, 0)
         else:
-            essential, mask = cv2.findEssentialMat(before, moved, self.matrix, cv2.RANSAC, 0.999, RANSAC_PIXELS * self.scale)
+            essential, mask = cv2.findEssentialMat(
+                before, moved, self.matrix, cv2.RANSAC, 0.999, RANSAC_PIXELS * self.scale
+            )
             if essential is None or essential.shape != (3, 3):
                 result = self.lose(len(moved))
             else:
-                count, rotation_cv, translation_cv, pose_mask = cv2.recoverPose(essential, before, moved, self.matrix, mask=mask)
+                count, rotation_cv, translation_cv, pose_mask = cv2.recoverPose(
+                    essential, before, moved, self.matrix, mask=mask
+                )
                 inlier = pose_mask.ravel() > 0
                 if count < MIN_INLIERS:
                     result = self.lose(len(moved))
                 else:
-                    result = self.translate(before[inlier], moved[inlier], ids[inlier], rotation_cv, translation_cv.ravel())
-                    self.points, self.ids = moved[inlier], ids[inlier]  # outliers of the epipolar model stop being tracked
+                    result = self.translate(
+                        before[inlier], moved[inlier], ids[inlier], rotation_cv, translation_cv.ravel()
+                    )
+                    self.points, self.ids = (
+                        moved[inlier],
+                        ids[inlier],
+                    )  # outliers of the epipolar model stop being tracked
         self.refill(grey)
         return result
 
@@ -209,8 +244,11 @@ class MonoVO:
         in_a = triangulate(before, moved, rotation_cv, translation_cv, self.matrix)
         in_b = in_a @ rotation_cv.T + translation_cv
         valid = (in_a[:, 2] > 0) & (in_b[:, 2] > 0)
-        ratios = [self.depths[key][2] / point[2] for key, point, ok in zip(ids.tolist(), in_a, valid)
-                  if ok and key in self.depths and self.depths[key][2] > 0]
+        ratios = [
+            self.depths[key][2] / point[2]
+            for key, point, ok in zip(ids.tolist(), in_a, valid)
+            if ok and key in self.depths and self.depths[key][2] > 0
+        ]
         if len(ratios) >= MIN_SCALE_POINTS:
             length = float(np.median(ratios))
         else:
@@ -228,16 +266,19 @@ def turned_pixels(points: np.ndarray, rotation_ab: np.ndarray, matrix: np.ndarra
     return (turned[:, :2] / turned[:, 2:3]).astype(np.float32)
 
 
-def triangulate_world(pixels_a: np.ndarray, pixels_b: np.ndarray, pose_a: tuple, pose_b: tuple, matrix: np.ndarray,
-                      scale: float) -> tuple[np.ndarray, np.ndarray]:
+def triangulate_world(
+    pixels_a: np.ndarray, pixels_b: np.ndarray, pose_a: tuple, pose_b: tuple, matrix: np.ndarray, scale: float
+) -> tuple[np.ndarray, np.ndarray]:
     """World points seen from two posed cameras (camera-to-world rotation, centre) and which of them to trust: in front
     of both cameras, reprojecting within MAX_REPROJECTION and seen under at least MIN_TRIANGULATION_DEG."""
     import cv2
+
     projections = []
     for rotation, centre in (pose_a, pose_b):
         projections.append(matrix @ np.hstack([rotation.T, (-rotation.T @ centre).reshape(3, 1)]))
-    homogeneous = cv2.triangulatePoints(projections[0], projections[1], pixels_a.T.astype(np.float64),
-                                        pixels_b.T.astype(np.float64))
+    homogeneous = cv2.triangulatePoints(
+        projections[0], projections[1], pixels_a.T.astype(np.float64), pixels_b.T.astype(np.float64)
+    )
     world = (homogeneous[:3] / homogeneous[3]).T
     good = np.isfinite(world).all(axis=1)
     for (rotation, centre), pixels in zip((pose_a, pose_b), (pixels_a, pixels_b)):
@@ -247,7 +288,9 @@ def triangulate_world(pixels_a: np.ndarray, pixels_b: np.ndarray, pose_a: tuple,
         error = np.linalg.norm(projected[:, :2] / np.where(local[:, 2:3] > 0, projected[:, 2:3], 1.0) - pixels, axis=1)
         good &= error < MAX_REPROJECTION * scale
     rays_a, rays_b = world - pose_a[1], world - pose_b[1]
-    cosine = np.einsum("ij,ij->i", rays_a, rays_b) / (np.linalg.norm(rays_a, axis=1) * np.linalg.norm(rays_b, axis=1) + 1e-12)
+    cosine = np.einsum("ij,ij->i", rays_a, rays_b) / (
+        np.linalg.norm(rays_a, axis=1) * np.linalg.norm(rays_b, axis=1) + 1e-12
+    )
     good &= cosine < np.cos(np.radians(MIN_TRIANGULATION_DEG))
     return world, good
 
@@ -276,8 +319,11 @@ class KeyframeVO:
         if self.keyframe is not None and self.initialised:
             spacing = float(np.linalg.norm(self.centre - self.keyframe["centre"]))
             self.baseline = spacing if spacing > 0 else self.baseline
-        self.keyframe = {"rotation": self.rotation.copy(), "centre": self.centre.copy(),
-                         "pixels": {int(key): point.copy() for key, point in zip(self.ids, self.points)}}
+        self.keyframe = {
+            "rotation": self.rotation.copy(),
+            "centre": self.centre.copy(),
+            "pixels": {int(key): point.copy() for key, point in zip(self.ids, self.points)},
+        }
 
     def start(self, grey: np.ndarray) -> None:
         self.grey = grey
@@ -311,10 +357,13 @@ class KeyframeVO:
         self.refill(grey)
         self.turn = rotation_before.T @ self.rotation
         centre = rotation_before.T @ (self.centre - centre_before)
-        return Step(self.turn.copy(), centre, kind, len(moved), inliers, sum(int(key) in self.map for key in self.ids.tolist()))
+        return Step(
+            self.turn.copy(), centre, kind, len(moved), inliers, sum(int(key) in self.map for key in self.ids.tolist())
+        )
 
     def initialise(self) -> tuple[str, int]:
         import cv2
+
         ids, before, after = self.common()
         if len(ids) < MIN_INIT_INLIERS:
             self.set_keyframe()
@@ -326,18 +375,23 @@ class KeyframeVO:
         if parallax(before, after, rotation, self.matrix) < MIN_INIT_PARALLAX * self.scale:
             self.rotation = keyframe_pose[0] @ rotation
             return "rotation", inliers
-        essential, mask = cv2.findEssentialMat(before, after, self.matrix, cv2.RANSAC, 0.999, RANSAC_PIXELS * self.scale)
+        essential, mask = cv2.findEssentialMat(
+            before, after, self.matrix, cv2.RANSAC, 0.999, RANSAC_PIXELS * self.scale
+        )
         if essential is None or essential.shape != (3, 3):
             return "lost", 0
-        count, rotation_cv, translation_cv, pose_mask = cv2.recoverPose(essential, before, after, self.matrix, mask=mask)
+        count, rotation_cv, translation_cv, pose_mask = cv2.recoverPose(
+            essential, before, after, self.matrix, mask=mask
+        )
         if count < MIN_INIT_INLIERS:
             self.rotation = keyframe_pose[0] @ rotation
             return "rotation", inliers
         inlier = pose_mask.ravel() > 0
         self.rotation = keyframe_pose[0] @ rotation_cv.T
         self.centre = keyframe_pose[1] + keyframe_pose[0] @ (-rotation_cv.T @ translation_cv.ravel()) * self.baseline
-        world, good = triangulate_world(before[inlier], after[inlier], keyframe_pose, (self.rotation, self.centre),
-                                        self.matrix, self.scale)
+        world, good = triangulate_world(
+            before[inlier], after[inlier], keyframe_pose, (self.rotation, self.centre), self.matrix, self.scale
+        )
         self.map = {int(key): point for key, point, ok in zip(ids[inlier].tolist(), world, good) if ok}
         if len(self.map) < MIN_PNP_POINTS:
             self.map, self.rotation, self.centre = {}, keyframe_pose[0] @ rotation, keyframe_pose[1].copy()
@@ -355,6 +409,7 @@ class KeyframeVO:
         """PnP failed: one step against the previous frame instead, a pure rotation (map kept) or the essential matrix
         at the last step length, whose inliers become the new map."""
         import cv2
+
         if len(before) < MIN_INLIERS:
             return self.drop_map()
         rotation, inliers = pure_rotation(before, self.points, self.matrix)
@@ -364,23 +419,34 @@ class KeyframeVO:
             self.rotation = rotation_before @ rotation
             self.set_keyframe()
             return "rotation", inliers
-        essential, mask = cv2.findEssentialMat(before, self.points, self.matrix, cv2.RANSAC, 0.999, RANSAC_PIXELS * self.scale)
+        essential, mask = cv2.findEssentialMat(
+            before, self.points, self.matrix, cv2.RANSAC, 0.999, RANSAC_PIXELS * self.scale
+        )
         if essential is None or essential.shape != (3, 3):
             return self.drop_map()
-        count, rotation_cv, translation_cv, pose_mask = cv2.recoverPose(essential, before, self.points, self.matrix, mask=mask)
+        count, rotation_cv, translation_cv, pose_mask = cv2.recoverPose(
+            essential, before, self.points, self.matrix, mask=mask
+        )
         if count < MIN_INLIERS:
             return self.drop_map()
         inlier = pose_mask.ravel() > 0
         self.rotation = rotation_before @ rotation_cv.T
         self.centre = centre_before + rotation_before @ (-rotation_cv.T @ translation_cv.ravel()) * self.step_length
-        world, good = triangulate_world(before[inlier], self.points[inlier], (rotation_before, centre_before),
-                                        (self.rotation, self.centre), self.matrix, self.scale)
+        world, good = triangulate_world(
+            before[inlier],
+            self.points[inlier],
+            (rotation_before, centre_before),
+            (self.rotation, self.centre),
+            self.matrix,
+            self.scale,
+        )
         self.map = {int(key): point for key, point, ok in zip(self.ids[inlier].tolist(), world, good) if ok}
         self.set_keyframe()
         return "recovered", int(count)
 
     def track_map(self) -> tuple[str, int]:
         import cv2
+
         rows = [k for k, key in enumerate(self.ids.tolist()) if key in self.map]
         if len(rows) < MIN_PNP_POINTS:
             return "lost", 0
@@ -388,9 +454,19 @@ class KeyframeVO:
         pixels = self.points[rows].astype(np.float64)
         to_camera = self.rotation.T
         rvec, tvec = cv2.Rodrigues(to_camera)[0], (-to_camera @ self.centre).reshape(3, 1)
-        ok, rvec, tvec, inliers = cv2.solvePnPRansac(objects, pixels, self.matrix, None, rvec, tvec, useExtrinsicGuess=True,
-                                                     iterationsCount=100, reprojectionError=PNP_PIXELS * self.scale,
-                                                     confidence=0.99, flags=cv2.SOLVEPNP_ITERATIVE)
+        ok, rvec, tvec, inliers = cv2.solvePnPRansac(
+            objects,
+            pixels,
+            self.matrix,
+            None,
+            rvec,
+            tvec,
+            useExtrinsicGuess=True,
+            iterationsCount=100,
+            reprojectionError=PNP_PIXELS * self.scale,
+            confidence=0.99,
+            flags=cv2.SOLVEPNP_ITERATIVE,
+        )
         if not ok or inliers is None or len(inliers) < MIN_PNP_POINTS:
             return "lost", 0
         inliers = inliers.ravel()
@@ -417,15 +493,22 @@ class KeyframeVO:
         new = np.array([int(key) not in self.map for key in ids.tolist()], dtype=bool)
         if not new.any():
             return
-        world, good = triangulate_world(before[new], after[new], (self.keyframe["rotation"], self.keyframe["centre"]),
-                                        (self.rotation, self.centre), self.matrix, self.scale)
+        world, good = triangulate_world(
+            before[new],
+            after[new],
+            (self.keyframe["rotation"], self.keyframe["centre"]),
+            (self.rotation, self.centre),
+            self.matrix,
+            self.scale,
+        )
         for key, point, ok in zip(ids[new].tolist(), world, good):
             if ok:
                 self.map[int(key)] = point
 
 
-def run_vo(frames: list[np.ndarray], stride: int, camera: Camera, scale: float,
-           method: type = MonoVO) -> tuple[list[int], list[Step], np.ndarray, np.ndarray, float]:
+def run_vo(
+    frames: list[np.ndarray], stride: int, camera: Camera, scale: float, method: type = MonoVO
+) -> tuple[list[int], list[Step], np.ndarray, np.ndarray, float]:
     """Processed frame indices, the steps, camera-to-world rotations and centres (world = first camera), ms per frame."""
     vo = method(camera, scale)
     indices = list(range(0, len(frames), stride))
@@ -450,7 +533,7 @@ def umeyama(source: np.ndarray, target: np.ndarray) -> tuple[float, np.ndarray, 
     if np.linalg.det(u) * np.linalg.det(vt) < 0:
         sign[2, 2] = -1
     rotation = u @ sign @ vt
-    variance = (a ** 2).sum() / len(source)
+    variance = (a**2).sum() / len(source)
     scale = float(np.trace(np.diag(d) @ sign) / variance) if variance > 0 else 0.0
     return scale, rotation, mean_t - scale * rotation @ mean_s
 
@@ -461,8 +544,15 @@ def map_heading(rotations: np.ndarray) -> np.ndarray:
     return np.unwrap(np.arctan2(-forward[..., 0], forward[..., 2]))
 
 
-def evaluate(indices: list[int], steps: list[Step], rotations: np.ndarray, centres: np.ndarray, times: np.ndarray,
-             reference_rotations: np.ndarray, reference_centres: np.ndarray) -> dict:
+def evaluate(
+    indices: list[int],
+    steps: list[Step],
+    rotations: np.ndarray,
+    centres: np.ndarray,
+    times: np.ndarray,
+    reference_rotations: np.ndarray,
+    reference_centres: np.ndarray,
+) -> dict:
     """Errors of one run against the reference (see the module docstring)."""
     ref_r, ref_c = reference_rotations[indices], reference_centres[indices]
     scale, rotation, offset = umeyama(centres, ref_c)
@@ -487,25 +577,34 @@ def evaluate(indices: list[int], steps: list[Step], rotations: np.ndarray, centr
         if path_reference[inside].sum() > 0.1:
             windows.append(float(path_estimate[inside].sum() / path_reference[inside].sum()))
     kinds = [step.kind for step in steps]
-    return {"steps": len(steps), "lost": kinds.count("lost"), "rotation_only": kinds.count("rotation"),
-            "kinds": {kind: kinds.count(kind) for kind in sorted(set(kinds))},
-            "median_tracks": float(np.median([s.tracks for s in steps])),
-            "ate_rmse": float(np.sqrt(np.mean(position_error ** 2))), "ate_max": float(position_error.max()),
-            "final_error": float(position_error[-1]), "path_length_reference": float(path_reference.sum()),
-            "alignment_scale": scale,
-            "pair_rotation_median_deg": float(np.median(pair_errors)), "pair_rotation_p90_deg": float(np.percentile(pair_errors, 90)),
-            "zero_rotation_median_deg": float(np.median(zero_errors)),
-            "direction_median_deg": float(np.median(direction_errors)) if direction_errors else None,
-            "direction_pairs": len(direction_errors),
-            "heading_rmse_deg": float(np.sqrt(np.mean(heading ** 2))), "heading_max_deg": float(heading.max()),
-            "scale_drift_window_ratio_min": float(min(windows)) if windows else None,
-            "scale_drift_window_ratio_max": float(max(windows)) if windows else None,
-            "aligned": aligned}
+    return {
+        "steps": len(steps),
+        "lost": kinds.count("lost"),
+        "rotation_only": kinds.count("rotation"),
+        "kinds": {kind: kinds.count(kind) for kind in sorted(set(kinds))},
+        "median_tracks": float(np.median([s.tracks for s in steps])),
+        "ate_rmse": float(np.sqrt(np.mean(position_error**2))),
+        "ate_max": float(position_error.max()),
+        "final_error": float(position_error[-1]),
+        "path_length_reference": float(path_reference.sum()),
+        "alignment_scale": scale,
+        "pair_rotation_median_deg": float(np.median(pair_errors)),
+        "pair_rotation_p90_deg": float(np.percentile(pair_errors, 90)),
+        "zero_rotation_median_deg": float(np.median(zero_errors)),
+        "direction_median_deg": float(np.median(direction_errors)) if direction_errors else None,
+        "direction_pairs": len(direction_errors),
+        "heading_rmse_deg": float(np.sqrt(np.mean(heading**2))),
+        "heading_max_deg": float(heading.max()),
+        "scale_drift_window_ratio_min": float(min(windows)) if windows else None,
+        "scale_drift_window_ratio_max": float(max(windows)) if windows else None,
+        "aligned": aligned,
+    }
 
 
 def read_frames(video: Path, end_s: float) -> tuple[dict[str, list[np.ndarray]], float, tuple[int, int]]:
     """Grey robot frames at both resolutions for every video frame up to end_s, the frame rate and the source size."""
     import cv2
+
     capture = cv2.VideoCapture(str(video))
     if not capture.isOpened():
         raise ValueError(f"Cannot open video: {video}")
@@ -530,42 +629,60 @@ def number(value, digits: int = 2, unit: str = "") -> str:
 
 
 def write_report(output: Path, summary: dict) -> None:
-    lines = ["# Monocular visual odometry on the robot camera's frames (lake clip, reference poses)", "",
-             f"Source: `{summary['source']['name']}`, {summary['source']['frames']} frames ({summary['source']['duration_s']:.1f} s "
-             f"at {summary['source']['fps']:g} FPS); reference: the reconstruction's keyframes at the {summary['time_scale']:g}× pose "
-             f"timing, interpolated to every frame. No IMU, depth or ranger data are used.", "",
-             "- Frames take the robot camera's path (320×240, RGB565) and turn grey; 160×120 is the 2×2 average the "
-             "segmentation model sees. Intrinsics: a 110° horizontal field of view (fitted in the mask_motion probe).",
-             "- Both methods track Shi-Tomasi corners with pyramidal Lucas-Kanade and a forward-backward check. *pairwise*: "
-             "the essential matrix by RANSAC between consecutive processed frames (a homography when the tracks barely "
-             "move), with scale carried from step to step by the points both steps triangulate. *keyframe*: the essential "
-             "matrix only to initialise, then PnP against a map of points triangulated between keyframes (made when the "
-             "rotation-compensated parallax reaches 6 px at 320×240), and tracks predicted by the last rotation.",
-             "- Positions are compared after one similarity alignment of the whole run (scale, rotation, offset); "
-             "rotation, the direction of travel and the heading are compared directly.", "",
-             "## Results", "",
-             "| Method | Frames | Rate | Steps (lost / rotation only) | Position RMSE after alignment | Final error | Heading RMSE / max | "
-             "Rotation per pair, median (no rotation) | Direction of travel, median | Scale ratio over 5 s windows | ms per frame (PC) |",
-             "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    lines = [
+        "# Monocular visual odometry on the robot camera's frames (lake clip, reference poses)",
+        "",
+        f"Source: `{summary['source']['name']}`, {summary['source']['frames']} frames ({summary['source']['duration_s']:.1f} s "
+        f"at {summary['source']['fps']:g} FPS); reference: the reconstruction's keyframes at the {summary['time_scale']:g}× pose "
+        f"timing, interpolated to every frame. No IMU, depth or ranger data are used.",
+        "",
+        "- Frames take the robot camera's path (320×240, RGB565) and turn grey; 160×120 is the 2×2 average the "
+        "segmentation model sees. Intrinsics: a 110° horizontal field of view (fitted in the mask_motion probe).",
+        "- Both methods track Shi-Tomasi corners with pyramidal Lucas-Kanade and a forward-backward check. *pairwise*: "
+        "the essential matrix by RANSAC between consecutive processed frames (a homography when the tracks barely "
+        "move), with scale carried from step to step by the points both steps triangulate. *keyframe*: the essential "
+        "matrix only to initialise, then PnP against a map of points triangulated between keyframes (made when the "
+        "rotation-compensated parallax reaches 6 px at 320×240), and tracks predicted by the last rotation.",
+        "- Positions are compared after one similarity alignment of the whole run (scale, rotation, offset); "
+        "rotation, the direction of travel and the heading are compared directly.",
+        "",
+        "## Results",
+        "",
+        "| Method | Frames | Rate | Steps (lost / rotation only) | Position RMSE after alignment | Final error | Heading RMSE / max | "
+        "Rotation per pair, median (no rotation) | Direction of travel, median | Scale ratio over 5 s windows | ms per frame (PC) |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
     for row in summary["runs"]:
-        lines.append(f"| {row['method']} | {row['resolution']} | {row['rate_hz']:g} Hz | {row['steps']} ({row['lost']} / {row['rotation_only']}) | "
-                     f"{number(row['ate_rmse'], 2, ' m')} | {number(row['final_error'], 2, ' m')} | "
-                     f"{number(row['heading_rmse_deg'], 1, '°')} / {number(row['heading_max_deg'], 0, '°')} | "
-                     f"{number(row['pair_rotation_median_deg'], 2, '°')} ({number(row['zero_rotation_median_deg'], 2, '°')}) | "
-                     f"{number(row['direction_median_deg'], 1, '°')} | "
-                     f"{number(row['scale_drift_window_ratio_min'], 2)}–{number(row['scale_drift_window_ratio_max'], 2)} | "
-                     f"{number(row['ms_per_frame'], 1)} |")
-    lines += ["", f"The reference camera travels {summary['runs'][0]['path_length_reference']:.1f} reconstruction units "
-              "(taken as metres). \"Scale ratio over 5 s windows\" is the aligned estimated path length over the reference "
-              "path length in each 5 s window: 1 everywhere means no scale drift.", "",
-              "## Limits", "",
-              "- One diver clip, not the robot; the reference is a reconstruction interpolated between keyframes, in its "
-              "own units.",
-              "- A monocular run has no metric scale: the alignment supplies it after the fact.",
-              "- PC timings are for the OpenCV implementation and say nothing about an ESP32-S3.", "",
-              "Re-run (the output folder must not exist or be empty):", "", "```bash",
-              "python -m uwslam.experiments.mono_vo <video> --reconstruction <folder with images.txt> "
-              "--output results/lake_clip/mono_vo_2", "```", ""]
+        lines.append(
+            f"| {row['method']} | {row['resolution']} | {row['rate_hz']:g} Hz | {row['steps']} ({row['lost']} / {row['rotation_only']}) | "
+            f"{number(row['ate_rmse'], 2, ' m')} | {number(row['final_error'], 2, ' m')} | "
+            f"{number(row['heading_rmse_deg'], 1, '°')} / {number(row['heading_max_deg'], 0, '°')} | "
+            f"{number(row['pair_rotation_median_deg'], 2, '°')} ({number(row['zero_rotation_median_deg'], 2, '°')}) | "
+            f"{number(row['direction_median_deg'], 1, '°')} | "
+            f"{number(row['scale_drift_window_ratio_min'], 2)}–{number(row['scale_drift_window_ratio_max'], 2)} | "
+            f"{number(row['ms_per_frame'], 1)} |"
+        )
+    lines += [
+        "",
+        f"The reference camera travels {summary['runs'][0]['path_length_reference']:.1f} reconstruction units "
+        '(taken as metres). "Scale ratio over 5 s windows" is the aligned estimated path length over the reference '
+        "path length in each 5 s window: 1 everywhere means no scale drift.",
+        "",
+        "## Limits",
+        "",
+        "- One diver clip, not the robot; the reference is a reconstruction interpolated between keyframes, in its "
+        "own units.",
+        "- A monocular run has no metric scale: the alignment supplies it after the fact.",
+        "- PC timings are for the OpenCV implementation and say nothing about an ESP32-S3.",
+        "",
+        "Re-run (the output folder must not exist or be empty):",
+        "",
+        "```bash",
+        "python -m uwslam.experiments.mono_vo <video> --reconstruction <folder with images.txt> "
+        "--output results/lake_clip/mono_vo_2",
+        "```",
+        "",
+    ]
     (output / "RESULTS.md").write_text("\n".join(lines), encoding="utf-8", newline="\n")
 
 
@@ -586,34 +703,71 @@ def run(video: Path, reconstruction: Path, output: Path, time_scale: float = REF
                 aligned = result.pop("aligned")
                 runs.append({"method": method, "resolution": name, "rate_hz": rate, "ms_per_frame": ms, **result})
                 for k, index in enumerate(indices):
-                    trajectories.append({"method": method, "resolution": name, "rate_hz": rate, "frame": index,
-                                         "t": round(float(times[index]), 4),
-                                         **{f"est_{a}": round(float(v), 4) for a, v in zip("xyz", aligned[k])},
-                                         **{f"ref_{a}": round(float(v), 4) for a, v in zip("xyz", reference_centres[index])},
-                                         **{f"est_rot_{a}": round(float(v), 4) for a, v in zip("xyz", np.degrees(rotation_vector(rotations[k])))}})
-                print(f"{method} {name} {rate:g} Hz: ATE {result['ate_rmse']:.2f}, heading RMSE {result['heading_rmse_deg']:.1f} deg, "
-                      f"lost {result['lost']}/{result['steps']}", flush=True)
+                    trajectories.append(
+                        {
+                            "method": method,
+                            "resolution": name,
+                            "rate_hz": rate,
+                            "frame": index,
+                            "t": round(float(times[index]), 4),
+                            **{f"est_{a}": round(float(v), 4) for a, v in zip("xyz", aligned[k])},
+                            **{f"ref_{a}": round(float(v), 4) for a, v in zip("xyz", reference_centres[index])},
+                            **{
+                                f"est_rot_{a}": round(float(v), 4)
+                                for a, v in zip("xyz", np.degrees(rotation_vector(rotations[k])))
+                            },
+                        }
+                    )
+                print(
+                    f"{method} {name} {rate:g} Hz: ATE {result['ate_rmse']:.2f}, heading RMSE {result['heading_rmse_deg']:.1f} deg, "
+                    f"lost {result['lost']}/{result['steps']}",
+                    flush=True,
+                )
     output.mkdir(parents=True, exist_ok=True)
     with (output / "trajectories.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(trajectories[0]))
         writer.writeheader()
         writer.writerows(trajectories)
-    summary = {"task": "Monocular visual odometry (KLT + essential matrix, scale from triangulated points) on the robot "
-                       "camera's grey frames, no IMU or rangers, against reconstructed reference poses",
-               "source": {"name": video.name, "sha256": hashlib.sha256(video.read_bytes()).hexdigest(), "fps": fps,
-                          "frames": len(times), "duration_s": float(times[-1]), "width": size[0], "height": size[1],
-                          "poses_sha256": hashlib.sha256((reconstruction / "images.txt").read_bytes()).hexdigest()},
-               "time_scale": time_scale, "hfov_deg": HFOV_DEG,
-               "methods": list(METHODS),
-               "settings": {"max_corners": MAX_CORNERS, "quality": QUALITY, "min_distance": MIN_DISTANCE, "refill_share": REFILL_SHARE,
-                            "lk_window": LK_WINDOW, "lk_levels": LK_LEVELS, "fb_max": FB_MAX, "ransac_pixels": RANSAC_PIXELS,
-                            "min_parallax": MIN_PARALLAX, "min_inliers": MIN_INLIERS, "min_scale_points": MIN_SCALE_POINTS,
-                            "min_init_parallax": MIN_INIT_PARALLAX, "min_init_inliers": MIN_INIT_INLIERS, "kf_parallax": KF_PARALLAX,
-                            "min_pnp_points": MIN_PNP_POINTS, "pnp_pixels": PNP_PIXELS, "max_reprojection": MAX_REPROJECTION,
-                            "min_triangulation_deg": MIN_TRIANGULATION_DEG,
-                            "strides": {str(rate): stride for rate, stride in RATES.items()}},
-               "runs": runs,
-               "source_sha256": {"mono_vo.py": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}}
+    summary = {
+        "task": "Monocular visual odometry (KLT + essential matrix, scale from triangulated points) on the robot "
+        "camera's grey frames, no IMU or rangers, against reconstructed reference poses",
+        "source": {
+            "name": video.name,
+            "sha256": hashlib.sha256(video.read_bytes()).hexdigest(),
+            "fps": fps,
+            "frames": len(times),
+            "duration_s": float(times[-1]),
+            "width": size[0],
+            "height": size[1],
+            "poses_sha256": hashlib.sha256((reconstruction / "images.txt").read_bytes()).hexdigest(),
+        },
+        "time_scale": time_scale,
+        "hfov_deg": HFOV_DEG,
+        "methods": list(METHODS),
+        "settings": {
+            "max_corners": MAX_CORNERS,
+            "quality": QUALITY,
+            "min_distance": MIN_DISTANCE,
+            "refill_share": REFILL_SHARE,
+            "lk_window": LK_WINDOW,
+            "lk_levels": LK_LEVELS,
+            "fb_max": FB_MAX,
+            "ransac_pixels": RANSAC_PIXELS,
+            "min_parallax": MIN_PARALLAX,
+            "min_inliers": MIN_INLIERS,
+            "min_scale_points": MIN_SCALE_POINTS,
+            "min_init_parallax": MIN_INIT_PARALLAX,
+            "min_init_inliers": MIN_INIT_INLIERS,
+            "kf_parallax": KF_PARALLAX,
+            "min_pnp_points": MIN_PNP_POINTS,
+            "pnp_pixels": PNP_PIXELS,
+            "max_reprojection": MAX_REPROJECTION,
+            "min_triangulation_deg": MIN_TRIANGULATION_DEG,
+            "strides": {str(rate): stride for rate, stride in RATES.items()},
+        },
+        "runs": runs,
+        "source_sha256": {"mono_vo.py": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()},
+    }
     dump_json(output / "summary.json", summary)
     write_report(output, summary)
     return summary
@@ -623,9 +777,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("video", type=Path, help="The lake clip video")
     parser.add_argument("--reconstruction", type=Path, required=True, help="Reconstruction folder holding images.txt")
-    parser.add_argument("--output", type=Path, default=LAKE_CLIP_RESULTS / "mono_vo", help="Fresh empty results directory")
-    parser.add_argument("--time-scale", type=float, default=REFERENCE_TIME_SCALE,
-                        help="Video seconds per second of the images.txt time column")
+    parser.add_argument("--output", type=Path, default=CLIP_RESULTS / "mono_vo", help="Fresh empty results directory")
+    parser.add_argument(
+        "--time-scale",
+        type=float,
+        default=REFERENCE_TIME_SCALE,
+        help="Video seconds per second of the images.txt time column",
+    )
     args = parser.parse_args()
     run(args.video, args.reconstruction, args.output, args.time_scale)
 

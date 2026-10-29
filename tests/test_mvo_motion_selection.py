@@ -1,34 +1,58 @@
 """Reproducible known-geometry motion-selection diagnostics; not an image-tracking test."""
 
 import csv
-from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 from uwslam.core import CFLAGS
 from uwslam.mvo import config_defines
 from uwslam.paths import CORE_DIR
 
-
 SOURCE = Path(__file__).resolve().parent / "c" / "mvo_motion_selection_check.c"
-UNITS = [CORE_DIR / name for name in ("mono_vo.c", "mono_vo_numerics.c", "mono_vo_homography.c",
-                                      "mono_vo_essential.c")]
+UNITS = [CORE_DIR / name for name in ("mono_vo.c", "mono_vo_numerics.c", "mono_vo_homography.c", "mono_vo_essential.c")]
 
 
 def build(folder: Path) -> Path:
     executable = folder / "mvo_motion_selection_check.exe"
-    subprocess.run(["gcc", *CFLAGS, *config_defines(), *(["-static"] if sys.platform == "win32" else []), f"-I{CORE_DIR}",
-                    str(SOURCE), *map(str, UNITS), "-lm", "-o", str(executable)], check=True)
+    subprocess.run(
+        [
+            "gcc",
+            *CFLAGS,
+            *config_defines(),
+            *(["-static"] if sys.platform == "win32" else []),
+            f"-I{CORE_DIR}",
+            str(SOURCE),
+            *map(str, UNITS),
+            "-lm",
+            "-o",
+            str(executable),
+        ],
+        check=True,
+    )
     return executable
 
 
-def samples(executable: Path, tag: str, pairs: int, sigma_x: float, sigma_y: float, outliers: float,
-            centre_x: float, centre_z: float, yaw: float, first_seed: int, trials: int) -> list[dict]:
-    command = [str(executable), *map(str, (pairs, sigma_x, sigma_y, outliers, centre_x, centre_z,
-                                          yaw, first_seed, trials, tag))]
+def samples(
+    executable: Path,
+    tag: str,
+    pairs: int,
+    sigma_x: float,
+    sigma_y: float,
+    outliers: float,
+    centre_x: float,
+    centre_z: float,
+    yaw: float,
+    first_seed: int,
+    trials: int,
+) -> list[dict]:
+    command = [
+        str(executable),
+        *map(str, (pairs, sigma_x, sigma_y, outliers, centre_x, centre_z, yaw, first_seed, trials, tag)),
+    ]
     text = subprocess.run(command, capture_output=True, text=True, check=True).stdout
     return list(csv.DictReader(text.splitlines()))
 
@@ -54,11 +78,19 @@ def summarize(rows: list[dict]) -> dict:
     weak = [row for row in rows if int(row["homography"]) < 15]
     essential = [row for row in rows if int(row["kind"]) == 2]
     correct = [row for row in essential if float(row["direction_cos"]) >= 0.9] if translation else []
-    weak_correct = [row for row in weak if int(row["kind"]) == 2 and float(row["direction_cos"]) >= 0.9] if translation else []
-    return {"tag": rows[0]["tag"], "trials": len(rows), "weak": len(weak), "essential": len(essential),
-            "correct_direction": len(correct), "weak_correct_direction": len(weak_correct),
-            "false_translation": 0 if translation else len(essential),
-            "mean_cpu_ms": sum(float(row["cpu_ms"]) for row in rows) / len(rows)}
+    weak_correct = (
+        [row for row in weak if int(row["kind"]) == 2 and float(row["direction_cos"]) >= 0.9] if translation else []
+    )
+    return {
+        "tag": rows[0]["tag"],
+        "trials": len(rows),
+        "weak": len(weak),
+        "essential": len(essential),
+        "correct_direction": len(correct),
+        "weak_correct_direction": len(weak_correct),
+        "false_translation": 0 if translation else len(essential),
+        "mean_cpu_ms": sum(float(row["cpu_ms"]) for row in rows) / len(rows),
+    }
 
 
 @unittest.skipUnless(shutil.which("gcc"), "gcc is needed")
@@ -70,8 +102,9 @@ class MvoMotionSelectionTests(unittest.TestCase):
             first = samples(executable, *args)
             second = samples(executable, *args)
         for a, b in zip(first, second):
-            self.assertEqual({k: v for k, v in a.items() if k != "cpu_ms"},
-                             {k: v for k, v in b.items() if k != "cpu_ms"})
+            self.assertEqual(
+                {k: v for k, v in a.items() if k != "cpu_ms"}, {k: v for k, v in b.items() if k != "cpu_ms"}
+            )
             self.assertNotEqual(int(a["kind"]), 2)
             self.assertEqual([float(a[k]) for k in ("estimate_x", "estimate_y", "estimate_z")], [0.0, 0.0, 0.0])
             self.assertEqual(int(a["rotation_support_2px"]), 25)
@@ -83,12 +116,15 @@ class MvoMotionSelectionTests(unittest.TestCase):
             clean = samples(executable, "weak", 25, 0, 0, 0, 0.3, 0, 0, 7001, 20)
             self.assertTrue(any(int(row["homography"]) < 15 for row in clean))
             self.assertTrue(all(int(row["kind"]) == 2 and float(row["direction_cos"]) > 0.99 for row in clean))
-            for count, noise, outliers, yaw in ((25, 1.0, 0.0, 0.0), (25, 2.0, 0.2, 5.0),
-                                                  (50, 2.0, 0.0, 5.0), (80, 2.0, 0.2, 0.0),
-                                                  (150, 3.0, 0.4, 15.0)):
+            for count, noise, outliers, yaw in (
+                (25, 1.0, 0.0, 0.0),
+                (25, 2.0, 0.2, 5.0),
+                (50, 2.0, 0.0, 5.0),
+                (80, 2.0, 0.2, 0.0),
+                (150, 3.0, 0.4, 15.0),
+            ):
                 with self.subTest(count=count, noise=noise, outliers=outliers, yaw=yaw):
-                    rows = samples(executable, "rotation", count, noise, noise / 2, outliers,
-                                   0, 0, yaw, 50001, 20)
+                    rows = samples(executable, "rotation", count, noise, noise / 2, outliers, 0, 0, yaw, 50001, 20)
                     self.assertTrue(all(int(row["kind"]) != 2 for row in rows), rows)
 
     def test_large_translation_does_not_require_rotation_support(self):
@@ -97,7 +133,9 @@ class MvoMotionSelectionTests(unittest.TestCase):
             rows = samples(executable, "large", 80, 0, 0, 0, 2.0, 0, 0, 7001, 20)
         self.assertTrue(all(int(row["homography"]) < 15 for row in rows))
         self.assertGreaterEqual(sum(int(row["kind"]) == 2 and float(row["direction_cos"]) > 0.99 for row in rows), 18)
-        self.assertTrue(any(0 <= int(row["rotation_model_support"]) < 3 and int(row["kind"]) == 2 for row in rows), rows)
+        self.assertTrue(
+            any(0 <= int(row["rotation_model_support"]) < 3 and int(row["kind"]) == 2 for row in rows), rows
+        )
 
     def test_small_rotation_subset_is_not_a_frame_wide_rotation(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -108,12 +146,17 @@ class MvoMotionSelectionTests(unittest.TestCase):
     def test_high_noise_counterexamples_do_not_invent_translation(self):
         with tempfile.TemporaryDirectory() as folder:
             executable = build(Path(folder))
-            for noise, outliers, yaw, seed in ((2.0, 0.2, 0.0, 250021), (3.0, 0.0, 0.0, 250021),
-                                                (3.0, 0.0, 5.0, 250008), (3.0, 0.0, 0.0, 500446),
-                                                (3.0, 0.0, 5.0, 500443), (3.0, 0.0, 0.0, 720117),
-                                                (5.0, 0.0, 0.0, 900026), (3.0, 0.0, 0.0, 11100008)):
-                row = samples(executable, "counterexample", 25, noise, noise / 2, outliers,
-                              0, 0, yaw, seed, 1)[0]
+            for noise, outliers, yaw, seed in (
+                (2.0, 0.2, 0.0, 250021),
+                (3.0, 0.0, 0.0, 250021),
+                (3.0, 0.0, 5.0, 250008),
+                (3.0, 0.0, 0.0, 500446),
+                (3.0, 0.0, 5.0, 500443),
+                (3.0, 0.0, 0.0, 720117),
+                (5.0, 0.0, 0.0, 900026),
+                (3.0, 0.0, 0.0, 11100008),
+            ):
+                row = samples(executable, "counterexample", 25, noise, noise / 2, outliers, 0, 0, yaw, seed, 1)[0]
                 self.assertNotEqual(int(row["kind"]), 2, row)
             for count in (150, 250):
                 rows = samples(executable, "extreme", count, 8.0, 4.0, 0.2, 0, 0, 5, 840001, 30)
@@ -132,8 +175,20 @@ class MvoMotionSelectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             binary = Path(folder) / "narrow_field_check.exe"
             source = SOURCE.with_name("mvo_narrow_field_check.c")
-            subprocess.run(["gcc", *CFLAGS, *config_defines(), *(["-static"] if sys.platform == "win32" else []),
-                            f"-I{CORE_DIR}", str(source), *map(str, UNITS), "-o", str(binary)], check=True)
+            subprocess.run(
+                [
+                    "gcc",
+                    *CFLAGS,
+                    *config_defines(),
+                    *(["-static"] if sys.platform == "win32" else []),
+                    f"-I{CORE_DIR}",
+                    str(source),
+                    *map(str, UNITS),
+                    "-o",
+                    str(binary),
+                ],
+                check=True,
+            )
             output = subprocess.run([str(binary)], check=True, capture_output=True, text=True).stdout
         values = {key: float(value) for key, value in (part.split("=") for part in output.split())}
         self.assertLess(values["h"], 15, output)
@@ -147,24 +202,52 @@ class MvoMotionSelectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             binary = Path(folder) / "narrow_noise_check.exe"
             source = SOURCE.with_name("mvo_narrow_noise_check.c")
-            subprocess.run(["gcc", *CFLAGS, *config_defines(), *(["-static"] if sys.platform == "win32" else []),
-                            f"-I{CORE_DIR}", str(source), *map(str, UNITS), "-o", str(binary)], check=True)
+            subprocess.run(
+                [
+                    "gcc",
+                    *CFLAGS,
+                    *config_defines(),
+                    *(["-static"] if sys.platform == "win32" else []),
+                    f"-I{CORE_DIR}",
+                    str(source),
+                    *map(str, UNITS),
+                    "-o",
+                    str(binary),
+                ],
+                check=True,
+            )
             for noise, outliers in ((0.5, 0.0), (1.0, 0.2)):
-                output = subprocess.run([str(binary), str(noise), str(outliers), "1", "200"],
-                                        check=True, capture_output=True, text=True).stdout
-                result = {key: int(value) for key, value in
-                          (part.split("=") for part in output.splitlines()[-1].split())}
+                output = subprocess.run(
+                    [str(binary), str(noise), str(outliers), "1", "200"], check=True, capture_output=True, text=True
+                ).stdout
+                result = {
+                    key: int(value) for key, value in (part.split("=") for part in output.splitlines()[-1].split())
+                }
                 self.assertEqual(result["false"], 0, output)
 
     def test_rotation_discards_outlier_depths(self):
         with tempfile.TemporaryDirectory() as folder:
             binary = Path(folder) / "rotation_points_check.exe"
             source = SOURCE.with_name("mvo_rotation_points_check.c")
-            subprocess.run(["gcc", *CFLAGS, *config_defines(), *(["-static"] if sys.platform == "win32" else []),
-                            f"-I{CORE_DIR}", str(source), *map(str, UNITS), "-o", str(binary)], check=True)
+            subprocess.run(
+                [
+                    "gcc",
+                    *CFLAGS,
+                    *config_defines(),
+                    *(["-static"] if sys.platform == "win32" else []),
+                    f"-I{CORE_DIR}",
+                    str(source),
+                    *map(str, UNITS),
+                    "-o",
+                    str(binary),
+                ],
+                check=True,
+            )
             output = subprocess.run([str(binary)], check=True, capture_output=True, text=True).stdout
-        lines = [{key: float(value) for key, value in (part.split("=") for part in line.split())}
-                 for line in output.splitlines()]
+        lines = [
+            {key: float(value) for key, value in (part.split("=") for part in line.split())}
+            for line in output.splitlines()
+        ]
         self.assertEqual(len(lines), 2)
         self.assertLess(lines[0]["parallax"], 1)
         self.assertGreater(lines[1]["parallax"], 1)

@@ -7,13 +7,16 @@ import unittest
 from uwslam import mvo
 from uwslam.paths import CORE_DIR, FIRMWARE_DIR
 
-FIRMWARE_CMAKE = FIRMWARE_DIR / "esp32s3_mono_vo" / "main" / "CMakeLists.txt"
+FIRMWARE_CMAKE = FIRMWARE_DIR / "mono_vo_stream" / "main" / "CMakeLists.txt"
 
 
 class MonoVoSourcesTests(unittest.TestCase):
     def test_every_unit_is_built_and_fingerprinted(self):
-        units = sorted(path.name for path in CORE_DIR.iterdir()
-                       if path.name.startswith("mono_vo") and path.suffix in (".c", ".h") and path.name != "mono_vo.h")
+        units = sorted(
+            path.name
+            for path in CORE_DIR.iterdir()
+            if path.name.startswith("mono_vo") and path.suffix in (".c", ".h") and path.name != "mono_vo.h"
+        )
         self.assertEqual(sorted(mvo.CORE_FILES), units)
         self.assertEqual([path.name for path in mvo.SOURCES], [name for name in mvo.CORE_FILES if name.endswith(".c")])
 

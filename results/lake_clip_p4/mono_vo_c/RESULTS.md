@@ -43,7 +43,7 @@ Records named `*_usj*` were streamed over the ESP32-P4's own USB-Serial-JTAG por
 Re-run (after `uwslam.mvo compare --board-frames` and `uwslam.mono_map --board-masks`):
 
 ```bash
-idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_240 -p <port> flash
-idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_p4 -D SDKCONFIG=build_p4/sdkconfig -D IDF_TARGET=esp32p4 -p <port> flash   # an ESP32-P4: the p4 configuration (UWSLAM_CONFIG=p4 on the PC)
+idf.py -C firmware/mono_vo_stream -B firmware/mono_vo_stream/build_240 -p <port> flash
+idf.py -C firmware/mono_vo_stream -B firmware/mono_vo_stream/build_p4 -D SDKCONFIG=build_p4/sdkconfig -D IDF_TARGET=esp32p4 -p <port> flash   # an ESP32-P4: the p4 configuration (UWSLAM_CONFIG=p4 on the PC)
 python -m uwslam.mvo_stream --port <port> --frames <frames file> --masks <masks file> --label <name>
 ```

@@ -3,10 +3,10 @@
 import ctypes
 import hashlib
 import json
-from pathlib import Path
 import tempfile
 import unittest
 import weakref
+from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
@@ -20,14 +20,30 @@ class FakeVO:
         self.map_updates = []
         self.kinds = iter(kinds)
 
-    def mvo_state_size(self): return 1
-    def mvo_pyramid_bytes(self): return 1
-    def mm_map_size(self): return mono_map.MAP_SIZE ** 2 + 28
-    def mvo_init(self, *args): pass
-    def mm_init(self, *args): pass
-    def mvo_frame(self, *args): return ctypes.addressof(self.frame)
-    def mvo_start(self, *args): pass
-    def mvo_step(self, state, out): out._obj.kind = next(self.kinds, 2)
+    def mvo_state_size(self):
+        return 1
+
+    def mvo_pyramid_bytes(self):
+        return 1
+
+    def mm_map_size(self):
+        return mono_map.MAP_SIZE**2 + 28
+
+    def mvo_init(self, *args):
+        pass
+
+    def mm_init(self, *args):
+        pass
+
+    def mvo_frame(self, *args):
+        return ctypes.addressof(self.frame)
+
+    def mvo_start(self, *args):
+        pass
+
+    def mvo_step(self, state, out):
+        out._obj.kind = next(self.kinds, 2)
+
     def mm_add(self, state, vo, points, count):
         self.map_updates.append(count)
         return 0
@@ -50,8 +66,11 @@ class InputSafetyTests(unittest.TestCase):
             return original_memmove(*args)
 
         for mapping in (False, True):
-            with self.subTest(mapping=mapping), patch.object(np, "ascontiguousarray", side_effect=contiguous), \
-                    patch.object(ctypes, "memmove", side_effect=copy):
+            with (
+                self.subTest(mapping=mapping),
+                patch.object(np, "ascontiguousarray", side_effect=contiguous),
+                patch.object(ctypes, "memmove", side_effect=copy),
+            ):
                 if mapping:
                     mono_map.run_mapping(FakeVO(), [frame], [None], mvo.Camera())
                 else:
@@ -113,16 +132,27 @@ class InputSafetyTests(unittest.TestCase):
         np.testing.assert_array_equal(mono_map.nearest_distances(query, cloud), [0.0])
 
     def test_no_observations_have_no_distance_summary(self):
-        result = {"steps": [], "observations": [], "odds": np.zeros((128, 128), dtype=np.int8),
-                  "cell": 0.0, "origin": (0, 0), "hits": 0, "updates": 0, "map_hash": 0,
-                  "slice_y": 0.0, "height_resets": 0}
+        result = {
+            "steps": [],
+            "observations": [],
+            "odds": np.zeros((128, 128), dtype=np.int8),
+            "cell": 0.0,
+            "origin": (0, 0),
+            "hits": 0,
+            "updates": 0,
+            "map_hash": 0,
+            "slice_y": 0.0,
+            "height_resets": 0,
+        }
         result = mono_map.evaluate_map(result, [0], np.array([np.eye(3)]), np.zeros((1, 3)), np.ones((1, 3)))
         self.assertIsNone(result["distance_to_cloud_m"]["median"])
         self.assertIsNone(result["ate_rmse_m"])
         self.assertIsNone(mono_map.distance_spread([None, None]))
         self.assertEqual(mono_map.distance_spread([None, 1.0])["median"], 1.0)
-        result.update(rate_hz=10.0, over_seeds={"distance_median_m": None, "distance_valid_seeds": 0,
-                                                "ate_rmse_m": None, "ate_valid_seeds": 0})
+        result.update(
+            rate_hz=10.0,
+            over_seeds={"distance_median_m": None, "distance_valid_seeds": 0, "ate_rmse_m": None, "ate_valid_seeds": 0},
+        )
         with tempfile.TemporaryDirectory() as folder:
             mono_map.write_report(Path(folder), {"runs": [result]})
             report = (Path(folder) / "RESULTS.md").read_text(encoding="utf-8")
@@ -135,15 +165,26 @@ class InputSafetyTests(unittest.TestCase):
             value.world_centre[:] = centre
             return value
 
-        steps = [step((1, 0, 0), 2), step((1, 1, 0), 2),
-                 step((99, 99, 99), 0), step((200, 200, 200), 2)]
+        steps = [step((1, 0, 0), 2), step((1, 1, 0), 2), step((99, 99, 99), 0), step((200, 200, 200), 2)]
         point = np.array([[2.0, 2.0, 2.0]])
-        result = {"steps": steps, "observations": [point, point, np.empty((0, 3)), np.empty((0, 3))],
-                  "odds": np.zeros((128, 128), dtype=np.int8), "cell": 1.0, "origin": (-64, -64),
-                  "hits": 0, "updates": 0, "map_hash": 0, "slice_y": 0.0, "height_resets": 0,
-                  "first_lost_frame": 3, "map_continuous": False}
+        result = {
+            "steps": steps,
+            "observations": [point, point, np.empty((0, 3)), np.empty((0, 3))],
+            "odds": np.zeros((128, 128), dtype=np.int8),
+            "cell": 1.0,
+            "origin": (-64, -64),
+            "hits": 0,
+            "updates": 0,
+            "map_hash": 0,
+            "slice_y": 0.0,
+            "height_resets": 0,
+            "first_lost_frame": 3,
+            "map_continuous": False,
+        }
         reference = np.array([[0, 0, 0], [2, 0, 0], [2, 2, 0], [2, 4, 0], [2, 6, 0]], dtype=float)
-        evaluated = mono_map.evaluate_map(result, list(range(5)), np.repeat(np.eye(3)[None], 5, axis=0), reference, point * 2)
+        evaluated = mono_map.evaluate_map(
+            result, list(range(5)), np.repeat(np.eye(3)[None], 5, axis=0), reference, point * 2
+        )
         self.assertEqual(evaluated["scored_frames"], 3)
         self.assertAlmostEqual(evaluated["alignment_scale_m_per_unit"], 2.0, places=6)
         self.assertAlmostEqual(evaluated["ate_rmse_m"], 0.0, places=6)
@@ -156,12 +197,22 @@ class InputSafetyTests(unittest.TestCase):
             step = mvo.StepC()
             step.world_centre[:] = centre
             steps.append(step)
-        result = {"steps": steps, "observations": [np.empty((0, 3))] * 2,
-                  "odds": np.zeros((128, 128), dtype=np.int8), "cell": 1.0, "origin": (0, 0),
-                  "hits": 0, "updates": 0, "map_hash": 0, "slice_y": 0.0, "height_resets": 0}
+        result = {
+            "steps": steps,
+            "observations": [np.empty((0, 3))] * 2,
+            "odds": np.zeros((128, 128), dtype=np.int8),
+            "cell": 1.0,
+            "origin": (0, 0),
+            "hits": 0,
+            "updates": 0,
+            "map_hash": 0,
+            "slice_y": 0.0,
+            "height_resets": 0,
+        }
         reference = np.array([[0, 0, 0], [1, 0, 0], [2, 0.00001, 0]], dtype=float)
-        evaluated = mono_map.evaluate_map(result, [0, 1, 2], np.repeat(np.eye(3)[None], 3, axis=0),
-                                          reference, np.ones((1, 3)))
+        evaluated = mono_map.evaluate_map(
+            result, [0, 1, 2], np.repeat(np.eye(3)[None], 3, axis=0), reference, np.ones((1, 3))
+        )
         self.assertIsNotNone(evaluated["ate_rmse_m"])
         self.assertGreater(evaluated["alignment_spread_ratio"], 0)
         self.assertLess(evaluated["alignment_spread_ratio"], 1e-8)
@@ -174,8 +225,9 @@ class InputSafetyTests(unittest.TestCase):
                 result = mono_map.run_mapping(vo, [frame] * (len(kinds) + 1), [None] * (len(kinds) + 1), mvo.Camera())
                 n = len(kinds) + 1
                 reference = np.column_stack((np.arange(n), np.zeros(n), np.zeros(n))).astype(float)
-                evaluated = mono_map.evaluate_map(result, list(range(n)), np.repeat(np.eye(3)[None], n, axis=0),
-                                                  reference, np.ones((1, 3)))
+                evaluated = mono_map.evaluate_map(
+                    result, list(range(n)), np.repeat(np.eye(3)[None], n, axis=0), reference, np.ones((1, 3))
+                )
                 self.assertIsNone(evaluated["alignment_scale_m_per_unit"])
                 self.assertIsNone(evaluated["ate_rmse_m"])
                 self.assertIsNone(evaluated["alignment_spread_ratio"])
@@ -202,8 +254,10 @@ class InputSafetyTests(unittest.TestCase):
             video, masks = root / "video.bin", root / "frames.npz"
             video.write_bytes(b"same video")
             np.savez(masks, times=np.arange(3) / 30, mask_nonwater=np.zeros((3, 60, 80), dtype=bool))
-            (root / "summary.json").write_text(json.dumps({"source": {"sha256": hashlib.sha256(video.read_bytes()).hexdigest(),
-                                                                         "fps": 30.0}}), encoding="utf-8")
+            (root / "summary.json").write_text(
+                json.dumps({"source": {"sha256": hashlib.sha256(video.read_bytes()).hexdigest(), "fps": 30.0}}),
+                encoding="utf-8",
+            )
             with patch.object(mono_map, "MASKS", masks):
                 self.assertEqual(len(mono_map.load_matched_masks(video, 30.0)), 3)
                 video.write_bytes(b"other video")

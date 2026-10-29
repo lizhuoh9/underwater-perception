@@ -1,14 +1,14 @@
 """The mask-free sparse 3D cloud on synthetic camera images and the video/board output contract."""
 
-from importlib.util import find_spec
 import hashlib
 import json
-from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from importlib.util import find_spec
+from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
@@ -16,6 +16,7 @@ import numpy as np
 HAS_DEPENDENCIES = shutil.which("gcc") is not None and find_spec("cv2") is not None
 if HAS_DEPENDENCIES:
     import cv2
+
     from tests.test_mvo import FLOOR_Y, WALL_Z, render, texture
     from uwslam import mono_cloud, mvo
     from uwslam.experiments.mask_motion import euler_rotation
@@ -61,8 +62,9 @@ class MonoCloudTests(unittest.TestCase):
         cls.vo = mvo.build(cls.folder)
         cls.camera = mvo.camera_for(110.0, 544 / 960)
         wall, floor = texture(1), texture(2)
-        cls.poses = [(euler_rotation(np.radians(1.5 * k), 0.0, 0.0), np.array([0.30 * k, 0.0, 0.15 * k]))
-                     for k in range(8)]
+        cls.poses = [
+            (euler_rotation(np.radians(1.5 * k), 0.0, 0.0), np.array([0.30 * k, 0.0, 0.15 * k])) for k in range(8)
+        ]
         cls.frames = [render(rotation, centre, cls.camera, wall, floor) for rotation, centre in cls.poses]
         cls.unit = float(np.linalg.norm(cls.poses[1][1] - cls.poses[0][1]))
 
@@ -77,7 +79,7 @@ class MonoCloudTests(unittest.TestCase):
         self.assertGreater(cloud.count, 100)
         self.assertEqual(cloud.continuous, 1)
         self.assertTrue(all(item["kind"] == "essential" for item in result["trajectory"][1:]))
-        points = np.array([list(point.xyz) for point in cloud.points[:cloud.count]]) * self.unit
+        points = np.array([list(point.xyz) for point in cloud.points[: cloud.count]]) * self.unit
         # Only this known synthetic fixture supplies the unit for comparison; VO has no metric scale.
         nearest_surface = np.minimum(abs(points[:, 2] - WALL_Z), abs(points[:, 1] - FLOOR_Y))
         self.assertLess(float(np.median(nearest_surface)), 0.15)
@@ -90,21 +92,24 @@ class MonoCloudTests(unittest.TestCase):
         frames[2] = np.full((mvo.HEIGHT, mvo.WIDTH), 128, dtype=np.uint8)
         result = mono_cloud.run_frames(self.vo, iter(frames), self.camera)
         self.assertGreater(before["cloud"].count, 0)
-        self.assertEqual([entry["kind"] for entry in result["trajectory"]][2:5],
-                         ["lost", "lost", "essential"])
+        self.assertEqual([entry["kind"] for entry in result["trajectory"]][2:5], ["lost", "lost", "essential"])
         self.assertEqual(result["first_lost_frame"], 2)
         self.assertEqual(result["cloud"].continuous, 0)
         self.assertEqual(result["cloud"].count, before["cloud"].count)
         self.assertEqual(result["cloud"].dropped, before["cloud"].dropped)
-        self.assertEqual([bytes(point) for point in result["cloud"].points[:result["cloud"].count]],
-                         [bytes(point) for point in before["cloud"].points[:before["cloud"].count]])
+        self.assertEqual(
+            [bytes(point) for point in result["cloud"].points[: result["cloud"].count]],
+            [bytes(point) for point in before["cloud"].points[: before["cloud"].count]],
+        )
         self.assertTrue(all(item["cloud"]["accepted"] == 0 for item in result["trajectory"][2:]))
 
     def test_pure_turn_does_not_create_depth(self):
         wall, floor = texture(1), texture(2)
         rotation = euler_rotation(np.radians(5.0), np.radians(-1.5), np.radians(0.5))
-        frames = [render(np.eye(3), np.zeros(3), self.camera, wall, floor),
-                  render(rotation, np.zeros(3), self.camera, wall, floor)]
+        frames = [
+            render(np.eye(3), np.zeros(3), self.camera, wall, floor),
+            render(rotation, np.zeros(3), self.camera, wall, floor),
+        ]
         result = mono_cloud.run_frames(self.vo, iter(frames), self.camera)
         self.assertEqual(result["trajectory"][1]["kind"], "rotation")
         self.assertEqual(result["cloud"].count, 0)
@@ -139,9 +144,13 @@ class MonoCloudTests(unittest.TestCase):
             self.assertEqual(expected["rate_hz"], 15.0)
             self.assertEqual(expected_cloud["cloud_policy"], 1)
             self.assertEqual(expected_cloud["frames_sha256"], hashlib.sha256(frames_bytes).hexdigest())
-            self.assertEqual(expected_cloud["frame_sha256"],
-                             [hashlib.sha256(frames_bytes[i:i + frame_size]).hexdigest()
-                              for i in range(0, len(frames_bytes), frame_size)])
+            self.assertEqual(
+                expected_cloud["frame_sha256"],
+                [
+                    hashlib.sha256(frames_bytes[i : i + frame_size]).hexdigest()
+                    for i in range(0, len(frames_bytes), frame_size)
+                ],
+            )
             self.assertEqual(expected_cloud["source_sha256"], summary["source_sha256"])
             self.assertEqual(expected_cloud["frame_coordinates"], summary["frame_coordinates"])
             self.assertEqual(expected_cloud["point_units"], summary["point_units"])
@@ -180,8 +189,11 @@ class MonoCloudTests(unittest.TestCase):
                 mono_cloud.run_video(root / "missing", root / "new", self.camera, every=0)
 
     def test_timestamps_must_not_go_backward_across_missing_values(self):
-        frames = [mono_cloud.Frame(self.frames[0], 0, 0.2), mono_cloud.Frame(self.frames[1], 1, None),
-                  mono_cloud.Frame(self.frames[2], 2, 0.1)]
+        frames = [
+            mono_cloud.Frame(self.frames[0], 0, 0.2),
+            mono_cloud.Frame(self.frames[1], 1, None),
+            mono_cloud.Frame(self.frames[2], 2, 0.1),
+        ]
         with self.assertRaisesRegex(ValueError, "timestamps must be nondecreasing"):
             mono_cloud.run_frames(self.vo, iter(frames), self.camera)
         frames[2] = mono_cloud.Frame(self.frames[2], 2, 0.2)
@@ -220,8 +232,10 @@ class MonoCloudTests(unittest.TestCase):
             video = root / "video.fake"
             video.write_bytes(b"fake video")
             capture = FakeCapture(self.frames[:1])
-            with patch.object(cv2, "VideoCapture", return_value=capture), \
-                    patch.object(capture, "get", side_effect=RuntimeError("decoder metadata failed")):
+            with (
+                patch.object(cv2, "VideoCapture", return_value=capture),
+                patch.object(capture, "get", side_effect=RuntimeError("decoder metadata failed")),
+            ):
                 with self.assertRaisesRegex(RuntimeError, "decoder metadata failed"):
                     mono_cloud.run_video(video, root / "out", self.camera)
             self.assertTrue(capture.released)
@@ -239,9 +253,23 @@ class MonoCloudTests(unittest.TestCase):
                     writer.write(cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR))
             finally:
                 writer.release()
-            command = [sys.executable, "-m", "uwslam.mono_cloud", str(video), "--fx", str(self.camera.fx),
-                       "--fy", str(self.camera.fy), "--cx", str(self.camera.cx), "--cy", str(self.camera.cy),
-                       "--board-files", "--output", str(output)]
+            command = [
+                sys.executable,
+                "-m",
+                "uwslam.mono_cloud",
+                str(video),
+                "--fx",
+                str(self.camera.fx),
+                "--fy",
+                str(self.camera.fy),
+                "--cx",
+                str(self.camera.cx),
+                "--cy",
+                str(self.camera.cy),
+                "--board-files",
+                "--output",
+                str(output),
+            ]
             subprocess.run(command, check=True, capture_output=True, text=True)
             summary = json.loads((output / "summary.json").read_text(encoding="utf-8"))
             self.assertEqual(summary["frames"], len(self.frames))
@@ -252,10 +280,25 @@ class MonoCloudTests(unittest.TestCase):
     def test_c_cloud_invariants(self):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
             program = Path(folder) / "cloud_check.exe"
-            subprocess.run(["gcc", "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-pedantic", *mvo.config_defines(),
-                            *(["-static"] if sys.platform == "win32" else []), f"-I{ROOT / 'core'}",
-                            str(ROOT / "tests/c/mono_cloud_check.c"), str(ROOT / "core/mono_cloud.c"),
-                            "-o", str(program)], check=True)
+            subprocess.run(
+                [
+                    "gcc",
+                    "-std=c99",
+                    "-O2",
+                    "-Wall",
+                    "-Wextra",
+                    "-Werror",
+                    "-pedantic",
+                    *mvo.config_defines(),
+                    *(["-static"] if sys.platform == "win32" else []),
+                    f"-I{ROOT / 'core'}",
+                    str(ROOT / "tests/c/mono_cloud_check.c"),
+                    str(ROOT / "core/mono_cloud.c"),
+                    "-o",
+                    str(program),
+                ],
+                check=True,
+            )
             subprocess.run([str(program)], check=True)
 
 

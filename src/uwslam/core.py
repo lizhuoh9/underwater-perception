@@ -7,4 +7,6 @@ The local gcc builds it into a shared library with the floating-point flags the 
 import sys
 
 CFLAGS = ["-O2", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "-ffp-contract=off"]
-LIBRARY_SUFFIX, LINK_FLAGS = {"win32": (".dll", ["-static-libgcc"]), "darwin": (".dylib", [])}.get(sys.platform, (".so", ["-fPIC"]))
+LIBRARY_SUFFIX, LINK_FLAGS = {"win32": (".dll", ["-static-libgcc"]), "darwin": (".dylib", [])}.get(
+    sys.platform, (".so", ["-fPIC"])
+)

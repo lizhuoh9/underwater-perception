@@ -2,34 +2,54 @@
 points set a step length (tests/c/mvo_ratio_check.c); not an image-tracking test."""
 
 import csv
-from pathlib import Path
 import shutil
 import statistics
 import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 from uwslam.core import CFLAGS
 from uwslam.mvo import config_defines
 from uwslam.paths import CORE_DIR
 
-
 SOURCE = Path(__file__).resolve().parent / "c" / "mvo_carry_check.c"
 RATIO_SOURCE = Path(__file__).resolve().parent / "c" / "mvo_ratio_check.c"
-UNITS = [CORE_DIR / name for name in ("mono_vo.c", "mono_vo_numerics.c", "mono_vo_homography.c",
-                                      "mono_vo_essential.c")]
+UNITS = [CORE_DIR / name for name in ("mono_vo.c", "mono_vo_numerics.c", "mono_vo_homography.c", "mono_vo_essential.c")]
 
 
 def build(folder: Path) -> Path:
     executable = folder / "mvo_carry_check.exe"
-    subprocess.run(["gcc", *CFLAGS, *config_defines(), *(["-static"] if sys.platform == "win32" else []), f"-I{CORE_DIR}",
-                    str(SOURCE), *map(str, UNITS), "-lm", "-o", str(executable)], check=True)
+    subprocess.run(
+        [
+            "gcc",
+            *CFLAGS,
+            *config_defines(),
+            *(["-static"] if sys.platform == "win32" else []),
+            f"-I{CORE_DIR}",
+            str(SOURCE),
+            *map(str, UNITS),
+            "-lm",
+            "-o",
+            str(executable),
+        ],
+        check=True,
+    )
     return executable
 
 
-def trials(executable: Path, mode: str, sigma: float, outliers: float, yaw: float, forward: float, speed: float,
-           first_seed: int, count: int) -> list[dict]:
+def trials(
+    executable: Path,
+    mode: str,
+    sigma: float,
+    outliers: float,
+    yaw: float,
+    forward: float,
+    speed: float,
+    first_seed: int,
+    count: int,
+) -> list[dict]:
     command = [str(executable), mode, *map(str, (sigma, outliers, yaw, forward, speed, first_seed, count))]
     text = subprocess.run(command, capture_output=True, text=True, check=True).stdout
     return list(csv.DictReader(text.splitlines()))
@@ -53,8 +73,11 @@ class CarryTests(unittest.TestCase):
         # the points that get one, and the odd pose's error reaches 0.1 (log2; 90th percentile 0.04 and 0.06 here).
         for sigma, yaw in ((0.3, 5.0), (0.5, 12.0)):
             with self.subTest(sigma=sigma, yaw=yaw):
-                rows = [row for row in trials(self.executable, "direct", sigma, 0.0, yaw, 0.1, 0.1, 70000, 300)
-                        if int(row["inliers"]) >= 15]
+                rows = [
+                    row
+                    for row in trials(self.executable, "direct", sigma, 0.0, yaw, 0.1, 0.1, 70000, 300)
+                    if int(row["inliers"]) >= 15
+                ]
                 carried = [float(row["depth_error"]) for row in rows if int(row["carried"])]
                 self.assertGreaterEqual(len(carried), 0.8 * len(rows), (len(carried), len(rows)))
                 self.assertLess(abs(statistics.median(carried)), 0.05)
@@ -64,9 +87,21 @@ class CarryTests(unittest.TestCase):
         # Exact geometry with a depth ratio per group of points (tests/c/mvo_ratio_check.c): the carried length is the
         # one of the inliers within MVO_RATIO_DEPTH, mvo_best or not, without the points beyond or the outliers.
         executable = Path(self.folder.name) / "mvo_ratio_check.exe"
-        subprocess.run(["gcc", *CFLAGS, *config_defines(), *(["-static"] if sys.platform == "win32" else []),
-                        f"-I{CORE_DIR}", str(RATIO_SOURCE), *map(str, UNITS), str(CORE_DIR / "mono_vo_tracking.c"),
-                        "-o", str(executable)], check=True)
+        subprocess.run(
+            [
+                "gcc",
+                *CFLAGS,
+                *config_defines(),
+                *(["-static"] if sys.platform == "win32" else []),
+                f"-I{CORE_DIR}",
+                str(RATIO_SOURCE),
+                *map(str, UNITS),
+                str(CORE_DIR / "mono_vo_tracking.c"),
+                "-o",
+                str(executable),
+            ],
+            check=True,
+        )
         output = subprocess.run([str(executable)], capture_output=True, text=True).stdout
         self.assertIn("mvo_ratio_check ok", output)
 
@@ -77,8 +112,11 @@ class CarryTests(unittest.TestCase):
         for sigma in (1.0, 2.0, 3.0):
             for outliers in (0.0, 0.2, 0.4):
                 for yaw in (0.0, 5.0):
-                    rows = [row for row in trials(self.executable, "direct", sigma, outliers, yaw, 0.0, 0.1, 80000, 60)
-                            if int(row["inliers"]) >= 15]
+                    rows = [
+                        row
+                        for row in trials(self.executable, "direct", sigma, outliers, yaw, 0.0, 0.1, 80000, 60)
+                        if int(row["inliers"]) >= 15
+                    ]
                     poses += len(rows)
                     carried += sum(int(row["carried"]) for row in rows)
         self.assertGreater(poses, 800)
@@ -96,8 +134,11 @@ class CarryTests(unittest.TestCase):
                     for outliers in (0.0, 0.2, 0.4):
                         for yaw in (0.0, 5.0):
                             rows = trials(self.executable, "hovers", sigma, outliers, yaw, count, 0.1, 50000, 40)
-                            errors += [abs(float(row["length_error"])) for row in rows
-                                       if int(row["kind_last"]) == 0 and int(row["kind2"]) == 2]
+                            errors += [
+                                abs(float(row["length_error"]))
+                                for row in rows
+                                if int(row["kind_last"]) == 0 and int(row["kind2"]) == 2
+                            ]
                 self.assertGreater(len(errors), 400)
                 self.assertLess(statistics.median(errors), 0.05)
                 self.assertLessEqual(sum(error > 0.3 for error in errors), 0.05 * len(errors))

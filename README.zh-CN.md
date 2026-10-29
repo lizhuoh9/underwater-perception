@@ -63,7 +63,7 @@
 │   ├── path_plan.c/.h          下一步往哪里走：局部避障与三维路径选择
 │   ├── mono_map.c/.h           俯视障碍切片（第一次跟丢时冻结）
 │   └── mono_cloud.c/.h         跟踪特征的稀疏点（第一次跟丢时冻结）
-├── firmware/esp32s3_mono_vo/   ESP-IDF 程序（ESP32-S3，也能编译到 ESP32-P4）：在送来的帧和掩码上运行核心，回报哈希和耗时
+├── firmware/mono_vo_stream/    ESP-IDF 程序（ESP32-P4，也能编译到 ESP32-S3）：在送来的帧和掩码上运行核心，回报哈希和耗时
 ├── src/uwslam/                 Python 包
 │   ├── mvo.py                  核心的 ctypes 绑定；里程计在湖中片段上与 OpenCV 原型对照
 │   ├── voxel_map.py            体素地图在湖中片段上对照重建打分
@@ -232,12 +232,12 @@ C 版本在设计上沿用 OpenCV 原型（[experiments/mono_vo.py](src/uwslam/e
 
 ## ESP32-S3
 
-[firmware/esp32s3_mono_vo](firmware/esp32s3_mono_vo) 在 USB 送来的帧和掩码上运行里程计、体素地图、障碍方向、规划器
+[firmware/mono_vo_stream](firmware/mono_vo_stream) 在 USB 送来的帧和掩码上运行里程计、体素地图、障碍方向、规划器
 和两张旧地图，每帧回报这一步的哈希、地图计数和各阶段耗时。[mvo_stream.py](src/uwslam/mvo_stream.py) 把这些逐项对照电脑的结果。
 
 ```bash
 # 在 ESP-IDF 5.3+ 的命令行里
-idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_240 -p <端口> flash
+idf.py -C firmware/mono_vo_stream -B firmware/mono_vo_stream/build_240 -p <端口> flash
 python -m uwslam.mvo_stream --port <端口> --frames <帧文件> --masks <掩码文件> \
     --expected results/lake_clip/mono_vo_c/board_expected_5hz.json \
     --expected-map results/lake_clip/mono_map/board_expected_map_5hz.json \
@@ -272,7 +272,7 @@ USB-Serial-JTAG 口，把控制台编到那里，固件就像在 S3 上一样走
 编译目录）。经这个口回放 5 Hz 片段用了 31 秒，较早经 UART 的那次是 173 秒。
 
 ```bash
-idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_p4 -D SDKCONFIG=build_p4/sdkconfig \
+idf.py -C firmware/mono_vo_stream -B firmware/mono_vo_stream/build_p4 -D SDKCONFIG=build_p4/sdkconfig \
     -D IDF_TARGET=esp32p4 -p <端口> flash
 python -m uwslam.mvo_stream --port <端口> ...   # 参数与 S3 相同
 ```
@@ -292,7 +292,7 @@ python -m uwslam.mvo_stream --port <端口> ...   # 参数与 S3 相同
 | 规划，平均 / 最长 | 0.49 / 0.7 ms | 0.53 / 0.7 ms |
 | 结束时剩余内部 RAM | 217,036 B | 217,036 B |
 
-[mvo_pie_p4.S](firmware/esp32s3_mono_vo/main/mvo_pie_p4.S) 是把 S3 的窗口内核改用 P4 的向量指令（两者属于同一类）写成的：
+[mvo_pie_p4.S](firmware/mono_vo_stream/main/mvo_pie_p4.S) 是把 S3 的窗口内核改用 P4 的向量指令（两者属于同一类）写成的：
 每次调用 8.6 微秒（窗口）和 3.0 微秒（求和），P4 上的 C 内核是 72 和 23 微秒，S3 的向量内核是 14 和 4.7 微秒。板上自检在
 20,000 个随机窗口上与 C 内核完全相同，每次运行前还会再查 2,000 个。块拷贝仍用 C（每次 6.0
 微秒），P4 上没有写向量版。与 S3 相比，跟踪快 1.9 倍，运动估计快 2.6 倍，角点检测快 2.2 倍，5 Hz 每步 74 毫秒而不是 161 毫秒，剩余内部 RAM
@@ -323,7 +323,7 @@ P4 多出来的时间和内存，用在它自己的核心编译配置 `p4` 上�
 的更大地图都没有用）。用上镜头后，19×19 窗口让 5 Hz 窗口上的航向中位数从 8.1° 降到 6.2°（59% 的配对运行更低），最大误差
 从 20.1° 降到 15.3°，位置差不多（0.066 m 对 0.067 m，57% 更低），整段位置也一样（0.21 m）；3 Hz 和 10 Hz 下航向变差。在
 19×19 窗口上再用 350 或 400 个特征点，5 Hz 反而更差（整段 0.23 和 0.24 m）。
-[mvo_pie_p4.S](firmware/esp32s3_mono_vo/main/mvo_pie_p4.S) 里是两种窗口的向量内核：一行 19 个像素占三个向量，每次调用
+[mvo_pie_p4.S](firmware/mono_vo_stream/main/mvo_pie_p4.S) 里是两种窗口的向量内核：一行 19 个像素占三个向量，每次调用
 19.6 微秒（窗口）和 6.5 微秒（求和），C 内核是 118 和 36 微秒；板上在 20,000 个随机窗口上验证与 C 内核完全相同。
 
 更细的体素把同样的周围环境存成更小的格子。在 15×15 窗口的里程计上评分时，5 Hz 下保留的障碍在整条路径上离参照表面 0.074 m

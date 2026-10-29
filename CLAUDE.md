@@ -12,7 +12,7 @@ lake clip.
   `mono_cloud`), the board host `mvo_stream`, and `experiments/` (OpenCV prototype `mono_vo`, reference poses and
   masks `mask_motion`, `segmenter`).
 - `tests/`: unittest suite; `tests/c/` holds the C contract checks and the firmware host harnesses.
-- `firmware/esp32s3_mono_vo/`: the only firmware, for the ESP32-P4 (and the ESP32-S3, its default target, no longer
+- `firmware/mono_vo_stream/`: the only firmware, for the ESP32-P4 (and the ESP32-S3, its default target, no longer
   used; `sdkconfig.defaults.<target>`); on the P4 frames and masks arrive over the console UART, or over its own
   USB-Serial-JTAG port when the console is built there.
 - `results/lake_clip_p4/`: the P4's committed results, including the board's expected-hash files and its records.

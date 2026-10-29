@@ -55,7 +55,7 @@ int xTaskCreatePinnedToCore(void (*fn)(void *), const char *name, int stack, voi
 unsigned uxTaskGetStackHighWaterMark(void *task) { (void)task; return 0; }
 void vTaskDelay(int ticks) { (void)ticks; }
 
-#include "../../firmware/esp32s3_mono_vo/main/main.c"
+#include "../../firmware/mono_vo_stream/main/main.c"
 
 static mvo_camera_t last_camera;
 void mvo_init(mvo_t *s, const mvo_camera_t *camera, uint32_t seed, uint8_t *a, uint8_t *b)

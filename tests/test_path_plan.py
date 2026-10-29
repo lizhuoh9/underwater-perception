@@ -2,13 +2,13 @@
 follow the wall and that it steers by the mask; the reference corridors and the scoring."""
 
 import ctypes
-from importlib.util import find_spec
-from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from importlib.util import find_spec
+from pathlib import Path
 
 import numpy as np
 
@@ -29,12 +29,39 @@ class PathPlanContractTests(unittest.TestCase):
     def test_c_contract(self):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
             program = Path(folder) / "path_plan_check.exe"
-            units = ("mono_vo.c", "mono_vo_numerics.c", "mono_vo_tracking.c", "mono_vo_homography.c", "mono_vo_essential.c")
-            sources = [ROOT / "tests/c/path_plan_check.c", ROOT / "core/path_plan.c", ROOT / "core/obstacle_dir.c",
-                       ROOT / "core/voxel_map.c", *(ROOT / "core" / name for name in units)]
-            subprocess.run(["gcc", "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-pedantic", "-ffp-contract=off",
-                            *config_defines(), *STATIC, f"-I{ROOT / 'core'}", *map(str, sources), "-o", str(program)],
-                           check=True)
+            units = (
+                "mono_vo.c",
+                "mono_vo_numerics.c",
+                "mono_vo_tracking.c",
+                "mono_vo_homography.c",
+                "mono_vo_essential.c",
+            )
+            sources = [
+                ROOT / "tests/c/path_plan_check.c",
+                ROOT / "core/path_plan.c",
+                ROOT / "core/obstacle_dir.c",
+                ROOT / "core/voxel_map.c",
+                *(ROOT / "core" / name for name in units),
+            ]
+            subprocess.run(
+                [
+                    "gcc",
+                    "-std=c99",
+                    "-O2",
+                    "-Wall",
+                    "-Wextra",
+                    "-Werror",
+                    "-pedantic",
+                    "-ffp-contract=off",
+                    *config_defines(),
+                    *STATIC,
+                    f"-I{ROOT / 'core'}",
+                    *map(str, sources),
+                    "-o",
+                    str(program),
+                ],
+                check=True,
+            )
             output = subprocess.run([str(program)], check=True, capture_output=True, text=True).stdout
         self.assertIn("path_plan_check ok", output)
 

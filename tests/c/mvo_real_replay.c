@@ -43,7 +43,7 @@ int xTaskCreatePinnedToCore(void (*fn)(void *), const char *name, int stack, voi
 unsigned uxTaskGetStackHighWaterMark(void *task) { (void)task; return 0; }
 void vTaskDelay(int ticks) { (void)ticks; }
 
-#include "../../firmware/esp32s3_mono_vo/main/main.c"
+#include "../../firmware/mono_vo_stream/main/main.c"
 
 void mvo_pie_lk_template(mvo_window_t *w, const uint8_t *s, int stride, const int16_t q[4], int64_t g[3])
 { mvo_lk_template_c(w, s, stride, q, g); }

@@ -35,7 +35,7 @@ def device_frame(rgb: np.ndarray) -> np.ndarray:
 def device_codes(frames: np.ndarray, mean: np.ndarray, std: np.ndarray, exponent: int) -> np.ndarray:
     """esp-dl input quantisation on the ESP32-S3, as NCHW int8: float32 (v - mean) * (1/std) * 2^-exp, then floor(x + 0.5)."""
     inv_std = np.float32(1.0) / std.astype(np.float32)
-    scaled = (frames.astype(np.float32) - mean.astype(np.float32)) * inv_std * np.float32(2.0 ** -exponent)
+    scaled = (frames.astype(np.float32) - mean.astype(np.float32)) * inv_std * np.float32(2.0**-exponent)
     codes = np.clip(np.floor(scaled.astype(np.float64) + 0.5), -128, 127).astype(np.int8)
     return np.ascontiguousarray(codes.transpose(0, 3, 1, 2))
 
@@ -43,7 +43,8 @@ def device_codes(frames: np.ndarray, mean: np.ndarray, std: np.ndarray, exponent
 def int8_scores(logits, exponent: int) -> np.ndarray:
     """Fake-quantised logits (torch, N x 1 x H x W) -> int8 output codes shifted to 0..255 (code + 128)."""
     import torch
-    codes = torch.round(logits / 2.0 ** exponent).clamp(-128, 127)
+
+    codes = torch.round(logits / 2.0**exponent).clamp(-128, 127)
     return (codes + 128).to(torch.uint8)[:, 0].cpu().numpy()
 
 
@@ -57,6 +58,7 @@ class EspdlSegmenter:
             raise ValueError(f"Changed since locking: {native}")
         from esp_ppq import TorchExecutor
         from esp_ppq.api import load_native_graph
+
         self.model_dir = model_dir
         self.executor = TorchExecutor(graph=load_native_graph(str(native)), device="cpu")
         self.mean, self.std = (np.array(locked[key], dtype=np.float32) for key in ("mean", "std"))
@@ -67,12 +69,15 @@ class EspdlSegmenter:
     def __call__(self, frame: np.ndarray) -> np.ndarray:
         """160x120 device frame -> 60x80 boolean non-water mask."""
         import torch
+
         codes = device_codes(frame[None], self.mean, self.std, self.exponent_in)
         with torch.no_grad():
-            quant = self.executor.forward(inputs=torch.from_numpy(codes.astype(np.float32)) * 2.0 ** self.exponent_in)[0]
+            quant = self.executor.forward(inputs=torch.from_numpy(codes.astype(np.float32)) * 2.0**self.exponent_in)[0]
         return int8_scores(quant, self.exponent_out)[0] >= self.threshold
 
     def describe(self) -> dict:
         """What the results record about the model: the hash of its lock file and its decision threshold."""
-        return {"locked_sha256": hashlib.sha256((self.model_dir / "LOCKED.json").read_bytes()).hexdigest(),
-                "threshold_code": self.threshold_code}
+        return {
+            "locked_sha256": hashlib.sha256((self.model_dir / "LOCKED.json").read_bytes()).hexdigest(),
+            "threshold_code": self.threshold_code,
+        }

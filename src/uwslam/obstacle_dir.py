@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 
 from uwslam import mvo
-from uwslam.paths import CORE_DIR, LAKE_CLIP_RESULTS
+from uwslam.paths import CLIP_RESULTS, CORE_DIR
 from uwslam.utils import dump_json
 
 ROWS, COLUMNS = 3, 5  # OD_ROWS, OD_COLUMNS
@@ -36,19 +36,31 @@ EXAMPLES = 4  # frames drawn in directions.png
 
 
 class LayoutC(ctypes.Structure):
-    _fields_ = [("width", ctypes.c_int32), ("height", ctypes.c_int32), ("sector", ctypes.c_uint8 * MAX_SIDE),
-                ("band", ctypes.c_uint8 * MAX_SIDE), ("cells", ctypes.c_uint16 * DIRECTIONS)]
+    _fields_ = [
+        ("width", ctypes.c_int32),
+        ("height", ctypes.c_int32),
+        ("sector", ctypes.c_uint8 * MAX_SIDE),
+        ("band", ctypes.c_uint8 * MAX_SIDE),
+        ("cells", ctypes.c_uint16 * DIRECTIONS),
+    ]
 
 
 class StateC(ctypes.Structure):
-    _fields_ = [("share", ctypes.c_uint8 * DIRECTIONS), ("blocked", ctypes.c_uint8 * DIRECTIONS),
-                ("clearing", ctypes.c_uint8 * DIRECTIONS), ("pad", ctypes.c_uint8 * 3), ("choice", ctypes.c_int32),
-                ("frames", ctypes.c_uint32)]
+    _fields_ = [
+        ("share", ctypes.c_uint8 * DIRECTIONS),
+        ("blocked", ctypes.c_uint8 * DIRECTIONS),
+        ("clearing", ctypes.c_uint8 * DIRECTIONS),
+        ("pad", ctypes.c_uint8 * 3),
+        ("choice", ctypes.c_int32),
+        ("frames", ctypes.c_uint32),
+    ]
 
 
 def sources_sha256() -> dict:
-    return {"dir_sha256": hashlib.sha256((CORE_DIR / "obstacle_dir.c").read_bytes()).hexdigest(),
-            "dir_header_sha256": hashlib.sha256((CORE_DIR / "obstacle_dir.h").read_bytes()).hexdigest()}
+    return {
+        "dir_sha256": hashlib.sha256((CORE_DIR / "obstacle_dir.c").read_bytes()).hexdigest(),
+        "dir_header_sha256": hashlib.sha256((CORE_DIR / "obstacle_dir.h").read_bytes()).hexdigest(),
+    }
 
 
 def layout_for(lib: ctypes.CDLL, camera: mvo.Camera, width: int = MASK_WIDTH, height: int = MASK_HEIGHT) -> LayoutC:
@@ -82,16 +94,24 @@ def run_directions(lib: ctypes.CDLL, masks: list[np.ndarray | None], camera: mvo
         blocked.append(np.array(state.blocked[:], dtype=bool))
         choices.append(int(state.choice))
         bits.append(blocked_bits(state))
-    return {"layout": layout, "shares": np.array(shares), "blocked": np.array(blocked), "choices": np.array(choices),
-            "blocked_bits": bits, "frames": int(state.frames), "hash": mvo.fnv(mvo.FNV_OFFSET, bytes(state))}
+    return {
+        "layout": layout,
+        "shares": np.array(shares),
+        "blocked": np.array(blocked),
+        "choices": np.array(choices),
+        "blocked_bits": bits,
+        "frames": int(state.frames),
+        "hash": mvo.fnv(mvo.FNV_OFFSET, bytes(state)),
+    }
 
 
 def load_cloud(reconstruction: Path) -> np.ndarray:
     """Every point of the reconstruction's cloud (its own world axes), unthinned: near surfaces need them all."""
     raw = (reconstruction / "images.ply").read_bytes()
     start = raw.index(b"end_header\n") + len(b"end_header\n")
-    points = np.frombuffer(raw[start:], dtype=[("x", "<f4"), ("y", "<f4"), ("z", "<f4"), ("r", "u1"), ("g", "u1"),
-                                                ("b", "u1")])
+    points = np.frombuffer(
+        raw[start:], dtype=[("x", "<f4"), ("y", "<f4"), ("z", "<f4"), ("r", "u1"), ("g", "u1"), ("b", "u1")]
+    )
     return np.stack([points["x"], points["y"], points["z"]], axis=1).astype(np.float32)
 
 
@@ -145,34 +165,45 @@ def score(result: dict, depth: np.ndarray, seed: int = mvo.SEED) -> dict:
     seen = np.flatnonzero(np.array(layout.cells[:]) > 0)
     rng = np.random.default_rng(seed)
     random_pick = seen[rng.integers(len(seen), size=len(choices))]
-    out = {"frames": int(len(choices)), "no_free_direction": float(np.mean(choices < 0)),
-           "blocked_rate": {f"{BANDS[d // COLUMNS]} {SECTORS[d % COLUMNS]}": float(blocked[:, d].mean())
-                            for d in range(DIRECTIONS)}}
+    out = {
+        "frames": int(len(choices)),
+        "no_free_direction": float(np.mean(choices < 0)),
+        "blocked_rate": {
+            f"{BANDS[d // COLUMNS]} {SECTORS[d % COLUMNS]}": float(blocked[:, d].mean()) for d in range(DIRECTIONS)
+        },
+    }
     for near in RANGES:
         share, truth = reference_blocked(depth, layout, near)
         bands = {}
         for band, name in enumerate(BANDS + ("all",)):
             part = slice(band * COLUMNS, (band + 1) * COLUMNS) if name != "all" else slice(0, DIRECTIONS)
             t, b = truth[:, part], blocked[:, part]
-            bands[name] = {"reference_blocked": float(t.mean()), "mask_blocked": float(b.mean()),
-                           "recall": float((t & b).sum() / t.sum()) if t.any() else None,
-                           "precision": float((t & b).sum() / b.sum()) if b.any() else None}
+            bands[name] = {
+                "reference_blocked": float(t.mean()),
+                "mask_blocked": float(b.mean()),
+                "recall": float((t & b).sum() / t.sum()) if t.any() else None,
+                "precision": float((t & b).sum() / b.sum()) if b.any() else None,
+            }
         chosen = choices >= 0
         out[f"within_{near:g}_m"] = {
             "bands": bands,
             "choice_free": float(np.mean(~truth[np.flatnonzero(chosen), choices[chosen]])) if chosen.any() else None,
             "ahead_free": float(np.mean(~truth[:, CENTRE])),
             "random_free": float(np.mean(~truth[np.arange(len(choices)), random_pick])),
-            "share_correlation": float(np.corrcoef(result["shares"].ravel() / 255.0, share.ravel())[0, 1])}
+            "share_correlation": float(np.corrcoef(result["shares"].ravel() / 255.0, share.ravel())[0, 1]),
+        }
     return out
 
 
-def draw(output: Path, rate: float, frames: list[np.ndarray], masks: list[np.ndarray | None], depth: np.ndarray,
-         result: dict) -> None:
+def draw(
+    output: Path, rate: float, frames: list[np.ndarray], masks: list[np.ndarray | None], depth: np.ndarray, result: dict
+) -> None:
     """directions.png: example frames with the directions over them (red blocked, green outline the choice), the mask
     and the reference depth; level_band.png: the level band over the clip."""
     from PIL import Image, ImageDraw
+
     from uwslam.utils import font
+
     layout = result["layout"]
     sector = np.array(layout.sector[:MASK_WIDTH])
     band = np.array(layout.band[:MASK_HEIGHT])
@@ -183,8 +214,13 @@ def draw(output: Path, rate: float, frames: list[np.ndarray], masks: list[np.nda
     picks = np.linspace(len(frames) * 0.1, len(frames) * 0.9, EXAMPLES).astype(int)
     sheet = Image.new("RGB", (3 * 330 + 10, EXAMPLES * 260 + 40), "white")
     pen = ImageDraw.Draw(sheet)
-    pen.text((10, 8), f"{rate:g} Hz: red blocked, green outline the chosen direction | mask (red not water) | "
-             "reference depth (white near, black none)", fill="black", font=font(14))
+    pen.text(
+        (10, 8),
+        f"{rate:g} Hz: red blocked, green outline the chosen direction | mask (red not water) | "
+        "reference depth (white near, black none)",
+        fill="black",
+        font=font(14),
+    )
     for row, k in enumerate(picks):
         top = 40 + row * 260
         grey = Image.fromarray(frames[k]).convert("RGB")
@@ -194,8 +230,12 @@ def draw(output: Path, rate: float, frames: list[np.ndarray], masks: list[np.nda
             b, s = divmod(d, COLUMNS)
             if columns[s] is None or rows[b] is None:
                 continue
-            box = [columns[s], rows[b], edges_x[edges_x.index(columns[s]) + 1] - 1,
-                   edges_y[edges_y.index(rows[b]) + 1] - 1]
+            box = [
+                columns[s],
+                rows[b],
+                edges_x[edges_x.index(columns[s]) + 1] - 1,
+                edges_y[edges_y.index(rows[b]) + 1] - 1,
+            ]
             if result["blocked"][k, d]:
                 tinter.rectangle(box, fill=(220, 40, 40, 90))
             tinter.rectangle(box, outline=(255, 255, 255, 120))
@@ -225,10 +265,18 @@ def draw(output: Path, rate: float, frames: list[np.ndarray], masks: list[np.nda
     canvas = Image.new("RGB", (image.width + 110, image.height + 64), "white")
     canvas.paste(image, (100, 54))
     pen = ImageDraw.Draw(canvas)
-    pen.text((10, 6), f"Level band at {rate:g} Hz over the clip, one column per frame. Per sector, upper row: the mask's",
-             fill="black", font=font(13))
-    pen.text((10, 24), "blocked (red; green where chosen); lower row: the reference has a surface within 1 m (grey)",
-             fill="black", font=font(13))
+    pen.text(
+        (10, 6),
+        f"Level band at {rate:g} Hz over the clip, one column per frame. Per sector, upper row: the mask's",
+        fill="black",
+        font=font(13),
+    )
+    pen.text(
+        (10, 24),
+        "blocked (red; green where chosen); lower row: the reference has a surface within 1 m (grey)",
+        fill="black",
+        font=font(13),
+    )
     for s in range(COLUMNS):
         pen.text((8, 54 + s * 28 + 6), SECTORS[s], fill="black", font=font(12))
     canvas.save(output / f"level_band_{rate:g}hz.png")
@@ -239,49 +287,81 @@ def percent(value: float | None) -> str:
 
 
 def write_report(output: Path, summary: dict) -> None:
-    lines = ["# Obstacle directions from the water masks (lake clip)", "",
-             "The segmentation's 60×80 mask of each frame (not water: red in the figures) is split into 3 × 5 "
-             "directions of the camera's view by `core/obstacle_dir.c`: bands up / level / down at ±15° and sectors at "
-             "±15° and ±40° from the optical axis. A direction is blocked as soon as half of it is not water and freed "
-             "only after two frames below 30%; the choice is the free direction nearest straight ahead (fewest steps, "
-             "turning before rising or diving, then the more open). It is scored against the reference "
-             "reconstruction, seen through the same grid from the reference camera of each frame: a direction counts "
-             "as blocked at range R when half of its cells hold a reconstructed surface nearer than R.", "",
-             "The reconstruction has no water surface, so in the upper band the mask blocks directions the reference "
-             "calls open: the surface bounds the robot too. The mask says nothing about range; the voxel map does.", ""]
+    lines = [
+        "# Obstacle directions from the water masks (lake clip)",
+        "",
+        "The segmentation's 60×80 mask of each frame (not water: red in the figures) is split into 3 × 5 "
+        "directions of the camera's view by `core/obstacle_dir.c`: bands up / level / down at ±15° and sectors at "
+        "±15° and ±40° from the optical axis. A direction is blocked as soon as half of it is not water and freed "
+        "only after two frames below 30%; the choice is the free direction nearest straight ahead (fewest steps, "
+        "turning before rising or diving, then the more open). It is scored against the reference "
+        "reconstruction, seen through the same grid from the reference camera of each frame: a direction counts "
+        "as blocked at range R when half of its cells hold a reconstructed surface nearer than R.",
+        "",
+        "The reconstruction has no water surface, so in the upper band the mask blocks directions the reference "
+        "calls open: the surface bounds the robot too. The mask says nothing about range; the voxel map does.",
+        "",
+    ]
     for row in summary["runs"]:
-        lines += [f"## {row['rate_hz']:g} Hz ({row['frames']} frames)", "",
-                  f"No free direction in {percent(row['no_free_direction'])} of the frames.", "",
-                  "| Range | Band | Reference blocked | Mask blocked | Reference-blocked directions the mask blocks | "
-                  "Mask-blocked directions the reference blocks |", "|---:|---|---:|---:|---:|---:|"]
+        lines += [
+            f"## {row['rate_hz']:g} Hz ({row['frames']} frames)",
+            "",
+            f"No free direction in {percent(row['no_free_direction'])} of the frames.",
+            "",
+            "| Range | Band | Reference blocked | Mask blocked | Reference-blocked directions the mask blocks | "
+            "Mask-blocked directions the reference blocks |",
+            "|---:|---|---:|---:|---:|---:|",
+        ]
         for near in RANGES:
             entry = row[f"within_{near:g}_m"]
             for name in BANDS + ("all",):
                 b = entry["bands"][name]
-                lines.append(f"| {near:g} m | {name} | {percent(b['reference_blocked'])} | {percent(b['mask_blocked'])} | "
-                             f"{percent(b['recall'])} | {percent(b['precision'])} |")
-        lines += ["", "| Range | The choice is free | Straight ahead is free | A random direction is free | "
-                  "Share correlation |", "|---:|---:|---:|---:|---:|"]
+                lines.append(
+                    f"| {near:g} m | {name} | {percent(b['reference_blocked'])} | {percent(b['mask_blocked'])} | "
+                    f"{percent(b['recall'])} | {percent(b['precision'])} |"
+                )
+        lines += [
+            "",
+            "| Range | The choice is free | Straight ahead is free | A random direction is free | Share correlation |",
+            "|---:|---:|---:|---:|---:|",
+        ]
         for near in RANGES:
             entry = row[f"within_{near:g}_m"]
-            lines.append(f"| {near:g} m | {percent(entry['choice_free'])} | {percent(entry['ahead_free'])} | "
-                         f"{percent(entry['random_free'])} | {entry['share_correlation']:.2f} |")
+            lines.append(
+                f"| {near:g} m | {percent(entry['choice_free'])} | {percent(entry['ahead_free'])} | "
+                f"{percent(entry['random_free'])} | {entry['share_correlation']:.2f} |"
+            )
         lines.append("")
-    lines += ["Figures: `directions_<rate>hz.png` (example frames with their directions, mask and reference depth) and "
-              "`level_band_<rate>hz.png` (the level band over the clip).", "",
-              "Re-run (the output folder must not exist or be empty):", "", "```bash",
-              "python -m uwslam.obstacle_dir <video> --reconstruction <folder with images.txt and images.ply> "
-              "--output results/lake_clip/obstacle_dir_2", "```", ""]
+    lines += [
+        "Figures: `directions_<rate>hz.png` (example frames with their directions, mask and reference depth) and "
+        "`level_band_<rate>hz.png` (the level band over the clip).",
+        "",
+        "Re-run (the output folder must not exist or be empty):",
+        "",
+        "```bash",
+        "python -m uwslam.obstacle_dir <video> --reconstruction <folder with images.txt and images.ply> "
+        "--output results/lake_clip/obstacle_dir_2",
+        "```",
+        "",
+    ]
     (output / "RESULTS.md").write_text("\n".join(lines), encoding="utf-8", newline="\n")
 
 
 def write_board_files(output: Path, result: dict, masks: list[np.ndarray | None], rate: float) -> None:
     """What the board must report at `rate` for the directions: after every frame the choice and the blocked bits, at
     the end the state's hash (it takes the masks `uwslam.mono_map --board-masks` wrote)."""
-    expected = {"rate_hz": rate, "every": BOARD_RATES[rate], "frames": len(masks),
-                "with_mask": [mask is not None for mask in masks], "choices": result["choices"].tolist(),
-                "blocked_bits": result["blocked_bits"], "dir_frames": result["frames"], "dir_hash": result["hash"],
-                **sources_sha256(), **mvo.build_config()}
+    expected = {
+        "rate_hz": rate,
+        "every": BOARD_RATES[rate],
+        "frames": len(masks),
+        "with_mask": [mask is not None for mask in masks],
+        "choices": result["choices"].tolist(),
+        "blocked_bits": result["blocked_bits"],
+        "dir_frames": result["frames"],
+        "dir_hash": result["hash"],
+        **sources_sha256(),
+        **mvo.build_config(),
+    }
     dump_json(output / f"board_expected_dirs_{rate:g}hz.json", expected)
 
 
@@ -289,6 +369,7 @@ def run(video: Path, reconstruction: Path, output: Path, time_scale: float) -> d
     from uwslam.experiments.mask_motion import Camera, reference_poses
     from uwslam.experiments.mono_vo import ASPECT, HFOV_DEG, LENS, read_frames
     from uwslam.mono_map import load_matched_masks
+
     if output.exists() and any(output.iterdir()):
         raise FileExistsError("Refusing to overwrite results; choose a fresh --output")
     poses = np.loadtxt(reconstruction / "images.txt")
@@ -299,10 +380,11 @@ def run(video: Path, reconstruction: Path, output: Path, time_scale: float) -> d
     rotations, centres = reference_poses(poses, np.arange(len(grey)) / fps, time_scale)
     cloud = load_cloud(reconstruction)
     grid_camera = Camera.from_fov(HFOV_DEG, ASPECT)
-    camera = mvo.lake_camera()
+    camera = mvo.clip_camera()
     output.mkdir(parents=True, exist_ok=True)
     runs = []
     import tempfile
+
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as scratch:
         lib = mvo.build(Path(scratch))
         depth_cache = {}
@@ -320,14 +402,25 @@ def run(video: Path, reconstruction: Path, output: Path, time_scale: float) -> d
             if rate in BOARD_RATES:
                 write_board_files(output, result, frame_masks, rate)
             level = scores["within_1_m"]
-            print(f"{rate:g} Hz: the choice is free within 1 m in {percent(level['choice_free'])} of the frames "
-                  f"(straight ahead {percent(level['ahead_free'])}); reference-blocked directions the mask blocks: "
-                  f"{percent(level['bands']['all']['recall'])}", flush=True)
-    summary = {"task": "Obstacle directions from the segmentation's water masks on the lake clip, scored against the "
-                       "reference reconstruction's depth", "sources_sha256": sources_sha256(), **mvo.build_config(),
-               "masks": "frames.npz",
-               "time_scale": time_scale, "hfov_deg": HFOV_DEG, "lens": list(LENS), "ranges_m": list(RANGES),
-               "reference_cell": {"min_points": MIN_POINTS, "depth_percentile": DEPTH_PERCENTILE}, "runs": runs}
+            print(
+                f"{rate:g} Hz: the choice is free within 1 m in {percent(level['choice_free'])} of the frames "
+                f"(straight ahead {percent(level['ahead_free'])}); reference-blocked directions the mask blocks: "
+                f"{percent(level['bands']['all']['recall'])}",
+                flush=True,
+            )
+    summary = {
+        "task": "Obstacle directions from the segmentation's water masks on the lake clip, scored against the "
+        "reference reconstruction's depth",
+        "sources_sha256": sources_sha256(),
+        **mvo.build_config(),
+        "masks": "frames.npz",
+        "time_scale": time_scale,
+        "hfov_deg": HFOV_DEG,
+        "lens": list(LENS),
+        "ranges_m": list(RANGES),
+        "reference_cell": {"min_points": MIN_POINTS, "depth_percentile": DEPTH_PERCENTILE},
+        "runs": runs,
+    }
     dump_json(output / "summary.json", summary)
     write_report(output, summary)
     return summary
@@ -337,7 +430,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("video", type=Path)
     parser.add_argument("--reconstruction", type=Path, required=True)
-    parser.add_argument("--output", type=Path, default=LAKE_CLIP_RESULTS / "obstacle_dir")
+    parser.add_argument("--output", type=Path, default=CLIP_RESULTS / "obstacle_dir")
     parser.add_argument("--time-scale", type=float, default=3.0)
     args = parser.parse_args()
     run(args.video, args.reconstruction, args.output, args.time_scale)

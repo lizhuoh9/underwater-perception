@@ -76,7 +76,7 @@ clip the seed alone can change an error twofold.
 │   ├── path_plan.c/.h          where to head next: local avoidance and 3D path choice
 │   ├── mono_map.c/.h           top-view obstacle slice (frozen at the first loss)
 │   └── mono_cloud.c/.h         sparse points of the tracked features (frozen at the first loss)
-├── firmware/esp32s3_mono_vo/   ESP-IDF app (ESP32-S3, also ESP32-P4): runs the core on streamed frames and masks, reports hashes and times
+├── firmware/mono_vo_stream/    ESP-IDF app (ESP32-P4; also builds for the ESP32-S3): runs the core on streamed frames and masks, reports hashes and times
 ├── src/uwslam/                 Python package
 │   ├── mvo.py                  ctypes binding of the core; the odometry on the lake clip against the OpenCV prototype
 │   ├── voxel_map.py            the voxel map on the lake clip, scored against the reconstruction
@@ -283,13 +283,13 @@ down as the steps to the nearest obstacle run out.
 
 ## ESP32-S3
 
-[firmware/esp32s3_mono_vo](firmware/esp32s3_mono_vo) runs the odometry, the voxel map, the obstacle directions, the
+[firmware/mono_vo_stream](firmware/mono_vo_stream) runs the odometry, the voxel map, the obstacle directions, the
 planner and the two older maps on frames and masks streamed over USB, and answers every frame with its step's hash, map counts and
 stage times. [mvo_stream.py](src/uwslam/mvo_stream.py) checks all of it against the PC's expectations.
 
 ```bash
 # in an ESP-IDF 5.3+ shell
-idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_240 -p <PORT> flash
+idf.py -C firmware/mono_vo_stream -B firmware/mono_vo_stream/build_240 -p <PORT> flash
 python -m uwslam.mvo_stream --port <PORT> --frames <frames file> --masks <masks file> \
     --expected results/lake_clip/mono_vo_c/board_expected_5hz.json \
     --expected-map results/lake_clip/mono_map/board_expected_map_5hz.json \
@@ -327,7 +327,7 @@ instead, the firmware links as on the S3 once built with that console: a default
 clip in 31 s, against 173 s for the earlier UART run.
 
 ```bash
-idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_p4 -D SDKCONFIG=build_p4/sdkconfig \
+idf.py -C firmware/mono_vo_stream -B firmware/mono_vo_stream/build_p4 -D SDKCONFIG=build_p4/sdkconfig \
     -D IDF_TARGET=esp32p4 -p <PORT> flash
 python -m uwslam.mvo_stream --port <PORT> ...   # the same arguments as for the S3
 ```
@@ -347,7 +347,7 @@ the P4 firmware got its own (below) and before the lens ([results/lake_clip/mono
 | Plan, mean / max | 0.49 / 0.7 ms | 0.53 / 0.7 ms |
 | Internal RAM free at the end | 217,036 B | 217,036 B |
 
-[mvo_pie_p4.S](firmware/esp32s3_mono_vo/main/mvo_pie_p4.S) is the S3's window kernels in the P4's vector instructions,
+[mvo_pie_p4.S](firmware/mono_vo_stream/main/mvo_pie_p4.S) is the S3's window kernels in the P4's vector instructions,
 which belong to the same family: per call 8.6 µs (a window) and 3.0 µs (its sums), against 72 and 23 µs for the C
 kernels on the P4 and 14 and 4.7 µs for the S3's vector kernels. The board's self-test found them equal to the C
 kernels on 20,000 random windows, and every run checks 2,000 more. The block copy stays in C (6.0 µs a call); no vector
@@ -384,7 +384,7 @@ same voxels did not). With the lens, the 19×19 windows brought the heading over
 the median (lower in 59% of the paired runs) and its largest error from 20.1° to 15.3°, the position about the same
 (0.066 against 0.067 m, lower in 57%), the full clip's too (0.21 m); at 3 and 10 Hz the heading was worse. With them,
 350 or 400 features were worse at 5 Hz (full clip 0.23 and 0.24 m).
-[mvo_pie_p4.S](firmware/esp32s3_mono_vo/main/mvo_pie_p4.S) holds the vector kernels for both window sizes: a row of 19
+[mvo_pie_p4.S](firmware/mono_vo_stream/main/mvo_pie_p4.S) holds the vector kernels for both window sizes: a row of 19
 pixels takes three vectors, and a call costs 19.6 µs (a window) and 6.5 µs (its sums) against 118 and 36 µs for the C
 kernels; the board found them equal to the C kernels on 20,000 random windows.
 

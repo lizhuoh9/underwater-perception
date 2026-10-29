@@ -2,13 +2,13 @@
 files their surfaces, goes on through a tracking loss and files nothing on water."""
 
 import ctypes
-from importlib.util import find_spec
-from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from importlib.util import find_spec
+from pathlib import Path
 
 import numpy as np
 
@@ -29,9 +29,26 @@ class VoxelMapContractTests(unittest.TestCase):
     def test_c_contract(self):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
             program = Path(folder) / "voxel_map_check.exe"
-            subprocess.run(["gcc", "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-pedantic", "-ffp-contract=off",
-                            *config_defines(), *STATIC, f"-I{ROOT / 'core'}", str(ROOT / "tests/c/voxel_map_check.c"),
-                            str(ROOT / "core/voxel_map.c"), "-o", str(program)], check=True)
+            subprocess.run(
+                [
+                    "gcc",
+                    "-std=c99",
+                    "-O2",
+                    "-Wall",
+                    "-Wextra",
+                    "-Werror",
+                    "-pedantic",
+                    "-ffp-contract=off",
+                    *config_defines(),
+                    *STATIC,
+                    f"-I{ROOT / 'core'}",
+                    str(ROOT / "tests/c/voxel_map_check.c"),
+                    str(ROOT / "core/voxel_map.c"),
+                    "-o",
+                    str(program),
+                ],
+                check=True,
+            )
             output = subprocess.run([str(program)], check=True, capture_output=True, text=True).stdout
         self.assertIn("voxel_map_check ok", output)
 
@@ -44,8 +61,9 @@ class VoxelMapTests(unittest.TestCase):
         cls.vo = mvo.build(cls.folder)
         cls.camera = mvo.camera_for(110.0, 544 / 960)
         wall, floor = texture(1), texture(2)
-        cls.poses = [(euler_rotation(np.radians(1.5 * k), 0.0, 0.0), np.array([0.30 * k, 0.0, 0.15 * k]))
-                     for k in range(10)]
+        cls.poses = [
+            (euler_rotation(np.radians(1.5 * k), 0.0, 0.0), np.array([0.30 * k, 0.0, 0.15 * k])) for k in range(10)
+        ]
         cls.frames = [render(rotation, centre, cls.camera, wall, floor) for rotation, centre in cls.poses]
         cls.unit = float(np.linalg.norm(cls.poses[1][1] - cls.poses[0][1]))  # the odometry's first step is its unit
 
@@ -63,7 +81,9 @@ class VoxelMapTests(unittest.TestCase):
         obstacles = voxel_map.centres_of(result["final"]) * self.unit
         self.assertGreater(len(obstacles), 100)
         side = result["final"]["side"] * self.unit
-        on_surface = (np.abs(obstacles[:, 2] - WALL_Z) < 2 * side + 0.1) | (np.abs(obstacles[:, 1] - FLOOR_Y) < 2 * side + 0.1)
+        on_surface = (np.abs(obstacles[:, 2] - WALL_Z) < 2 * side + 0.1) | (
+            np.abs(obstacles[:, 1] - FLOOR_Y) < 2 * side + 0.1
+        )
         self.assertGreater(on_surface.mean(), 0.9)
         self.assertEqual(result["stats"]["lost"], 0)
         self.assertEqual(result["stats"]["count"], len(result["final"]["keys"]))

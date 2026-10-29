@@ -1,9 +1,8 @@
 """End-to-end PC/firmware-handler replay using real VO and cloud C code, no device."""
-from importlib.util import find_spec
+
 import hashlib
 import json
 import os
-from pathlib import Path
 import queue
 import shutil
 import struct
@@ -13,6 +12,8 @@ import tempfile
 import threading
 import time
 import unittest
+from importlib.util import find_spec
+from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
@@ -32,8 +33,9 @@ class ProcessBoard:
 
     def __init__(self, program: Path | list[str], write_timeout: float = 15.0, close_timeout: float = 15.0):
         command = [str(program)] if isinstance(program, Path) else program
-        self.process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                        stderr=subprocess.PIPE, bufsize=0)
+        self.process = subprocess.Popen(
+            command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0
+        )
         self.lines = []
         self.output = queue.Queue()
         self.write_timeout, self.close_timeout = write_timeout, close_timeout
@@ -128,8 +130,9 @@ class ProcessBoard:
 
 class ProcessBoardTimeoutTests(unittest.TestCase):
     def test_write_timeout_reaps_child_and_unblocks_writer(self):
-        board = ProcessBoard([sys.executable, "-u", "-c", "import time; time.sleep(60)"],
-                             write_timeout=0.5, close_timeout=0.5)
+        board = ProcessBoard(
+            [sys.executable, "-u", "-c", "import time; time.sleep(60)"], write_timeout=0.5, close_timeout=0.5
+        )
         started = time.monotonic()
         with self.assertRaisesRegex(TimeoutError, "write timeout"):
             try:
@@ -142,8 +145,11 @@ class ProcessBoardTimeoutTests(unittest.TestCase):
         self.assertFalse(board.reader.is_alive())
 
     def test_close_does_not_replace_an_active_reply_error(self):
-        board = ProcessBoard([sys.executable, "-u", "-c", "import time; print('error simulated'); time.sleep(60)"],
-                             write_timeout=0.5, close_timeout=0.5)
+        board = ProcessBoard(
+            [sys.executable, "-u", "-c", "import time; print('error simulated'); time.sleep(60)"],
+            write_timeout=0.5,
+            close_timeout=0.5,
+        )
         with self.assertRaisesRegex(RuntimeError, "reported: error simulated"):
             try:
                 board.reply(("ready",), timeout=5)
@@ -161,8 +167,17 @@ class MonoCloudBoardHostTests(unittest.TestCase):
         cls.vo = mvo.build(cls.folder / "library")
         cls.camera = mvo.camera_for(110.0, 544 / 960)
         include = cls.folder / "include"
-        for name in ("driver/usb_serial_jtag.h", "driver/usb_serial_jtag_vfs.h", "esp_cpu.h", "esp_heap_caps.h",
-                     "esp_timer.h", "freertos/FreeRTOS.h", "freertos/semphr.h", "freertos/task.h", "sdkconfig.h"):
+        for name in (
+            "driver/usb_serial_jtag.h",
+            "driver/usb_serial_jtag_vfs.h",
+            "esp_cpu.h",
+            "esp_heap_caps.h",
+            "esp_timer.h",
+            "freertos/FreeRTOS.h",
+            "freertos/semphr.h",
+            "freertos/task.h",
+            "sdkconfig.h",
+        ):
             header = include / name
             header.parent.mkdir(parents=True, exist_ok=True)
             header.write_text("", encoding="ascii")
@@ -184,18 +199,36 @@ class MonoCloudBoardHostTests(unittest.TestCase):
         header = cls.folder / "hashes.h"
         header.write_text("".join(f'#define {key} "{value}"\n' for key, value in definitions.items()), encoding="ascii")
         cls.program = cls.folder / ("mvo_real_replay.exe" if sys.platform == "win32" else "mvo_real_replay")
-        command = ["gcc", *CFLAGS, *mvo.config_defines(), "-Wno-unused-function", "-ffunction-sections", "-fdata-sections",
-                   "-Wl,--gc-sections", *(["-static"] if sys.platform == "win32" else []),
-                   f"-I{include}", f"-I{ROOT / 'core'}", "-include", str(header),
-                   str(ROOT / "tests/c/mvo_real_replay.c"), *map(str, mvo.SOURCES),
-                   str(mvo.MAP_SOURCE), str(mvo.CLOUD_SOURCE), str(mvo.VOXEL_SOURCE), str(mvo.DIRECTION_SOURCE),
-                   str(mvo.PLAN_SOURCE), "-o", str(cls.program)]
+        command = [
+            "gcc",
+            *CFLAGS,
+            *mvo.config_defines(),
+            "-Wno-unused-function",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-Wl,--gc-sections",
+            *(["-static"] if sys.platform == "win32" else []),
+            f"-I{include}",
+            f"-I{ROOT / 'core'}",
+            "-include",
+            str(header),
+            str(ROOT / "tests/c/mvo_real_replay.c"),
+            *map(str, mvo.SOURCES),
+            str(mvo.MAP_SOURCE),
+            str(mvo.CLOUD_SOURCE),
+            str(mvo.VOXEL_SOURCE),
+            str(mvo.DIRECTION_SOURCE),
+            str(mvo.PLAN_SOURCE),
+            "-o",
+            str(cls.program),
+        ]
         env = dict(os.environ, TMP=str(cls.folder), TEMP=str(cls.folder))
         subprocess.run(command, check=True, env=env)
         cls.fingerprints = fingerprints
         wall, floor = texture(1), texture(2)
-        cls.poses = [(euler_rotation(np.radians(1.5 * k), 0.0, 0.0), np.array([0.30 * k, 0.0, 0.15 * k]))
-                     for k in range(8)]
+        cls.poses = [
+            (euler_rotation(np.radians(1.5 * k), 0.0, 0.0), np.array([0.30 * k, 0.0, 0.15 * k])) for k in range(8)
+        ]
         cls.frames = [render(rotation, centre, cls.camera, wall, floor) for rotation, centre in cls.poses]
 
     @classmethod
@@ -207,18 +240,33 @@ class MonoCloudBoardHostTests(unittest.TestCase):
         result = mono_cloud.run_frames(self.vo, iter(frames), self.camera)
         cloud = result["cloud"]
         frame_data = [np.ascontiguousarray(frame).tobytes() for frame in frames]
-        camera_bits = [struct.unpack("<I", struct.pack("<f", getattr(self.camera, name)))[0]
-                       for name in ("fx", "fy", "cx", "cy")]
-        expected = {"frames": len(frames), "every": 1, "rate_hz": None,
-                    "step_hashes": result["step_hashes"], "camera_bits": camera_bits, "seed": mvo.SEED,
-                    **{key: self.fingerprints[key] for key in ("core_sha256", "header_sha256")}, **mvo.build_config()}
-        expected_cloud = {"frames": len(frames), "step_hashes": result["step_hashes"], "cloud_policy": 1,
-                          **{key: self.fingerprints[key] for key in ("cloud_sha256", "cloud_header_sha256")},
-                          "frames_sha256": hashlib.sha256(b"".join(frame_data)).hexdigest(),
-                          "frame_sha256": [hashlib.sha256(frame).hexdigest() for frame in frame_data],
-                          "cloud_progress": result["cloud_progress"], "cloud_hash": result["cloud_hash"],
-                          "cloud_count": int(cloud.count), "cloud_dropped": int(cloud.dropped),
-                          "cloud_continuous": int(cloud.continuous), **mvo.build_config()}
+        camera_bits = [
+            struct.unpack("<I", struct.pack("<f", getattr(self.camera, name)))[0] for name in ("fx", "fy", "cx", "cy")
+        ]
+        expected = {
+            "frames": len(frames),
+            "every": 1,
+            "rate_hz": None,
+            "step_hashes": result["step_hashes"],
+            "camera_bits": camera_bits,
+            "seed": mvo.SEED,
+            **{key: self.fingerprints[key] for key in ("core_sha256", "header_sha256")},
+            **mvo.build_config(),
+        }
+        expected_cloud = {
+            "frames": len(frames),
+            "step_hashes": result["step_hashes"],
+            "cloud_policy": 1,
+            **{key: self.fingerprints[key] for key in ("cloud_sha256", "cloud_header_sha256")},
+            "frames_sha256": hashlib.sha256(b"".join(frame_data)).hexdigest(),
+            "frame_sha256": [hashlib.sha256(frame).hexdigest() for frame in frame_data],
+            "cloud_progress": result["cloud_progress"],
+            "cloud_hash": result["cloud_hash"],
+            "cloud_count": int(cloud.count),
+            "cloud_dropped": int(cloud.dropped),
+            "cloud_continuous": int(cloud.continuous),
+            **mvo.build_config(),
+        }
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp:
             folder = Path(temp)
             path = folder / "frames.bin"
@@ -226,14 +274,16 @@ class MonoCloudBoardHostTests(unittest.TestCase):
             vo_path, cloud_path = folder / "vo.json", folder / "cloud.json"
             vo_path.write_text(json.dumps(expected), encoding="utf-8")
             cloud_path.write_text(json.dumps(expected_cloud), encoding="utf-8")
-            with patch.object(mvo_stream, "Board", side_effect=lambda port, baud: ProcessBoard(self.program)), patch("builtins.print"):
-                record, lines = mvo_stream.stream("host-only", path, vo_path, cores=1,
-                                                  expected_cloud_path=cloud_path)
+            with (
+                patch.object(mvo_stream, "Board", side_effect=lambda port, baud: ProcessBoard(self.program)),
+                patch("builtins.print"),
+            ):
+                record, lines = mvo_stream.stream("host-only", path, vo_path, cores=1, expected_cloud_path=cloud_path)
         self.assertTrue(record["all_match"])
         self.assertTrue(record["cloud"]["match"])
         self.assertEqual(record["cloud"]["hash"], result["cloud_hash"])
         self.assertEqual(len(record["cloud"]["points"]), cloud.count)
-        for pc, board in zip(cloud.points[:cloud.count], record["cloud"]["points"]):
+        for pc, board in zip(cloud.points[: cloud.count], record["cloud"]["points"]):
             self.assertEqual(board["id"], pc.id)
             self.assertEqual(board["observations"], pc.observations)
             self.assertEqual(struct.pack("<3f", *board["xyz"]), struct.pack("<3f", *pc.xyz))
@@ -256,19 +306,22 @@ class MonoCloudBoardHostTests(unittest.TestCase):
         self.assertEqual(record["cloud"]["continuous"], 0)
         self.assertEqual(result["cloud"].count, before["cloud"].count)
         self.assertGreater(result["cloud"].count, 0)
-        self.assertEqual([bytes(point) for point in result["cloud"].points[:result["cloud"].count]],
-                         [bytes(point) for point in before["cloud"].points[:before["cloud"].count]])
+        self.assertEqual(
+            [bytes(point) for point in result["cloud"].points[: result["cloud"].count]],
+            [bytes(point) for point in before["cloud"].points[: before["cloud"].count]],
+        )
 
     def test_voxel_map_and_directions_match_the_pc_through_the_firmware(self):
         """With masks (one frame without), a blackout and the real handlers: every step's voxels and plan, every
         frame's directions and the final hashes equal the PC's, and the voxel map goes on after the loss."""
         from uwslam import mono_map, obstacle_dir, path_plan, voxel_map
+
         frames = list(self.frames)
         frames[3] = np.full((mvo.HEIGHT, mvo.WIDTH), 128, dtype=np.uint8)
         masks = []
         for k in range(len(frames)):
             mask = np.ones((60, 80), dtype=np.uint8)
-            mask[:24, 4 * k:4 * k + 30] = 0  # open water up and to the side, drifting right
+            mask[:24, 4 * k : 4 * k + 30] = 0  # open water up and to the side, drifting right
             masks.append(mask)
         masks[5] = None
         voxels = voxel_map.run_mapping(self.vo, frames, masks, self.camera)
@@ -278,12 +331,20 @@ class MonoCloudBoardHostTests(unittest.TestCase):
         self.assertEqual(plans["plan_hashes"][-1], plans["hash"])
         self.assertEqual(voxels["stats"]["lost"], 2)
         self.assertGreater(sum(item["filed"] for item in voxels["progress"][4:]), 0)
-        camera_bits = [struct.unpack("<I", struct.pack("<f", getattr(self.camera, name)))[0]
-                       for name in ("fx", "fy", "cx", "cy")]
+        camera_bits = [
+            struct.unpack("<I", struct.pack("<f", getattr(self.camera, name)))[0] for name in ("fx", "fy", "cx", "cy")
+        ]
         step_hashes = [mvo.fnv(mvo.FNV_OFFSET, bytes(step)) for step in voxels["steps"]]
-        expected = {"frames": len(frames), "every": 1, "rate_hz": 10.0, "step_hashes": step_hashes,
-                    "camera_bits": camera_bits, "seed": mvo.SEED,
-                    **{key: self.fingerprints[key] for key in ("core_sha256", "header_sha256")}, **mvo.build_config()}
+        expected = {
+            "frames": len(frames),
+            "every": 1,
+            "rate_hz": 10.0,
+            "step_hashes": step_hashes,
+            "camera_bits": camera_bits,
+            "seed": mvo.SEED,
+            **{key: self.fingerprints[key] for key in ("core_sha256", "header_sha256")},
+            **mvo.build_config(),
+        }
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp:
             folder = Path(temp)
             frames_path, vo_path, masks_path = folder / "frames.bin", folder / "vo.json", folder / "masks.bin"
@@ -293,13 +354,21 @@ class MonoCloudBoardHostTests(unittest.TestCase):
             voxel_map.write_board_files(folder, voxels, 10.0)
             obstacle_dir.write_board_files(folder, dirs, masks, 10.0)
             path_plan.write_board_files(folder, plans, 10.0)
-            with patch.object(mvo_stream, "Board", side_effect=lambda port, baud: ProcessBoard(self.program)), \
-                    patch("builtins.print"):
-                record, _ = mvo_stream.stream("host-only", frames_path, vo_path, cores=1, masks_path=masks_path,
-                                              expected_map_path=folder / "board_expected_map_10hz.json",
-                                              expected_voxels_path=folder / "board_expected_voxels_10hz.json",
-                                              expected_dirs_path=folder / "board_expected_dirs_10hz.json",
-                                              expected_plan_path=folder / "board_expected_plan_10hz.json")
+            with (
+                patch.object(mvo_stream, "Board", side_effect=lambda port, baud: ProcessBoard(self.program)),
+                patch("builtins.print"),
+            ):
+                record, _ = mvo_stream.stream(
+                    "host-only",
+                    frames_path,
+                    vo_path,
+                    cores=1,
+                    masks_path=masks_path,
+                    expected_map_path=folder / "board_expected_map_10hz.json",
+                    expected_voxels_path=folder / "board_expected_voxels_10hz.json",
+                    expected_dirs_path=folder / "board_expected_dirs_10hz.json",
+                    expected_plan_path=folder / "board_expected_plan_10hz.json",
+                )
         self.assertTrue(record["all_match"])
         self.assertTrue(record["map"]["match"])
         self.assertTrue(record["voxels"]["match"])
@@ -318,11 +387,20 @@ class MonoCloudBoardHostTests(unittest.TestCase):
             tampered = json.loads(plan_path.read_text(encoding="utf-8"))
             tampered["plan_hashes"][1] ^= 1
             plan_path.write_text(json.dumps(tampered), encoding="utf-8")
-            with patch.object(mvo_stream, "Board", side_effect=lambda port, baud: ProcessBoard(self.program)), \
-                    patch("builtins.print"):
-                partial, _ = mvo_stream.stream("host-only", frames_path, vo_path, limit=4, cores=1, masks_path=masks_path,
-                                               expected_map_path=folder / "board_expected_map_10hz.json",
-                                               expected_plan_path=plan_path)
+            with (
+                patch.object(mvo_stream, "Board", side_effect=lambda port, baud: ProcessBoard(self.program)),
+                patch("builtins.print"),
+            ):
+                partial, _ = mvo_stream.stream(
+                    "host-only",
+                    frames_path,
+                    vo_path,
+                    limit=4,
+                    cores=1,
+                    masks_path=masks_path,
+                    expected_map_path=folder / "board_expected_map_10hz.json",
+                    expected_plan_path=plan_path,
+                )
         self.assertIs(partial["plan"]["match"], False)
         self.assertEqual(partial["plan"]["mismatched_steps"], [2])
         self.assertEqual(record["voxels"]["count"], voxels["stats"]["count"])
@@ -340,7 +418,9 @@ class MonoCloudBoardHostTests(unittest.TestCase):
         self.assertTrue(all(item["kind"] == "essential" for item in result["trajectory"][1:]))
         self.assertEqual(record["cloud"]["count"], mono_cloud.MAX_POINTS)
         self.assertGreater(record["cloud"]["dropped"], 0)
-        full_index = next(i for i, state in enumerate(result["cloud_progress"]) if state["count"] == mono_cloud.MAX_POINTS)
+        full_index = next(
+            i for i, state in enumerate(result["cloud_progress"]) if state["count"] == mono_cloud.MAX_POINTS
+        )
         self.assertGreater(result["cloud_progress"][-1]["dropped"], result["cloud_progress"][full_index]["dropped"])
 
 

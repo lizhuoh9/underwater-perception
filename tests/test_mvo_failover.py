@@ -1,11 +1,11 @@
 """Recover a known weak-homography translation without inventing motion in negative cases."""
 
-from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 from uwslam.core import CFLAGS
 from uwslam.mvo import config_defines
@@ -16,12 +16,26 @@ from uwslam.paths import CORE_DIR
 class MvoFailoverTests(unittest.TestCase):
     def test_weak_homography_translation_and_noisy_turns(self):
         source = Path(__file__).resolve().parent / "c" / "mvo_failover_check.c"
-        units = [CORE_DIR / name for name in ("mono_vo.c", "mono_vo_numerics.c", "mono_vo_homography.c",
-                                               "mono_vo_essential.c")]
+        units = [
+            CORE_DIR / name
+            for name in ("mono_vo.c", "mono_vo_numerics.c", "mono_vo_homography.c", "mono_vo_essential.c")
+        ]
         with tempfile.TemporaryDirectory() as folder:
             binary = Path(folder) / "mvo_failover_check.exe"
-            subprocess.run(["gcc", *CFLAGS, *config_defines(), *(["-static"] if sys.platform == "win32" else []),
-                            f"-I{CORE_DIR}", str(source), *map(str, units), "-o", str(binary)], check=True)
+            subprocess.run(
+                [
+                    "gcc",
+                    *CFLAGS,
+                    *config_defines(),
+                    *(["-static"] if sys.platform == "win32" else []),
+                    f"-I{CORE_DIR}",
+                    str(source),
+                    *map(str, units),
+                    "-o",
+                    str(binary),
+                ],
+                check=True,
+            )
             output = subprocess.run([str(binary)], check=True, capture_output=True, text=True).stdout
         values = {key: float(value) for key, value in (part.split("=") for part in output.split())}
         self.assertLess(values["homography"], 15, output)

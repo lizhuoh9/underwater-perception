@@ -11,6 +11,7 @@ usage:
   python lake_score.py compare <control windows.json> <candidate windows.json>
   python lake_score.py full <control pc_summary.json> <candidate pc_summary.json>
 """
+
 import argparse
 import json
 import tempfile
@@ -31,16 +32,27 @@ def window_indices(first: int, length_s: float, fps: float, rate: float, count: 
 
 def print_rate(rate: float, runs: list[dict]) -> None:
     median = {key: float(np.median([run[key] for run in runs])) for key in METRICS}
-    print(f"{rate:g} Hz, {len(runs)} runs: median ATE {median['ate_rmse']:.3f} m, heading RMSE "
-          f"{median['heading_rmse_deg']:.1f} deg, heading max {median['heading_max_deg']:.1f} deg, "
-          f"lost {median['lost']:g}", flush=True)
+    print(
+        f"{rate:g} Hz, {len(runs)} runs: median ATE {median['ate_rmse']:.3f} m, heading RMSE "
+        f"{median['heading_rmse_deg']:.1f} deg, heading max {median['heading_max_deg']:.1f} deg, "
+        f"lost {median['lost']:g}",
+        flush=True,
+    )
 
 
-def windows(video: Path, reconstruction: Path, output: Path, rates: list[float], length_s: float, every_s: float,
-            time_scale: float) -> dict:
+def windows(
+    video: Path,
+    reconstruction: Path,
+    output: Path,
+    rates: list[float],
+    length_s: float,
+    every_s: float,
+    time_scale: float,
+) -> dict:
     from uwslam import mvo
     from uwslam.experiments.mask_motion import reference_poses
     from uwslam.experiments.mono_vo import ASPECT, HFOV_DEG, evaluate, read_frames
+
     if output.exists():
         raise FileExistsError(f"Refusing to overwrite {output.name}; choose a fresh --output")
     poses = np.loadtxt(reconstruction / "images.txt")
@@ -49,7 +61,8 @@ def windows(video: Path, reconstruction: Path, output: Path, rates: list[float],
     grey = frames["320x240"]
     times = np.arange(len(grey)) / fps
     reference_rotations, reference_centres = reference_poses(poses, times, time_scale)
-    camera = mvo.lake_camera() if hasattr(mvo, "lake_camera") else mvo.camera_for(HFOV_DEG, ASPECT)  # older trees: no lens
+    clip_camera = getattr(mvo, "clip_camera", None) or getattr(mvo, "lake_camera", None)  # older trees: its old name
+    camera = clip_camera() if clip_camera else mvo.camera_for(HFOV_DEG, ASPECT)  # trees from before the lens: none
     starts = np.arange(0.0, times[-1] - length_s + 1e-6, every_s)
     runs = []
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as scratch:  # Windows keeps the loaded library locked
@@ -62,15 +75,32 @@ def windows(video: Path, reconstruction: Path, output: Path, rates: list[float],
                 window_centres = (reference_centres[indices] - first_centre) @ first_rotation
                 local = list(range(len(indices)))
                 for seed in mvo.SEEDS:
-                    records, rotations, centres = mvo.as_steps(mvo.run_frames(vo, [grey[i] for i in indices], camera, seed)[0])
-                    result = evaluate(local, records, rotations, centres, times[indices], window_rotations, window_centres)
-                    runs.append({"rate_hz": rate, "start_s": round(float(start), 3), "seed": seed,
-                                 **{key: result[key] for key in METRICS}})
+                    records, rotations, centres = mvo.as_steps(
+                        mvo.run_frames(vo, [grey[i] for i in indices], camera, seed)[0]
+                    )
+                    result = evaluate(
+                        local, records, rotations, centres, times[indices], window_rotations, window_centres
+                    )
+                    runs.append(
+                        {
+                            "rate_hz": rate,
+                            "start_s": round(float(start), 3),
+                            "seed": seed,
+                            **{key: result[key] for key in METRICS},
+                        }
+                    )
             print_rate(rate, [run for run in runs if run["rate_hz"] == rate])
     config = mvo.build_config() if hasattr(mvo, "build_config") else {"config": "s3"}  # a control from before them
-    summary = {**mvo.sources_sha256(), **config, "length_s": length_s, "every_s": every_s,
-               "time_scale": time_scale,
-               "seeds": list(mvo.SEEDS), "windows": len(starts), "runs": runs}
+    summary = {
+        **mvo.sources_sha256(),
+        **config,
+        "length_s": length_s,
+        "every_s": every_s,
+        "time_scale": time_scale,
+        "seeds": list(mvo.SEEDS),
+        "windows": len(starts),
+        "runs": runs,
+    }
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(summary, indent=1), encoding="utf-8", newline="\n")
     return summary
@@ -86,23 +116,30 @@ def compare(control_path: Path, candidate_path: Path) -> None:
     if differing:
         raise ValueError(f"The scorings differ in {', '.join(differing)}; score both with the same settings")
     base = {run_key(run): run for run in control["runs"]}
-    print(f"control core {control['core_sha256'][:8]} ({control.get('config', 's3')}), candidate core "
-          f"{candidate['core_sha256'][:8]} ({candidate.get('config', 's3')})")  # a configuration is a fair candidate
+    print(
+        f"control core {control['core_sha256'][:8]} ({control.get('config', 's3')}), candidate core "
+        f"{candidate['core_sha256'][:8]} ({candidate.get('config', 's3')})"
+    )  # a configuration is a fair candidate
     for rate in sorted({run["rate_hz"] for run in candidate["runs"]}):
-        pairs = [(base[run_key(run)], run) for run in candidate["runs"]
-                 if run["rate_hz"] == rate and run_key(run) in base]
+        pairs = [
+            (base[run_key(run)], run) for run in candidate["runs"] if run["rate_hz"] == rate and run_key(run) in base
+        ]
         print(f"{rate:g} Hz, {len(pairs)} paired runs:")
         for metric in METRICS:
             a = np.array([pair[0][metric] for pair in pairs], dtype=float)
             b = np.array([pair[1][metric] for pair in pairs], dtype=float)
-            print(f"  {metric:17s} control {np.median(a):8.3f}  candidate {np.median(b):8.3f}  "
-                  f"candidate lower in {np.mean(b < a):4.0%}, equal in {np.mean(b == a):4.0%}")
+            print(
+                f"  {metric:17s} control {np.median(a):8.3f}  candidate {np.median(b):8.3f}  "
+                f"candidate lower in {np.mean(b < a):4.0%}, equal in {np.mean(b == a):4.0%}"
+            )
 
 
 def full(control_path: Path, candidate_path: Path) -> None:
     control, candidate = (json.loads(path.read_text(encoding="utf-8")) for path in (control_path, candidate_path))
-    print(f"control core {control['core_sha256'][:8]}, candidate core {candidate['core_sha256'][:8]}; "
-          f"median [smallest-largest] over {len(control['runs'][0]['c_over_seeds']['seeds'])} seeds")
+    print(
+        f"control core {control['core_sha256'][:8]}, candidate core {candidate['core_sha256'][:8]}; "
+        f"median [smallest-largest] over {len(control['runs'][0]['c_over_seeds']['seeds'])} seeds"
+    )
     rows = {row["rate_hz"]: row["c_over_seeds"] for row in control["runs"]}
     for row in candidate["runs"]:
         if row["rate_hz"] not in rows:
@@ -110,8 +147,10 @@ def full(control_path: Path, candidate_path: Path) -> None:
         print(f"{row['rate_hz']:g} Hz:")
         for metric in FULL_METRICS:
             a, b = rows[row["rate_hz"]][metric], row["c_over_seeds"][metric]
-            print(f"  {metric:17s} control {a['median']:7.3f} [{a['min']:.3f}-{a['max']:.3f}]  "
-                  f"candidate {b['median']:7.3f} [{b['min']:.3f}-{b['max']:.3f}]")
+            print(
+                f"  {metric:17s} control {a['median']:7.3f} [{a['min']:.3f}-{a['max']:.3f}]  "
+                f"candidate {b['median']:7.3f} [{b['min']:.3f}-{b['max']:.3f}]"
+            )
 
 
 def main() -> None:
@@ -125,15 +164,24 @@ def main() -> None:
     score.add_argument("--length", type=float, default=10.0, help="Window length in seconds")
     score.add_argument("--every", type=float, default=2.0, help="Seconds between window starts")
     score.add_argument("--time-scale", type=float, default=3.0)
-    for name, text in (("compare", "Pair two window scorings run for run"),
-                       ("full", "Set two `uwslam.mvo compare` pc_summary.json tables side by side")):
+    for name, text in (
+        ("compare", "Pair two window scorings run for run"),
+        ("full", "Set two `uwslam.mvo compare` pc_summary.json tables side by side"),
+    ):
         command = commands.add_parser(name, help=text)
         command.add_argument("control", type=Path)
         command.add_argument("candidate", type=Path)
     args = parser.parse_args()
     if args.command == "windows":
-        windows(args.video, args.reconstruction, args.output, [float(v) for v in args.rates.split(",") if v],
-                args.length, args.every, args.time_scale)
+        windows(
+            args.video,
+            args.reconstruction,
+            args.output,
+            [float(v) for v in args.rates.split(",") if v],
+            args.length,
+            args.every,
+            args.time_scale,
+        )
     elif args.command == "compare":
         compare(args.control, args.candidate)
     else:

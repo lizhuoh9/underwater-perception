@@ -1,12 +1,12 @@
 """The obstacle directions (core/obstacle_dir.c): the C contract, the Python binding against a direct computation, the
 reference depth and the scores."""
 
-from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 
@@ -34,10 +34,27 @@ class ObstacleDirectionTests(unittest.TestCase):
 
     def test_c_contract(self):
         program = self.folder / "obstacle_dir_check.exe"
-        subprocess.run(["gcc", "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-pedantic", "-ffp-contract=off",
-                        *mvo.config_defines(), *STATIC, f"-I{ROOT / 'core'}", str(ROOT / "tests/c/obstacle_dir_check.c"),
-                        str(ROOT / "core/obstacle_dir.c"), str(ROOT / "core/mono_vo_numerics.c"), "-o", str(program)],
-                       check=True)
+        subprocess.run(
+            [
+                "gcc",
+                "-std=c99",
+                "-O2",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-pedantic",
+                "-ffp-contract=off",
+                *mvo.config_defines(),
+                *STATIC,
+                f"-I{ROOT / 'core'}",
+                str(ROOT / "tests/c/obstacle_dir_check.c"),
+                str(ROOT / "core/obstacle_dir.c"),
+                str(ROOT / "core/mono_vo_numerics.c"),
+                "-o",
+                str(program),
+            ],
+            check=True,
+        )
         output = subprocess.run([str(program)], check=True, capture_output=True, text=True).stdout
         self.assertIn("obstacle_dir_check ok", output)
 
@@ -72,13 +89,15 @@ class ObstacleDirectionTests(unittest.TestCase):
         rng = np.random.default_rng(0)
         plane = np.stack([rng.uniform(-3, 3, 400000), rng.uniform(-2, 2, 400000), np.full(400000, 1.5)], axis=1)
         behind = plane * np.array([1.0, 1.0, -1.0])  # behind the camera: ignored
-        depth = obstacle_dir.reference_depth(np.vstack([plane, behind]).astype(np.float32), np.eye(3), np.zeros(3),
-                                             camera)
+        depth = obstacle_dir.reference_depth(
+            np.vstack([plane, behind]).astype(np.float32), np.eye(3), np.zeros(3), camera
+        )
         seen = np.isfinite(depth)
         self.assertGreater(seen.mean(), 0.9)
         np.testing.assert_allclose(depth[seen], 1.5, atol=1e-5)
-        lone = obstacle_dir.reference_depth(np.array([[0.0, 0.0, 1.0]], dtype=np.float32), np.eye(3), np.zeros(3),
-                                            camera)
+        lone = obstacle_dir.reference_depth(
+            np.array([[0.0, 0.0, 1.0]], dtype=np.float32), np.eye(3), np.zeros(3), camera
+        )
         self.assertTrue(np.isinf(lone).all())  # one point is too few to show a surface
 
     def test_scores_count_agreement(self):

@@ -5,8 +5,11 @@ from pathlib import Path
 
 from PIL import ImageFont
 
-FONTS = (Path("C:/Windows/Fonts/arial.ttf"), Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
-         Path("/System/Library/Fonts/Supplemental/Arial.ttf"))
+FONTS = (
+    Path("C:/Windows/Fonts/arial.ttf"),
+    Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+    Path("/System/Library/Fonts/Supplemental/Arial.ttf"),
+)
 
 
 def dump_json(path: Path, data) -> None:
@@ -20,4 +23,3 @@ def font(size: int) -> ImageFont.ImageFont:
         if path.exists():
             return ImageFont.truetype(str(path), size)
     return ImageFont.load_default()
-

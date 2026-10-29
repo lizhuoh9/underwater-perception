@@ -7,4 +7,4 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 CORE_DIR = REPO_ROOT / "core"
 FIRMWARE_DIR = REPO_ROOT / "firmware"
 RESULTS_DIR = REPO_ROOT / "results"
-LAKE_CLIP_RESULTS = RESULTS_DIR / "lake_clip"
+CLIP_RESULTS = RESULTS_DIR / "lake_clip"

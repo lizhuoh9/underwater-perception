@@ -2,32 +2,52 @@
 test."""
 
 import csv
-from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 from uwslam.core import CFLAGS
 from uwslam.mvo import config_defines
 from uwslam.paths import CORE_DIR
 
-
 SOURCE = Path(__file__).resolve().parent / "c" / "mvo_lost_turn_check.c"
-UNITS = [CORE_DIR / name for name in ("mono_vo.c", "mono_vo_numerics.c", "mono_vo_homography.c",
-                                      "mono_vo_essential.c")]
+UNITS = [CORE_DIR / name for name in ("mono_vo.c", "mono_vo_numerics.c", "mono_vo_homography.c", "mono_vo_essential.c")]
 
 
 def build(folder: Path) -> Path:
     executable = folder / "mvo_lost_turn_check.exe"
-    subprocess.run(["gcc", *CFLAGS, *config_defines(), *(["-static"] if sys.platform == "win32" else []), f"-I{CORE_DIR}",
-                    str(SOURCE), *map(str, UNITS), "-lm", "-o", str(executable)], check=True)
+    subprocess.run(
+        [
+            "gcc",
+            *CFLAGS,
+            *config_defines(),
+            *(["-static"] if sys.platform == "win32" else []),
+            f"-I{CORE_DIR}",
+            str(SOURCE),
+            *map(str, UNITS),
+            "-lm",
+            "-o",
+            str(executable),
+        ],
+        check=True,
+    )
     return executable
 
 
-def trials(executable: Path, pairs: int, sigma: float, outliers: float, centre: tuple, yaw: float, pitch: float,
-           first_seed: int, count: int) -> list[dict]:
+def trials(
+    executable: Path,
+    pairs: int,
+    sigma: float,
+    outliers: float,
+    centre: tuple,
+    yaw: float,
+    pitch: float,
+    first_seed: int,
+    count: int,
+) -> list[dict]:
     command = [str(executable), *map(str, (pairs, sigma, outliers, *centre, yaw, pitch, first_seed, count))]
     text = subprocess.run(command, capture_output=True, text=True, check=True).stdout
     return list(csv.DictReader(text.splitlines()))
@@ -48,9 +68,11 @@ class LostTurnTests(unittest.TestCase):
         # Few pairs moving forward and down: the translation lacks evidence and the rotation fit lacks support, but the
         # homography has it, having read the parallax as a turn. Before the essential pose's rotation replaced it there,
         # these steps took the homography's and were as far off as it.
-        for pairs, sigma, outliers, centre, yaw, pitch in ((20, 0.5, 0.2, (0, 0.1, 0.2), 10, 0),
-                                                           (20, 0.5, 0.1, (0, 0.1, 0.2), 0, 5),
-                                                           (30, 1.0, 0.0, (0, 0.1, 0.2), 0, 0)):
+        for pairs, sigma, outliers, centre, yaw, pitch in (
+            (20, 0.5, 0.2, (0, 0.1, 0.2), 10, 0),
+            (20, 0.5, 0.1, (0, 0.1, 0.2), 0, 5),
+            (30, 1.0, 0.0, (0, 0.1, 0.2), 0, 0),
+        ):
             with self.subTest(pairs=pairs, sigma=sigma, outliers=outliers, yaw=yaw, pitch=pitch):
                 rows = trials(self.executable, pairs, sigma, outliers, centre, yaw, pitch, 70000, 200)
                 lost = [row for row in rows if int(row["kind"]) == 0 and int(row["fallback"])]

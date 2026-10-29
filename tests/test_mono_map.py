@@ -4,11 +4,11 @@ moving past a textured wall and floor, with a mask that marks only the wall as n
 Needs gcc and OpenCV; skipped without either.
 """
 
-from importlib.util import find_spec
-from pathlib import Path
 import shutil
 import tempfile
 import unittest
+from importlib.util import find_spec
+from pathlib import Path
 
 import numpy as np
 
@@ -29,7 +29,9 @@ class MonoMapTests(unittest.TestCase):
         cls.vo = mvo.build(cls.folder)
         cls.camera = mvo.camera_for(110.0, 544 / 960)
         wall, floor = texture(1), texture(2)
-        cls.poses = [(euler_rotation(np.radians(1.5 * k), 0.0, 0.0), np.array([0.30 * k, 0.0, 0.15 * k])) for k in range(8)]
+        cls.poses = [
+            (euler_rotation(np.radians(1.5 * k), 0.0, 0.0), np.array([0.30 * k, 0.0, 0.15 * k])) for k in range(8)
+        ]
         frames = [render(r, c, cls.camera, wall, floor) for r, c in cls.poses]
         mask = np.zeros((MASK_ROWS, MASK_COLUMNS), dtype=np.uint8)
         mask[:WALL_ROWS] = 1
@@ -69,8 +71,7 @@ class MonoMapTests(unittest.TestCase):
         frames[2] = np.full((mvo.HEIGHT, mvo.WIDTH), 128, dtype=np.uint8)
         masks[2] = None
         result = mono_map.run_mapping(self.vo, frames, masks, self.camera)
-        self.assertEqual([mvo.KINDS[step.kind] for step in result["steps"]][1:4],
-                         ["lost", "lost", "essential"])
+        self.assertEqual([mvo.KINDS[step.kind] for step in result["steps"]][1:4], ["lost", "lost", "essential"])
         self.assertGreater(before["hits"], 0)
         self.assertEqual(result["first_lost_frame"], 2)
         self.assertFalse(result["map_continuous"])

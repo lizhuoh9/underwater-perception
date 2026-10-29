@@ -23,7 +23,7 @@ both Pythons come from `CLAUDE.local.md`. Run from the repository root with `UWS
 3. Check the port's chip first: `python -m esptool --port <port> chip_id` must report an ESP32-P4 (and the MAC
    `CLAUDE.local.md` gives for the dev board). Then build and flash, in a shell where ESP-IDF is activated as
    `CLAUDE.local.md` says:
-   `idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_p4 -D SDKCONFIG=build_p4/sdkconfig -D IDF_TARGET=esp32p4 -p <port> flash`
+   `idf.py -C firmware/mono_vo_stream -B firmware/mono_vo_stream/build_p4 -D SDKCONFIG=build_p4/sdkconfig -D IDF_TARGET=esp32p4 -p <port> flash`
    → the flash is verified. That build links over the console UART (a USB-UART bridge). For a board connected through
    the P4's own USB-Serial-JTAG port, build the console there instead: a build folder of its own, with
    `-D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;<file holding CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y>"` (`CLAUDE.local.md`

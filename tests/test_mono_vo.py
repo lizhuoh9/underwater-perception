@@ -4,8 +4,8 @@ triangulated points, and the similarity alignment used to score it.
 Needs OpenCV; skipped without it.
 """
 
-from importlib.util import find_spec
 import unittest
+from importlib.util import find_spec
 
 import numpy as np
 
@@ -72,9 +72,11 @@ class MotionTests(unittest.TestCase):
         rng = np.random.default_rng(4)
         world = np.column_stack([rng.uniform(-3, 3, 300), rng.uniform(-2, 2, 300), rng.uniform(4, 10, 300)])
         matrix = self.camera.matrix()
-        poses = [(np.eye(3), np.zeros(3)),  # camera-to-world rotation and centre, world = first camera
-                 (euler_rotation(np.radians(3.0), 0.0, 0.0), np.array([0.4, 0.0, 0.9])),
-                 (euler_rotation(np.radians(5.0), np.radians(1.0), 0.0), np.array([0.6, 0.05, 1.35]))]
+        poses = [
+            (np.eye(3), np.zeros(3)),  # camera-to-world rotation and centre, world = first camera
+            (euler_rotation(np.radians(3.0), 0.0, 0.0), np.array([0.4, 0.0, 0.9])),
+            (euler_rotation(np.radians(5.0), np.radians(1.0), 0.0), np.array([0.6, 0.05, 1.35])),
+        ]
         views = [project((world - centre) @ rotation, matrix) for rotation, centre in poses]
         vo = mv.MonoVO(self.camera, 1.0)
         ids = np.arange(len(world))
@@ -85,7 +87,9 @@ class MotionTests(unittest.TestCase):
             translation = -rotation_cv @ (r_a.T @ (c_b - c_a))
             step = vo.translate(views[k], views[k + 1], ids, rotation_cv, translation / np.linalg.norm(translation))
             lengths.append(np.linalg.norm(step.centre))
-            np.testing.assert_allclose(step.centre / lengths[-1], r_a.T @ (c_b - c_a) / np.linalg.norm(c_b - c_a), atol=1e-6)
+            np.testing.assert_allclose(
+                step.centre / lengths[-1], r_a.T @ (c_b - c_a) / np.linalg.norm(c_b - c_a), atol=1e-6
+            )
         true_ratio = np.linalg.norm(poses[2][1] - poses[1][1]) / np.linalg.norm(poses[1][1] - poses[0][1])
         self.assertAlmostEqual(lengths[0], 1.0)
         self.assertAlmostEqual(lengths[1] / lengths[0], true_ratio, places=3)
@@ -108,8 +112,11 @@ class MotionTests(unittest.TestCase):
         world = np.column_stack([rng.uniform(-3, 3, 50), rng.uniform(-2, 2, 50), rng.uniform(3, 8, 50)])
         matrix = self.camera.matrix()
         rotation_ab = euler_rotation(np.radians(-7.0), np.radians(2.0), np.radians(1.0))
-        np.testing.assert_allclose(mv.turned_pixels(project(world, matrix), rotation_ab, matrix),
-                                   project(world @ rotation_ab, matrix), atol=1e-3)
+        np.testing.assert_allclose(
+            mv.turned_pixels(project(world, matrix), rotation_ab, matrix),
+            project(world @ rotation_ab, matrix),
+            atol=1e-3,
+        )
 
     def test_parallax_ignores_rotation_and_sees_translation(self):
         rng = np.random.default_rng(5)

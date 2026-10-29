@@ -6,13 +6,13 @@ Needs gcc and OpenCV; skipped without either.
 """
 
 import ctypes
-from importlib.util import find_spec
-from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from importlib.util import find_spec
+from pathlib import Path
 
 import numpy as np
 
@@ -34,11 +34,17 @@ def texture(seed: int, size: int = 1024) -> np.ndarray:
     return cv2.GaussianBlur(cv2.resize(coarse, (size, size), interpolation=cv2.INTER_CUBIC), (5, 5), 0)
 
 
-def render(rotation: np.ndarray, centre: np.ndarray, camera, wall: np.ndarray, floor: np.ndarray,
-           normalised: np.ndarray | None = None) -> np.ndarray:
+def render(
+    rotation: np.ndarray,
+    centre: np.ndarray,
+    camera,
+    wall: np.ndarray,
+    floor: np.ndarray,
+    normalised: np.ndarray | None = None,
+) -> np.ndarray:
     """320x240 grey view of a wall at z = WALL_Z and a floor at y = FLOOR_Y (world = first camera, y down). normalised:
     every pixel's ray as (x, y) at z = 1 (240 x 320 x 2), for a lens; the pinhole's by default."""
-    v, u = np.mgrid[0:mvo.HEIGHT, 0:mvo.WIDTH].astype(np.float64)
+    v, u = np.mgrid[0 : mvo.HEIGHT, 0 : mvo.WIDTH].astype(np.float64)
     if normalised is None:
         normalised = np.stack([(u - camera.cx) / camera.fx, (v - camera.cy) / camera.fy], axis=-1)
     rays = np.concatenate([normalised, np.ones_like(normalised[..., :1])], axis=-1) @ rotation.T
@@ -49,10 +55,20 @@ def render(rotation: np.ndarray, centre: np.ndarray, camera, wall: np.ndarray, f
     t = np.where(on_floor, t_floor, t_wall)
     hit = centre + rays * t[..., None]
     size = wall.shape[0]
-    wall_view = cv2.remap(wall, (hit[..., 0] * TEXELS_PER_UNIT + size / 2).astype(np.float32),
-                          (hit[..., 1] * TEXELS_PER_UNIT + size / 2).astype(np.float32), cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
-    floor_view = cv2.remap(floor, (hit[..., 0] * TEXELS_PER_UNIT + size / 2).astype(np.float32),
-                           (hit[..., 2] * TEXELS_PER_UNIT).astype(np.float32), cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+    wall_view = cv2.remap(
+        wall,
+        (hit[..., 0] * TEXELS_PER_UNIT + size / 2).astype(np.float32),
+        (hit[..., 1] * TEXELS_PER_UNIT + size / 2).astype(np.float32),
+        cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_REFLECT,
+    )
+    floor_view = cv2.remap(
+        floor,
+        (hit[..., 0] * TEXELS_PER_UNIT + size / 2).astype(np.float32),
+        (hit[..., 2] * TEXELS_PER_UNIT).astype(np.float32),
+        cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_REFLECT,
+    )
     return np.where(on_floor, floor_view, wall_view).astype(np.uint8)
 
 
@@ -80,8 +96,10 @@ class MonoVoCTests(unittest.TestCase):
 
     def test_a_pure_turn_is_a_rotation_step(self):
         rotation_b = euler_rotation(np.radians(5.0), np.radians(-1.5), np.radians(0.5))
-        frames = [render(np.eye(3), np.zeros(3), self.camera, self.wall, self.floor),
-                  render(rotation_b, np.zeros(3), self.camera, self.wall, self.floor)]
+        frames = [
+            render(np.eye(3), np.zeros(3), self.camera, self.wall, self.floor),
+            render(rotation_b, np.zeros(3), self.camera, self.wall, self.floor),
+        ]
         steps, _, _ = mvo.run_frames(self.vo, frames, self.camera)
         self.assertEqual(mvo.KINDS[steps[0].kind], "rotation")
         found = np.array(steps[0].rotation, dtype=np.float64).reshape(3, 3)
@@ -94,8 +112,10 @@ class MonoVoCTests(unittest.TestCase):
         wall, floor = np.full((1024, 1024), 128, np.uint8), np.full((1024, 1024), 128, np.uint8)
         wall[452:572, 452:572] = self.wall[452:572, 452:572]  # one textured patch: a dozen corners
         rotation_b = euler_rotation(np.radians(8.0), np.radians(-1.0), 0.0)
-        frames = [render(np.eye(3), np.zeros(3), self.camera, wall, floor),
-                  render(rotation_b, np.zeros(3), self.camera, wall, floor)]
+        frames = [
+            render(np.eye(3), np.zeros(3), self.camera, wall, floor),
+            render(rotation_b, np.zeros(3), self.camera, wall, floor),
+        ]
         steps, _, _ = mvo.run_frames(self.vo, frames, self.camera)
         self.assertEqual(mvo.KINDS[steps[0].kind], "lost")
         self.assertLess(steps[0].tracks, 15)
@@ -107,8 +127,10 @@ class MonoVoCTests(unittest.TestCase):
         # with a clear sideways step past the near floor the pairs must still decide, so the pull may cost a little but
         # not the rotation (on the lake clip's fast swing it is what keeps a quarter of each turn from becoming travel).
         rotation_b, centre_b = euler_rotation(np.radians(10.0), np.radians(-1.0), 0.0), np.array([-0.3, 0.0, 0.15])
-        frames = [render(np.eye(3), np.zeros(3), self.camera, self.wall, self.floor),
-                  render(rotation_b, centre_b, self.camera, self.wall, self.floor)]
+        frames = [
+            render(np.eye(3), np.zeros(3), self.camera, self.wall, self.floor),
+            render(rotation_b, centre_b, self.camera, self.wall, self.floor),
+        ]
         steps, _, _ = mvo.run_frames(self.vo, frames, self.camera)
         self.assertEqual(mvo.KINDS[steps[0].kind], "essential")
         found = np.array(steps[0].rotation, dtype=np.float64).reshape(3, 3)
@@ -194,9 +216,23 @@ class MonoVoCTests(unittest.TestCase):
         # degrees of pitch and -0.07 of yaw a step, a steady drift. The analytic Jacobian must match central differences
         # of the residuals, whose own error shrinks as h^2: to about a quarter when h halves.
         program = self.folder / "mvo_jacobian_check.exe"
-        units = [str(mvo.CORE_DIR / name) for name in mvo.CORE_FILES if name.endswith(".c") and name != "mono_vo_essential.c"]
-        subprocess.run(["gcc", *CFLAGS, *mvo.config_defines(), *STATIC, f"-I{mvo.CORE_DIR}",
-                        str(C_CHECKS / "mvo_jacobian_check.c"), *units, "-o", str(program)], check=True)
+        units = [
+            str(mvo.CORE_DIR / name) for name in mvo.CORE_FILES if name.endswith(".c") and name != "mono_vo_essential.c"
+        ]
+        subprocess.run(
+            [
+                "gcc",
+                *CFLAGS,
+                *mvo.config_defines(),
+                *STATIC,
+                f"-I{mvo.CORE_DIR}",
+                str(C_CHECKS / "mvo_jacobian_check.c"),
+                *units,
+                "-o",
+                str(program),
+            ],
+            check=True,
+        )
         printed = subprocess.run([str(program)], capture_output=True, text=True, check=True).stdout
         values = {key: float(value) for key, value in (pair.split("=") for pair in printed.split())}
         self.assertGreater(values["largest"], 10.0)
@@ -211,9 +247,23 @@ class MonoVoCTests(unittest.TestCase):
         # rotation dragged in the homography's tilt: 10 degrees more pitch over the lake clip), and a slow turn's
         # pairs must leave no pull at all while a fast turn's get one.
         program = self.folder / "mvo_turn_pull_check.exe"
-        units = [str(mvo.CORE_DIR / name) for name in mvo.CORE_FILES if name.endswith(".c") and name != "mono_vo_essential.c"]
-        subprocess.run(["gcc", *CFLAGS, *mvo.config_defines(), *STATIC, f"-I{mvo.CORE_DIR}",
-                        str(C_CHECKS / "mvo_turn_pull_check.c"), *units, "-o", str(program)], check=True)
+        units = [
+            str(mvo.CORE_DIR / name) for name in mvo.CORE_FILES if name.endswith(".c") and name != "mono_vo_essential.c"
+        ]
+        subprocess.run(
+            [
+                "gcc",
+                *CFLAGS,
+                *mvo.config_defines(),
+                *STATIC,
+                f"-I{mvo.CORE_DIR}",
+                str(C_CHECKS / "mvo_turn_pull_check.c"),
+                *units,
+                "-o",
+                str(program),
+            ],
+            check=True,
+        )
         printed = subprocess.run([str(program)], capture_output=True, text=True, check=True).stdout
         values = {key: float(value) for key, value in (pair.split("=") for pair in printed.split())}
         self.assertGreater(values["gradient_largest"], 10.0)
@@ -247,14 +297,18 @@ class MonoVoCTests(unittest.TestCase):
         gy = interpolate(centre + stride) - interpolate(centre - stride)
         window = np.zeros((3, side, lanes), dtype=np.int16)
         g = np.zeros(3, dtype=np.int64)
-        self.vo.mvo_lk_template_c(window.ctypes.data, image.ctypes.data + origin, stride, weights.ctypes.data, g.ctypes.data)
+        self.vo.mvo_lk_template_c(
+            window.ctypes.data, image.ctypes.data + origin, stride, weights.ctypes.data, g.ctypes.data
+        )
         for got, want in zip(window, (patch, gx, gy)):
             np.testing.assert_array_equal(got[:, :side], want)
             np.testing.assert_array_equal(got[:, side:], 0)
         np.testing.assert_array_equal(g, [(gx * gx).sum(), (gx * gy).sum(), (gy * gy).sum()])
         target = origin + stride + 2  # the window's top-left pixel in the other image, here a pixel right and down
         sums = np.zeros(2, dtype=np.int64)
-        self.vo.mvo_lk_sums_c(window.ctypes.data, image.ctypes.data + target, stride, weights.ctypes.data, sums.ctypes.data)
+        self.vo.mvo_lk_sums_c(
+            window.ctypes.data, image.ctypes.data + target, stride, weights.ctypes.data, sums.ctypes.data
+        )
         diff = patch - interpolate(target + j * stride + i)
         np.testing.assert_array_equal(sums, [(diff * gx).sum(), (diff * gy).sum()])
 
@@ -293,10 +347,14 @@ class MonoVoCTests(unittest.TestCase):
             self.vo.mvo_init(state, ctypes.byref(self.camera), mvo.SEED, pyramids[0], pyramids[1])
             if parallel is not None:  # mvo_t ends with its two optional pointers: parallel, then kernels
                 pointer = ctypes.sizeof(ctypes.c_void_p)
-                ctypes.c_void_p.from_buffer(state, len(state) - 2 * pointer).value = ctypes.cast(parallel, ctypes.c_void_p).value
+                ctypes.c_void_p.from_buffer(state, len(state) - 2 * pointer).value = ctypes.cast(
+                    parallel, ctypes.c_void_p
+                ).value
             run = []
             for k, frame in enumerate(frames):
-                ctypes.memmove(self.vo.mvo_frame(state), np.ascontiguousarray(frame).ctypes.data, mvo.WIDTH * mvo.HEIGHT)
+                ctypes.memmove(
+                    self.vo.mvo_frame(state), np.ascontiguousarray(frame).ctypes.data, mvo.WIDTH * mvo.HEIGHT
+                )
                 if k == 0:
                     self.vo.mvo_start(state)
                     continue
@@ -304,7 +362,9 @@ class MonoVoCTests(unittest.TestCase):
                 self.vo.mvo_step(state, ctypes.byref(step))
                 run.append(mvo.fnv(mvo.FNV_OFFSET, bytes(step)))
             hashes.append(run)
-        self.assertGreaterEqual(len(calls), 3 * (len(frames) - 1))  # tracking, direction search and refinements per step
+        self.assertGreaterEqual(
+            len(calls), 3 * (len(frames) - 1)
+        )  # tracking, direction search and refinements per step
         self.assertEqual(hashes[0], hashes[1])
 
     def test_square_root_without_division(self):
