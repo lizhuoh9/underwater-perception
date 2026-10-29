@@ -1,10 +1,9 @@
 set(SOURCES "main.c" "../../../core/mono_vo.c" "../../../core/mono_vo_numerics.c" "../../../core/mono_vo_tracking.c"
     "../../../core/mono_vo_homography.c" "../../../core/mono_vo_essential.c" "../../../core/mono_map.c"
-    "../../../core/mono_cloud.c" "../../../core/voxel_map.c" "../../../core/obstacle_dir.c" "../../../core/path_plan.c")
-if(CONFIG_IDF_TARGET_ESP32S3) # the tracker's vector kernels, in each chip's instructions; other chips run the C ones
-    list(APPEND SOURCES "mvo_pie.S")
-elseif(CONFIG_IDF_TARGET_ESP32P4)
-    list(APPEND SOURCES "mvo_pie_p4.S")
+    "../../../core/mono_cloud.c" "../../../core/voxel_map.c" "../../../core/obstacle_dir.c" "../../../core/path_plan.c"
+    "mvo_vector.S") # the tracker's window kernels in the ESP32-P4's vector instructions
+if(NOT CMAKE_BUILD_EARLY_EXPANSION AND NOT CONFIG_IDF_TARGET_ESP32P4) # sdkconfig is read after the early pass
+    message(FATAL_ERROR "mono_vo_stream runs on the ESP32-P4 only: its window kernels use the P4's vector instructions")
 endif()
 idf_component_register(
     SRCS ${SOURCES}
@@ -14,12 +13,6 @@ idf_component_register(
 
 # Same floating-point contract as the PC build (uwslam.core.CFLAGS): no fused multiply-add, so results match bit for bit.
 target_compile_options(${COMPONENT_LIB} PRIVATE -ffp-contract=off)
-
-# The core's build configuration (core/mono_vo.h): the P4 has the time for its own, MVO_CONFIG_P4 (on the PC:
-# UWSLAM_CONFIG=p4). The board reports which in its ready line, and the host refuses expectations of another.
-if(CONFIG_IDF_TARGET_ESP32P4)
-    target_compile_definitions(${COMPONENT_LIB} PRIVATE MVO_CONFIG_P4)
-endif()
 
 # The board reports which cores it runs (sources and headers), so the host can refuse a stale build. MVO_CORE_SHA256 is
 # the SHA-256 of the odometry's implementation files back to back in this order, the list uwslam.mvo.CORE_FILES gives.

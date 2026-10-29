@@ -1,35 +1,32 @@
 /*
  * The Lucas-Kanade window kernels of core/mono_vo.h (mvo_kernels_t) with the ESP32-P4's vector instructions (PIE),
- * eight 16-bit lanes at a time: the same arithmetic as the S3's mvo_pie.S, giving exactly the integers of the portable
- * mvo_lk_template_c and mvo_lk_sums_c. Each pixel times its Q14 weight is shifted right by 7 lane by lane
- * (ESP.VMUL.S16 with SAR = 7), lane sums stay within 16 bits (an interpolation is at most 255 << 7), and window sums
- * accumulate exactly in the 40-bit XACC register, stored sign-extended to an int64 (ESP.ST.S.XACC.IP): a window sum is
- * at most SIDE * SIDE products of two Q7 differences, 361 * (255 << 7)^2 < 2^39 for the 19x19 window. The block copy
- * stays the portable mvo_block_c (about 6 us a call on the P4); no vector version was written.
+ * eight 16-bit lanes at a time, giving exactly the integers of the portable mvo_lk_template_c and mvo_lk_sums_c. Each
+ * pixel times its Q14 weight is shifted right by 7 lane by lane (ESP.VMUL.S16 with SAR = 7), lane sums stay within 16
+ * bits (an interpolation is at most 255 << 7), and window sums accumulate exactly in the 40-bit XACC register, stored
+ * sign-extended to an int64 (ESP.ST.S.XACC.IP): a window sum is at most SIDE * SIDE products of two Q7 differences,
+ * 361 * (255 << 7)^2 < 2^39 for the 19x19 window. The block copy stays the portable mvo_block_c (about 8 us a call on
+ * the P4); no vector version was written.
  *
- * The window's side follows the build configuration (core/mono_vo.h): MVO_CONFIG_P4 tracks 19x19 windows stored in
- * rows of 24 lanes (three vectors), the default 15x15 in rows of 16 (two vectors). main.c checks that the core's
- * MVO_SIDE and MVO_LANES are the ones assembled here.
+ * The window is the core's (core/mono_vo.h): 19x19, stored in rows of 24 lanes (three vectors). main.c checks that the
+ * core's MVO_SIDE and MVO_LANES are the ones assembled here.
  *
  * Standard RISC-V calling convention, leaf functions using only a0-a5, t0-t6 and the stack. Vector loads and stores
  * take their address in s0, s1, a0-a5, s8-s11 or t3-t6, never sp, so stack buffers are reached through t3. q2, q3, q6
  * and q7 hold the four weights, one in every lane, for the whole call; q0 and q1 load and widen pixels; q4 and q5 hold
- * the lanes 0-7 and 8-15 of an interpolated row, and q4 again its lanes 16-23 in a three-vector row. A row's lanes from
+ * the lanes 0-7 and 8-15 of an interpolated row, and q4 again its lanes 16-23. A row's lanes from
  * SIDE on lie outside the window and are cleared with halfword stores.
  */
 
-#if defined(MVO_CONFIG_P4)
     .set    SIDE, 19                /* MVO_SIDE */
     .set    VECS, 3                 /* MVO_LANES / 8 */
-#else
-    .set    SIDE, 15
-    .set    VECS, 2
-#endif
     .set    WINDOW_ROW, 16 * VECS           /* bytes per window row: MVO_LANES int16 */
     .set    WINDOW_ARRAY, SIDE * WINDOW_ROW /* bytes per window array: MVO_SIDE rows */
     .set    INTERP_BYTES, (SIDE + 2) * WINDOW_ROW /* the template's interpolation, rows -1..SIDE */
     .set    DOT_VECTORS, SIDE * VECS        /* vectors per window array */
     .set    PAD_LANES, 8 * VECS - SIDE      /* lanes of a row outside the window */
+    .if DOT_VECTORS % 2 == 0
+    .error "DOT takes the vectors of a window array two at a time after the first: it needs an odd count"
+    .endif
 
 /* q4/q5 (first) or q4/q5 += (the 16 pixels from p widened to 16 bits) * (the weight in every lane of wq), >> 7 per
  * lane. t5 is scratch. */
@@ -119,11 +116,7 @@
     esp.zero.xacc
     esp.vld.128.ip  q0, \pa, 16
     esp.vld.128.ip  q1, \pb, 16
-    .if DOT_VECTORS % 2
-    li      t0, (DOT_VECTORS - 1) / 2
-    .else
-    li      t0, DOT_VECTORS / 2 - 1
-    .endif
+    li      t0, (DOT_VECTORS - 1) / 2   /* DOT_VECTORS is odd */
 1:
     esp.vld.128.ip  q4, \pa, 16
     esp.vmulas.s16.xacc.ld.ip q5, \pb, 16, q0, q1
@@ -131,24 +124,18 @@
     esp.vmulas.s16.xacc.ld.ip q1, \pb, 16, q4, q5
     addi    t0, t0, -1
     bnez    t0, 1b
-    .if DOT_VECTORS % 2
     esp.vmulas.s16.xacc q0, q1
-    .else
-    esp.vld.128.ip  q4, \pa, 16
-    esp.vmulas.s16.xacc.ld.ip q5, \pb, 16, q0, q1
-    esp.vmulas.s16.xacc q4, q5
-    .endif
     .endm
 
 
-/* void mvo_pie_p4_lk_sums(const mvo_window_t *window, const uint8_t *src, int stride, const int16_t weights[4],
+/* void mvo_vector_lk_sums(const mvo_window_t *window, const uint8_t *src, int stride, const int16_t weights[4],
  *                         int64_t sums[2])
  * a0 window, a1 src (the window's top-left pixel), a2 stride, a3 weights, a4 sums. */
     .text
     .align  2
-    .global mvo_pie_p4_lk_sums
-    .type   mvo_pie_p4_lk_sums, @function
-mvo_pie_p4_lk_sums:
+    .global mvo_vector_lk_sums
+    .type   mvo_vector_lk_sums, @function
+mvo_vector_lk_sums:
     addi    sp, sp, -WINDOW_ARRAY   /* [sp, sp + WINDOW_ARRAY): patch - interpolation, a window array */
     SETUP   a3
     mv      t2, a0                  /* the window, for gy */
@@ -168,15 +155,13 @@ mvo_pie_p4_lk_sums:
     esp.vst.128.ip  q0, t3, 16
     esp.vld.128.ip  q1, a5, 16
     esp.vmulas.s16.xacc q0, q1
-    .if VECS == 3
     addi    a3, a1, 16              /* the weights are in q2, q3, q6, q7 now */
     INTERP8 a3, a2
     esp.vld.128.ip  q0, a0, 16
     esp.vsub.s16    q0, q0, q4      /* lanes 16-23 */
     esp.vst.128.ip  q0, t3, 16
     esp.vld.128.ip  q1, a5, 16
-    esp.vmulas.s16.xacc q0, q1
-    .endif                          /* the lanes outside the window meet gx = 0 */
+    esp.vmulas.s16.xacc q0, q1  /* the lanes outside the window meet gx = 0 */
     add     a1, a1, a2
     addi    t1, t1, -1
     bnez    t1, 1b
@@ -187,18 +172,18 @@ mvo_pie_p4_lk_sums:
     esp.st.s.xacc.ip a4, 8          /* sums[1] */
     addi    sp, sp, WINDOW_ARRAY
     ret
-    .size   mvo_pie_p4_lk_sums, . - mvo_pie_p4_lk_sums
+    .size   mvo_vector_lk_sums, . - mvo_vector_lk_sums
 
 
-/* void mvo_pie_p4_lk_template(mvo_window_t *window, const uint8_t *src, int stride, const int16_t weights[4],
+/* void mvo_vector_lk_template(mvo_window_t *window, const uint8_t *src, int stride, const int16_t weights[4],
  *                             int64_t g[3])
  * a0 window, a1 src (one up and one left of the window's top-left pixel), a2 stride, a3 weights, a4 g. The window's
  * pixel (i, j) is src + (j + 1) * stride + i + 1. */
     .text
     .align  2
-    .global mvo_pie_p4_lk_template
-    .type   mvo_pie_p4_lk_template, @function
-mvo_pie_p4_lk_template:
+    .global mvo_vector_lk_template
+    .type   mvo_vector_lk_template, @function
+mvo_vector_lk_template:
     addi    sp, sp, -INTERP_BYTES   /* [sp, sp + INTERP_BYTES): rows -1..SIDE of the interpolation */
     SETUP   a3
 
@@ -210,11 +195,9 @@ mvo_pie_p4_lk_template:
     INTERP  a5, a2
     esp.vst.128.ip  q4, t3, 16
     esp.vst.128.ip  q5, t3, 16
-    .if VECS == 3
     addi    a3, a5, 16
     INTERP8 a3, a2
     esp.vst.128.ip  q4, t3, 16
-    .endif
     add     a5, a5, a2
     addi    t1, t1, -1
     bnez    t1, 1b
@@ -230,10 +213,8 @@ mvo_pie_p4_lk_template:
     esp.vld.128.ip  q1, t5, 16
     esp.vst.128.ip  q0, t4, 16
     esp.vst.128.ip  q1, t4, 16
-    .if VECS == 3
     esp.vld.128.ip  q0, t5, 16
     esp.vst.128.ip  q0, t4, 16
-    .endif
     CLEAR   t4
     esp.vld.128.ip  q0, t5, 16      /* row j + 1 */
     esp.vld.128.ip  q1, t5, 16
@@ -244,12 +225,10 @@ mvo_pie_p4_lk_template:
     esp.vsub.s16    q1, q1, q5
     esp.vst.128.ip  q0, a5, 16
     esp.vst.128.ip  q1, a5, 16
-    .if VECS == 3
     esp.vld.128.ip  q0, t5, 16
     esp.vld.128.ip  q4, t6, 16
     esp.vsub.s16    q0, q0, q4
     esp.vst.128.ip  q0, a5, 16
-    .endif
     CLEAR   a5
     addi    t3, t3, WINDOW_ROW
     addi    t1, t1, -1
@@ -265,11 +244,9 @@ mvo_pie_p4_lk_template:
     mv      a1, t4
     esp.vst.128.ip  q4, a1, 16
     esp.vst.128.ip  q5, a1, 16
-    .if VECS == 3
     addi    a3, a5, 16
     INTERP8 a3, a2
     esp.vst.128.ip  q4, a1, 16
-    .endif
     INTERP  t3, a2                  /* a column left */
     mv      a1, t4
     esp.vld.128.ip  q0, a1, 16
@@ -278,13 +255,11 @@ mvo_pie_p4_lk_template:
     esp.vsub.s16    q1, q1, q5
     esp.vst.128.ip  q0, t4, 16
     esp.vst.128.ip  q1, t4, 16
-    .if VECS == 3
     addi    a3, t3, 16
     INTERP8 a3, a2
     esp.vld.128.ip  q0, a1, 16
     esp.vsub.s16    q0, q0, q4
     esp.vst.128.ip  q0, t4, 16
-    .endif
     CLEAR   t4
     add     t3, t3, a2
     addi    t1, t1, -1
@@ -305,4 +280,4 @@ mvo_pie_p4_lk_template:
     esp.st.s.xacc.ip a4, 8
     addi    sp, sp, INTERP_BYTES
     ret
-    .size   mvo_pie_p4_lk_template, . - mvo_pie_p4_lk_template
+    .size   mvo_vector_lk_template, . - mvo_vector_lk_template

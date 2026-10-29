@@ -164,7 +164,7 @@ static void fundamental(const mvo_camera_t *c, const float e[9], float f[9])
 
 /* The Sampson distance (pixels) of a pixel pair to F as num / sqrt(den): its signed numerator b^T F a and its
  * denominator (den 0 where it is undefined). The callers square it or shrink it without a square root of their own
- * where they can: a root costs several divisions on the S3. */
+ * where they can: a root costs several divisions on a small FPU. */
 static void sampson_parts(const float f[9], const float pa[2], const float pb[2], float *num, float *den)
 {
     const float a[3] = {pa[0], pa[1], 1.0f}, b[3] = {pb[0], pb[1], 1.0f};

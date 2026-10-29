@@ -289,7 +289,6 @@ class MonoCloudTests(unittest.TestCase):
                     "-Wextra",
                     "-Werror",
                     "-pedantic",
-                    *mvo.config_defines(),
                     *(["-static"] if sys.platform == "win32" else []),
                     f"-I{ROOT / 'core'}",
                     str(ROOT / "tests/c/mono_cloud_check.c"),

@@ -44,7 +44,6 @@ class ObstacleDirectionTests(unittest.TestCase):
                 "-Werror",
                 "-pedantic",
                 "-ffp-contract=off",
-                *mvo.config_defines(),
                 *STATIC,
                 f"-I{ROOT / 'core'}",
                 str(ROOT / "tests/c/obstacle_dir_check.c"),

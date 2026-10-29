@@ -11,7 +11,7 @@ static mvo_t vo;
 static mvo_step_t step;
 static uint8_t mask[60 * 80];
 
-/* The scene depth that gives voxels of side s, in either build configuration (VM_CELLS_PER_DEPTH). */
+/* The scene depth that gives voxels of side s (VM_CELLS_PER_DEPTH). */
 #define DEPTH(s) ((float)(s) * VM_CELLS_PER_DEPTH)
 
 static void setup(void)

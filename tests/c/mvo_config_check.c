@@ -1,4 +1,4 @@
-/* The build configurations of core/mono_vo.h, compiled with and without MVO_CONFIG_P4: prints what each sets, the map
+/* The build's constants (core/mono_vo.h and the headers after it): prints its name and feature count, the map
  * admissions and the evidence penalty's constant as their float bits, the tracking window and the voxel map's and the
  * plan's sizes (which the Python side repeats). */
 #include <inttypes.h>

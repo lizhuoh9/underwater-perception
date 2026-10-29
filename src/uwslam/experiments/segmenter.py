@@ -33,7 +33,7 @@ def device_frame(rgb: np.ndarray) -> np.ndarray:
 
 
 def device_codes(frames: np.ndarray, mean: np.ndarray, std: np.ndarray, exponent: int) -> np.ndarray:
-    """esp-dl input quantisation on the ESP32-S3, as NCHW int8: float32 (v - mean) * (1/std) * 2^-exp, then floor(x + 0.5)."""
+    """esp-dl's input quantisation, as NCHW int8: float32 (v - mean) * (1/std) * 2^-exp, then floor(x + 0.5)."""
     inv_std = np.float32(1.0) / std.astype(np.float32)
     scaled = (frames.astype(np.float32) - mean.astype(np.float32)) * inv_std * np.float32(2.0**-exponent)
     codes = np.clip(np.floor(scaled.astype(np.float64) + 0.5), -128, 127).astype(np.int8)

@@ -2,10 +2,10 @@
   "task": "Obstacle directions from the segmentation's water masks on the lake clip, scored against the reference reconstruction's depth",
   "sources_sha256": {
     "dir_sha256": "ed8b510cdc05db181f41d5b8426ee2c7ee8d03d5ae04caa295ab71b7b3d12aa6",
-    "dir_header_sha256": "4ec7b465dba1fc9b51670029a93c806a4c9def2895b00a6bacbe8050b274813d"
+    "dir_header_sha256": "f7a9953e140288518d505dfbef2716ec683810ac886cfdd86337a5651758dcc6"
   },
-  "config": "s3",
-  "max_features": 250,
+  "config": "p4",
+  "max_features": 300,
   "masks": "frames.npz",
   "time_scale": 3.0,
   "hfov_deg": 110.0,

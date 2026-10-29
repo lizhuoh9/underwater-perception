@@ -2,24 +2,24 @@
  * Runs monocular visual odometry (core/mono_vo.c), a mask-independent sparse 3D cloud (core/mono_cloud.c), the
  * continuing voxel map (core/voxel_map.c, with the masks when they come), the planner (core/path_plan.c) and, when
  * masks come with the frames, the obstacle map (core/mono_map.c) and the obstacle directions (core/obstacle_dir.c) on
- * frames streamed over the USB-Serial-JTAG port (the console on the ESP32-S3) or, when the console is a UART (an
- * ESP32-P4 board's USB-UART bridge), over that UART at LINK_BAUD once the firmware runs, so a whole clip can be checked
- * against the PC build of the same C code and timed. The host (python -m uwslam.mvo_stream) sends the camera and the
- * seed, then one 320x240 grey frame at a time, each optionally with the segmentation's 60x80 water mask; the board
- * answers every frame with one line. While idle it repeats a `ready` line, so the host can open the port at any time.
- * The tracker's vector kernels are mvo_pie.S on the S3 and mvo_pie_p4.S on the P4; other chips run the portable ones.
+ * an ESP32-P4, on frames streamed over its console: the chip's own USB-Serial-JTAG port, or a UART (a board's USB-UART
+ * bridge) at LINK_BAUD once the firmware runs. So a whole clip can be checked against the PC build of the same C code
+ * and timed. The host (python -m uwslam.mvo_stream) sends the camera and the seed, then one 320x240 grey frame at a
+ * time, each optionally with the segmentation's 60x80 water mask; the board answers every frame with one line. While
+ * idle it repeats a `ready` line, so the host can open the port at any time. The tracker's window kernels are
+ * mvo_vector.S, in the P4's vector instructions; the block copy is the portable one.
  *
- *   host:  selftest <cases> <seed>                vector kernels and safe edge dispatch against portable C
+ *   host:  selftest <cases> <seed>                the vector window kernels against the portable C ones
  *   board: selftest cases=<n> template_mismatches=<n> sums_mismatches=<n> block_mismatches=<n> template_us_c=<t>
- *               template_us_simd=<t> sums_us_c=<t> sums_us_simd=<t> block_us_c=<t> block_us_simd=<t> vector=<0 or 1>
- *                                                 (microseconds per call, averaged; vector 0: the chip has no vector
- *                                                 kernels and the portable ones stand in for them)
+ *               template_us_simd=<t> sums_us_c=<t> sums_us_simd=<t> block_us_c=<t> block_us_simd=<t> vector=1
+ *                                                 (microseconds per call, averaged; the block copy is the portable
+ *                                                 one on both sides, so it always matches)
  *   host:  start <fx> <fy> <cx> <cy> <seed> [<cores> [<simd> [<k1> <k2> <p1> <p2> <k3>]]]
  *                                                       the camera's floats as their IEEE-754 bits, unsigned decimal;
  *                                                       cores 2 (default) runs half of each split part on the second
  *                                                       core; simd 1 (default) uses the vector kernels; the lens
  *                                                       distortion (mvo_camera_t) all five or none (a pinhole)
- *   board: started state_bytes=<n> cores=<1 or 2> simd=<0 or 1>   (simd 0 on a chip without vector kernels)
+ *   board: started state_bytes=<n> cores=<1 or 2> simd=<0 or 1>
  *   host:  frame <index> <fnv> [<mask fnv>]       then the frame's 76800 bytes, and with a mask fnv its 600 bytes:
  *                                                 bit i of the mask (byte i / 8, least significant bit first) is cell
  *                                                 i in row-major order, set where it is not water
@@ -47,7 +47,7 @@
  *   board: cloud count=<n> dropped=<n> continuous=<0 or 1> hash=<fnv of the mc_map_t>
  *          point index=<i> id=<id> x_bits=<bits> y_bits=<bits> z_bits=<bits> spread_bits=<bits> observations=<n>
  *          cloud_end count=<n>                    floats are sent as IEEE-754 uint32 bits
- *   board: ready ... config=<s3 or p4> max_features=<n>   the core's build configuration (core/mono_vo.h)
+ *   board: ready ... config=p4 max_features=<n>   the core's build (core/mono_vo.h), which the host checks
  *   board: ready ... map_policy=1 cloud_policy=1 freeze the obstacle map and the cloud after the first LOST until
  *                    the next start; the voxel map goes on through LOST steps
  *
@@ -99,8 +99,8 @@ typedef char cloud_map_wire_layout[(offsetof(mc_map_t, count) == MC_MAX_POINTS *
                                    offsetof(mc_map_t, continuous) == MC_MAX_POINTS * 24 + 8 &&
                                    sizeof(mc_map_t) == MC_MAX_POINTS * 24 + 12) ? 1 : -1];
 
-/* Internal RAM from the heap: the two pyramids (about 100 KB each) first, then the state (about 8 KB), the obstacle
- * map (about 16 KB) and the fixed-capacity cloud (about 12 KB), in separate blocks; the voxel map (about 14 KB) last,
+/* Internal RAM from the heap: the two pyramids (about 100 KB each) first, then the state (about 10 KB), the obstacle
+ * map (about 16 KB) and the fixed-capacity cloud (about 12 KB), in separate blocks; the voxel map (about 56 KB) last,
  * once the driver and the second core's task have their memory (see app_main). The obstacle directions are small enough
  * to be static. */
 static uint8_t *s_pyramid[2];
@@ -119,45 +119,14 @@ static SemaphoreHandle_t s_go, s_done; /* hand half of a split part to the secon
 static void (*s_work)(void *context, int part);
 static void *s_context;
 
-#if CONFIG_IDF_TARGET_ESP32S3
-/* mvo_pie.S: the tracker kernels with the S3's vector instructions, giving the portable ones' integers. */
-void mvo_pie_lk_template(mvo_window_t *window, const uint8_t *src, int stride, const int16_t weights[4], int64_t g[3]);
-void mvo_pie_lk_sums(const mvo_window_t *window, const uint8_t *src, int stride, const int16_t weights[4],
-                     int64_t sums[2]);
-void mvo_pie_block(uint8_t *out, int size, const uint8_t *img, int w, int h, const int origin[2]);
-
-static void mvo_pie_block_safe(uint8_t *out, int size, const uint8_t *img, int w, int h, const int origin[2])
-{
-    /* The vector loads include an aligned block before and another after the requested pixels. */
-    if (origin[0] < 16 || origin[0] + ((size + 15) & ~15) + 16 > w) {
-        mvo_block_c(out, size, img, w, h, origin);
-    } else {
-        mvo_pie_block(out, size, img, w, h, origin);
-    }
-}
-
-#define HAS_VECTOR_KERNELS 1
-static const mvo_kernels_t s_vector = {mvo_pie_lk_template, mvo_pie_lk_sums, mvo_pie_block_safe};
-#elif CONFIG_IDF_TARGET_ESP32P4
-/* mvo_pie_p4.S: the window kernels with the P4's vector instructions; the block copy stays the portable one. */
-void mvo_pie_p4_lk_template(mvo_window_t *window, const uint8_t *src, int stride, const int16_t weights[4],
+/* mvo_vector.S: the window kernels with the P4's vector instructions; the block copy stays the portable one. */
+void mvo_vector_lk_template(mvo_window_t *window, const uint8_t *src, int stride, const int16_t weights[4],
                             int64_t g[3]);
-void mvo_pie_p4_lk_sums(const mvo_window_t *window, const uint8_t *src, int stride, const int16_t weights[4],
+void mvo_vector_lk_sums(const mvo_window_t *window, const uint8_t *src, int stride, const int16_t weights[4],
                         int64_t sums[2]);
-/* mvo_pie_p4.S is assembled for the configuration's window: 19x19 in rows of 24 lanes under MVO_CONFIG_P4, else 15x15
- * in rows of 16. */
-#if defined(MVO_CONFIG_P4)
-typedef char mvo_pie_p4_fits_the_window[(MVO_SIDE == 19 && MVO_LANES == 24) ? 1 : -1];
-#else
-typedef char mvo_pie_p4_fits_the_window[(MVO_SIDE == 15 && MVO_LANES == 16) ? 1 : -1];
-#endif
-#define HAS_VECTOR_KERNELS 1
-static const mvo_kernels_t s_vector = {mvo_pie_p4_lk_template, mvo_pie_p4_lk_sums, mvo_block_c};
-#else
-/* No vector kernels for this chip: the portable ones stand in, so the selftest compares them with themselves. */
-#define HAS_VECTOR_KERNELS 0
-static const mvo_kernels_t s_vector = {mvo_lk_template_c, mvo_lk_sums_c, mvo_block_c};
-#endif
+/* mvo_vector.S is assembled for the core's window: 19x19 in rows of 24 lanes. */
+typedef char mvo_vector_fits_the_window[(MVO_SIDE == 19 && MVO_LANES == 24) ? 1 : -1];
+static const mvo_kernels_t s_vector = {mvo_vector_lk_template, mvo_vector_lk_sums, mvo_block_c};
 
 #if CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
 static void link_open(void)
@@ -325,7 +294,7 @@ static void selftest(const char *line)
            cases, template_bad, sums_bad, block_bad, (double)cycles[0] / CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ / cases,
            (double)cycles[1] / CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ / cases, (double)cycles[2] / CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ / cases,
            (double)cycles[3] / CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ / cases, (double)cycles[4] / CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ / cases,
-           (double)cycles[5] / CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ / cases, HAS_VECTOR_KERNELS);
+           (double)cycles[5] / CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ / cases, 1);
 }
 
 static void start(const char *line)
@@ -352,7 +321,6 @@ static void start(const char *line)
     mvo_init(s_state, &camera, seed, s_pyramid[0], s_pyramid[1]);
     s_state->timing.clock = clock_us;
     s_state->parallel = cores == 2 ? run_both : NULL;
-    simd = simd && HAS_VECTOR_KERNELS;
     s_state->kernels = simd ? &s_vector : NULL;
     mm_init(s_map);
     mc_init(s_cloud);
@@ -514,7 +482,7 @@ static void cloud(void)
     printf("cloud_end count=%" PRIu32 "\n", s_cloud->count);
 }
 
-/* The line the host waits for: the clock, the build configuration and the fingerprints of every source, which
+/* The line the host waits for: the clock, the build's name and the fingerprints of every source, which
  * uwslam.mvo_stream checks against its expectations. The host harnesses print it too. */
 static void print_ready(void)
 {
@@ -546,8 +514,8 @@ void app_main(void)
     if (s_go && s_done) {
         helper_ready = xTaskCreatePinnedToCore(helper_task, "mvo_helper", 4096, NULL, 5, NULL, 1) == pdPASS;
     }
-    /* Last, after the driver and the second core's task: allocated before them, it left so little internal RAM that two
-     * cores ran no faster than one. */
+    /* Last, after the driver and the second core's task, so that they get their memory first (on a smaller board,
+     * allocated before them, the map left so little internal RAM that two cores ran no faster than one). */
     s_voxels = heap_caps_malloc(sizeof *s_voxels, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     while (!s_state || !s_pyramid[0] || !s_pyramid[1] || !s_map || !s_cloud || !s_voxels || !s_go || !s_done
            || !helper_ready) {

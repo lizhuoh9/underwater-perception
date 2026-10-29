@@ -1,9 +1,9 @@
 # uwslam
 
 Monocular-camera SLAM for a small underwater robot: one camera, no IMU or rangers. A C core that gives the same results
-bit for bit on a PC and on an ESP32-S3 turns the robot camera's grey frames into the camera's motion and a continuing
+bit for bit on a PC and on an ESP32-P4 turns the robot camera's grey frames into the camera's motion and a continuing
 3D map, turns the segmentation model's water mask into the directions of the view that are blocked, and from both
-plans where to head next. Everything is checked on a lake clip against a 3D reconstruction of it, and on an ESP32-S3 by
+plans where to head next. Everything is checked on a lake clip against a 3D reconstruction of it, and on an ESP32-P4 by
 streaming the clip to the board over USB.
 
 [中文说明](README.zh-CN.md)
@@ -24,46 +24,39 @@ Two older maps stay beside them: [core/mono_map](core/mono_map.h), a top-view ob
 
 All numbers come from the lake clip: the first 33.8 s of an underwater video filmed along a wall in a lake, at 30 FPS.
 The reference is a WaterSplat reconstruction of it: 88 camera poses (their stamps times 3, see
-[mask_motion](results/lake_clip/mask_motion/RESULTS.md)) and 4.6 million points, taken as metres. The water masks are
-the segmentation model's output on the robot camera's 160×120 frames. Medians are over 16 RANSAC seeds, because on this
+[mask_motion](results/lake_clip/mask_motion/RESULTS.md)) and its point cloud, taken as metres. The water masks are the
+segmentation model's output on the robot camera's 160×120 frames. Medians are over 16 RANSAC seeds, because on this
 clip the seed alone can change an error twofold.
 
-1. **The odometry tracks the clip at the board's rates.** The C port's camera path, after one similarity alignment, is
-   0.41 m RMSE at 10 Hz, 0.28 m at 5 Hz and 0.37 m at 3 Hz over the 8.9 m the camera swims. The OpenCV prototype it was
-   ported from, which keeps a pinhole camera, gives 0.41, 0.44 and 0.33 m on one seed. Tracking is lost on 2.5, 12 and
-   21.5 steps. The monocular scale
-   drifts: the largest over the smallest 5 s window ratio is 15.2×, 2.2× and 6.1×. The estimated pitch drifts upward,
-   21° over the clip at 5 Hz, so a path lined up at the start climbs where the camera swam level. It drifted 35° until
-   the lake runs took the camera's lens, whose distortion is not centred in the frame.
+1. **The odometry tracks the clip at the board's rate.** The C port's camera path, after one similarity alignment, is
+   0.33 m RMSE at 10 Hz, 0.19 m at 5 Hz and 0.38 m at 3 Hz over the 8.9 m the camera swims. The OpenCV prototype it
+   was ported from, which keeps a pinhole camera, gives 0.41, 0.44 and 0.33 m on one seed. Tracking is lost on 2, 13
+   and 17 steps. The monocular scale drifts: the largest over the smallest 5 s window ratio is 5.3×, 1.8× and 4.1×.
+   The C tools' runs take the camera's lens, whose distortion is not centred in the frame: without it every step
+   pitched up a little.
 2. **The 3D map goes on for the whole clip.** The voxel map holds what the robot needs around it: every 5 s, the
-   obstacles it holds lie a median 5.8 cm (10 Hz) and 6.5 cm (5 Hz) from the reconstruction's surfaces, and 85% and 79%
-   of them lie within 0.2 m. That is with the last 5 s of the path aligned to the reference. With one alignment for the
-   whole drifting path it is 0.09 m and 0.15 m. It goes on through every tracking loss. The older maps, frozen at the
-   first loss, stop after 4.3–4.4 s of the 33.8 s.
+   obstacles it holds lie a median 5.5 cm (10 Hz) and 6.8 cm (5 Hz) from the reconstruction's surfaces, and 85% and
+   76% of them lie within 0.2 m. That is with the last 5 s of the path aligned to the reference. With one alignment
+   for the whole drifting path, the obstacles held at the end lie a median 0.05 m and 0.07 m from them. It goes on
+   through every tracking loss. The older maps, frozen at the first loss, stop after 4.2–4.4 s of the 33.8 s.
 3. **The water mask tells the blocked directions reliably.** When the reconstruction has a surface within 0.5, 1 or
    2 m filling half of one of the 15 directions, the mask blocks that direction too, in at least 99% of the cases in
-   every band. The direction it picks as free
-   really is free 100%, 100% and 99% of the time at those ranges. Straight ahead is free only 87%, 61% and 19% of the
-   time, and a random direction 66%, 45% and 41%. The mask also blocks the water surface above, which the
-   reconstruction lacks.
-4. **The planner heads into free water and knows how far it is.** Going, it heads into a corridor free beyond 0.5 m in
-   97% of its steps and beyond 1 m in 91%, never into one blocked within 0.25 m, where straight ahead is free beyond 1 m
-   in only 51%. Where the mask sees no free direction (3–4% of the steps, facing the wall) it creeps into the free water
-   the map knows instead of having no answer. Its ranges, counted in steps of the robot's own speed, agree with the
-   reference's within a factor of 2 for 86–90% of the directions the map knows. Where the mask sees water the map holds
-   no points, so the plan bounds those directions by the surfaces in view instead: free for a median 9.2 steps at 5 Hz
-   (15.4 at 10 Hz), and the reference was nearer than that bound in at most 1% of the water directions.
-5. **The ESP32-S3 gives the PC's results, at 5 Hz.** With the clip streamed at 5 and 10 Hz, the board gives every
-   odometry step, the voxel map, the directions, the plan and the obstacle map exactly as the PC does. At 240 MHz on two
-   cores a 5 Hz step takes 161 ms (median 169, at most 207); the voxel map adds 1.0 ms, the directions 0.25 ms and the
-   plan 1.2 ms, within the 200 ms between frames. At 10 Hz a step takes 135 ms, more than the 100 ms between frames.
-   12 KB of internal RAM stays free. An ESP32-P4 at 360 MHz gives the same results with its own vector kernels: a 5 Hz
-   step in 74 ms (at most 96), and at 10 Hz every step within the 100 ms between frames. These runs were made before
-   the lake runs took the lens, which reaches the board only as the camera the host sends; a board run with a lens
-   matched the PC too (see the camera, under Monocular odometry). With the lake's lens, the P4 in its own configuration
-   (300 features in 19×19 windows and a finer voxel map, under ESP32-P4) matches the PC at 5 and 10 Hz, a 5 Hz step
-   taking 127 ms (at most 155), within the 200 ms between frames; at 10 Hz 159 of its 338 steps take longer than
-   100 ms.
+   every band. At 5 Hz the direction it picks as free really is free 100%, 100% and 99% of the time at those ranges.
+   Straight ahead is free only 87%, 61% and 19% of the time, and a random direction 65%, 41% and 36%. The mask also
+   blocks the water surface above, which the reconstruction lacks.
+4. **The planner heads into free water and knows how far it is.** Going, at 5 Hz, it heads into a corridor free beyond
+   0.5 m in 97% of its steps and beyond 1 m in 92%, never into one blocked within 0.25 m, where straight ahead is free
+   beyond 1 m in only 51%. Where the mask sees no free direction (3–4% of the steps, facing the wall) it creeps into the
+   free water the map knows instead of having no answer. Its ranges, counted in steps of the robot's own speed, agree
+   with the reference's within a factor of 2 for 87% (5 Hz) and 82% (10 Hz) of the directions the map knows. Where the
+   mask sees water the map holds no points, so the plan bounds those directions by the surfaces in view instead: free
+   for a median 9.5 steps at 5 Hz (15.3 at 10 Hz), and the reference was nearer than that bound in at most 1% of the
+   water directions.
+5. **The ESP32-P4 gives the PC's results, at 5 Hz.** With the clip streamed at 5 and 10 Hz, the board gives every
+   odometry step, the voxel map, the directions, the plan and the obstacle map exactly as the PC does. At 360 MHz on
+   two cores a 5 Hz step takes 127 ms (median 132, at most 155); the voxel map adds 0.48 ms, the directions 0.18 ms and
+   the plan 1.78 ms, within the 200 ms between frames. At 10 Hz a step takes 102 ms (median 99, at most 163), and 158
+   of the 338 steps take longer than the 100 ms between frames. 107,928 B of internal RAM stay free.
 
 ## Repository layout
 
@@ -76,7 +69,7 @@ clip the seed alone can change an error twofold.
 │   ├── path_plan.c/.h          where to head next: local avoidance and 3D path choice
 │   ├── mono_map.c/.h           top-view obstacle slice (frozen at the first loss)
 │   └── mono_cloud.c/.h         sparse points of the tracked features (frozen at the first loss)
-├── firmware/mono_vo_stream/    ESP-IDF app (ESP32-P4; also builds for the ESP32-S3): runs the core on streamed frames and masks, reports hashes and times
+├── firmware/mono_vo_stream/    ESP-IDF app for the ESP32-P4: runs the core on streamed frames and masks, reports hashes and times
 ├── src/uwslam/                 Python package
 │   ├── mvo.py                  ctypes binding of the core; the odometry on the lake clip against the OpenCV prototype
 │   ├── voxel_map.py            the voxel map on the lake clip, scored against the reconstruction
@@ -87,8 +80,7 @@ clip the seed alone can change an error twofold.
 │   └── experiments/            the OpenCV prototype (mono_vo), the reference poses and masks (mask_motion), the
 │                               segmentation model runner (segmenter)
 ├── tests/                      unittest suite; tests/c/ holds the C contract checks and firmware host harnesses
-├── results/lake_clip/          reference results, one folder per tool, each with RESULTS.md
-└── results/lake_clip_p4/       the results of the tools that build the core, in the p4 configuration (UWSLAM_CONFIG=p4)
+└── results/lake_clip/          results, one folder per tool, each with RESULTS.md; the board's expectations and records
 ```
 
 ## Getting started
@@ -113,116 +105,153 @@ python -m uwslam.path_plan <video> --reconstruction <folder> --output results/la
 python -m uwslam.mono_map <video> --reconstruction <folder> --output results/lake_clip/mono_map_2 --board-masks <masks file>
 ```
 
-The core has two build configurations ([core/mono_vo.h](core/mono_vo.h)): `s3`, the default, and `p4` for the
-ESP32-P4 (300 features instead of 250; see ESP32-P4 below). The tools and tests build the one the `UWSLAM_CONFIG`
-environment variable names, `s3` when it is unset, and record it in their outputs.
-
 The water masks come from [mask_motion](src/uwslam/experiments/mask_motion.py), which runs an exported ESP-DL int8
 segmentation model on the clip ([segmenter.py](src/uwslam/experiments/segmenter.py) describes the model folder).
 
+The Python code is formatted and linted with ruff, configured in [pyproject.toml](pyproject.toml):
+`ruff format src tests` and `ruff check src tests`.
+
 ## Monocular odometry
 
-[core/mono_vo.h](core/mono_vo.h) tracks up to 250 Shi-Tomasi corners (300 in the p4 configuration) with a fixed-point
-pyramidal Lucas-Kanade and a forward-backward check. When the tracks fit a pure turn (a homography within 1 px), the step is that rotation.
-Otherwise an eight-point MSAC essential matrix, a search over travel directions and a robust Levenberg-Marquardt
-give the motion, unless a separately fitted rotation explains the tracks as well. A fast turn adds a pull towards the
-homography's turn. Translation is accepted only when the evidence favours it. The step length comes from the depth
-ratios of the points two steps share, kept within three times the recent speed. A step with too few inliers is LOST:
-it keeps the position, takes the turn it can measure and, where its depths agree with the earlier points', carries the
-scale on. The C port follows the OpenCV prototype
-([experiments/mono_vo.py](src/uwslam/experiments/mono_vo.py)) in design, not in numbers; the comparison of the two is
-[results/lake_clip/mono_vo_c/RESULTS.md](results/lake_clip/mono_vo_c/RESULTS.md), the prototype's own run
+[core/mono_vo.h](core/mono_vo.h) tracks up to 300 Shi-Tomasi corners in 19×19 windows with a fixed-point pyramidal
+Lucas-Kanade and a forward-backward check. When the tracks fit a pure turn (a homography within 1 px), the step is that
+rotation. Otherwise an eight-point MSAC essential matrix, a search over travel directions and a robust
+Levenberg-Marquardt give the motion, unless a separately fitted rotation explains the tracks as well. A fast turn adds
+a pull towards the homography's turn. Translation is accepted only when the evidence favours it. The step length comes
+from the depth ratios of the points two steps share, counting those the new pair puts within 60 baselines, and is kept
+within three times the recent speed. A step with too few inliers is LOST: it keeps the position, takes the turn it can
+measure and, where its depths agree with the earlier points', carries the scale on. The C port follows the OpenCV
+prototype ([experiments/mono_vo.py](src/uwslam/experiments/mono_vo.py)) in design, not in numbers; the comparison of
+the two is [results/lake_clip/mono_vo_c/RESULTS.md](results/lake_clip/mono_vo_c/RESULTS.md), the prototype's own run
 [results/lake_clip/mono_vo/RESULTS.md](results/lake_clip/mono_vo/RESULTS.md).
 
 | Rate | Position RMSE after alignment | Heading RMSE | Scale spread over 5 s windows | Lost steps |
 |---:|---:|---:|---:|---:|
-| 10 Hz | 0.41 m [0.27–0.50] | 31.8° [19–38] | 15.2× [1.9–38.0] | 2.5 [1–3] |
-| 5 Hz | 0.28 m [0.20–0.38] | 17.1° [6–33] | 2.2× [1.9–4.8] | 12 [9–13] |
-| 3 Hz | 0.37 m [0.32–0.47] | 23.4° [8–44] | 6.1× [2.7–11.2] | 21.5 [20–24] |
+| 10 Hz | 0.33 m [0.26–0.37] | 39.5° [30–46] | 5.3× [2.4–9.2] | 2 [1–4] |
+| 5 Hz | 0.19 m [0.16–0.26] | 19.4° [5–26] | 1.8× [1.4–2.6] | 13 [11–15] |
+| 3 Hz | 0.38 m [0.34–0.56] | 39.1° [26–66] | 4.1× [1.6–8.2] | 17 [16–19] |
 
 Median [smallest–largest] over 16 seeds. A monocular run has no metric scale: the alignment supplies it.
 
-The 5 Hz path climbs because the estimated pitch drifts upward, not because the travel points up: with the reference's
-orientation and the odometry's directions of travel it ends level with the reference. Part of the drift came from LOST
-steps on fast turns. Where only the homography, not the separately fitted rotation, has the support, the homography has
-mostly read the travel's parallax as a turn, over the lake's floor as pitch: on such lost steps at 5 Hz it errs +1.5°
-in pitch a step against −0.2° for the essential pose, though by as much in all (6.0° and 6.2°), and the bias adds up.
-Such a step now takes the essential pose's rotation when that had 15 inliers,
-still without a translation. Over 16 seeds, with the pinhole camera of the time, the end pitch error fell from 46° to
-35° at 5 Hz and from 47° to 20° at 3 Hz, and over 10 s windows the orientation error from 14° to 13° and from 26° to
-15°; 10 Hz, with 2 lost steps, changes little. (The heading RMSE over the whole clip is one realisation of a random walk
-and moved by a few degrees either way.) Lost steps with no supported rotation still keep none: on a still camera with
-noisy tracks the essential pose's rotation would add turns of 30° and more.
+The settings favour 5 Hz, the board's input rate, and spend the P4's time on it. With the pinhole camera of the time,
+300 features instead of 250 brought the 5 Hz path from 0.33 to 0.26 m in the median of 16 seeds and from 0.079 to
+0.067 m over 10 s windows of the clip (lower in 68% of 192 paired runs), the heading unchanged; at 10 Hz it was worse.
+The other ways tried to spend that time on accuracy did not help: 640×480 frames, 10 Hz input, more RANSAC samples,
+refinement or tracking iterations. With the lake's lens, 19×19 windows instead of 15×15 brought the heading over the
+5 Hz windows from 8.1° to 6.2° in the median (lower in 59% of the paired runs) and its largest error from 20.1° to
+15.3°, the position staying about the same (0.066 against 0.067 m, lower in 57%); at 3 and 10 Hz the heading was worse.
+With them, 350 or 400 features were worse at 5 Hz (full clip 0.23 and 0.24 m against 0.21). The pull towards the
+homography's turn mends the fast swings at 5 Hz, where the essential matrix took up to a quarter of each fast step as
+travel (14° over the clip's two-second swing); at 10 Hz the steps are half as large, the pull mends a swing's first
+half more than its second, and the heading over the whole clip comes out worse than without it.
 
-Much of the rest of the drift, about +0.18° of pitch per essential step (28° over the clip at 5 Hz), which OpenCV's
-five-point solver on full-resolution SIFT matches showed too, came from the lens. The lake camera's distortion is not
-centred in height: to first order it is a tangential term p1 of −0.02 in OpenCV's model, as a frame cropped off the
-lens's axis has, and every short-baseline step turned that asymmetry into a little pitch up. It was found without the
-reference, on the core's own tracks. At 30 FPS the chain of one-frame steps pitched 1.3–1.8° more than one direct
-estimate across 1.6 s of the same tracks (two seeds); with p1 = −0.02 the two agree within 0.05°. The floating dock's
-straight bottom edge, detected in every frame, must hold the vanishing point of one fixed direction: the chain's
-rotations held it to an RMS of 7 px with that lens, against 18.5 and 20.1 px as a pinhole. The C tools' lake runs
-therefore take it (`LENS` in [experiments/mono_vo.py](src/uwslam/experiments/mono_vo.py); the OpenCV prototype keeps the
-pinhole). Over 16 seeds the end pitch error fell
-from 35° to 21° at 5 Hz and from 26° to 1° at 10 Hz, the full-clip position error from 0.33 to 0.28 m at 5 Hz and from
-0.42 to 0.37 m at 3 Hz, and over 10 s windows at 5 Hz the heading error from 8.6° to 7.7° (lower in 57% of 192 paired
-runs), the position staying about as it was (0.077 m against 0.079 m, lower in 54%). At 10 Hz the position got worse:
-0.41 m over the clip instead of 0.33 m, and 0.092 m instead of 0.078 m over the windows (lower in 35%). Its step
-lengths scatter more, with a scale spread of 15.2× instead of 5.3×, while its directions of travel are about as good
-as before: rebuilt at the reference's step lengths, 6–22 s of the clip come out 0.036 m off against 0.037 m (8 seeds).
+A step LOST on a fast turn keeps a turn when at least 8 tracks and half of them agree on one (at 5 Hz the lost steps
+turn by 11° in the median, all of which keeping the last pose lost from the heading): the separately fitted rotation's,
+and where only the homography has that support, the essential pose's when it had 15 inliers, else the homography's. A
+homography the fitted rotation does not share has mostly read the travel's parallax as a turn, over the lake's floor as
+pitch: on such lost steps at 5 Hz it errs +1.5° in pitch a step against −0.2° for the essential pose, though by as much
+in all (6.0° and 6.2°), and that bias made the path climb. Lost steps with no supported rotation still keep none: on a
+still camera with noisy tracks the essential pose's rotation would add turns that are not there.
 
-Translation is refused on about 15 steps a run at 5 Hz, mostly on fast turns, and rightly: there the directions of
-travel the essential matrix proposed lie a median 87–126° from the reference's, against 10–11° for the steps it accepted
-on turns as fast. What those steps cost was the scale. A LOST step dropped the triangulated points that carry the step
-length from one step to the next, so each time the next step restarted at the recent speed, and the scale jumped by 1.4
-times across them in the median. Now a lost step whose essential pose had 15 inliers carries its points on with that
-pose, still taking no translation, when at least 8 of the depth ratios it shares with the earlier points agree on one
-scale (their interquartile range at most half their median). Over 16 seeds, with the pinhole camera, the 5 Hz path came
-out 0.33 m off instead of 0.40 m, and the scale spread fell from 5.8× to 2.6×. Over 10 s windows it is unchanged
-(0.079 m against 0.077 m: equal in 57% of 192 paired runs, lower in 20%); the voxel map's local accuracy at 5 Hz went
-from 5.7 to 6.1 cm and its accuracy over the whole path from 0.19 to 0.16 m; 10 Hz came out 0.33 m instead of 0.31 m.
-A still camera's noise fits poses whose depth ratios scatter, so it nearly always drops its points: none of 43,200
-still or turning steps took a translation, and after one to three noisy hovers the next move's length was off by more
-than 23% in 0.2–0.6% of the trials. A first version also carried points without shared ones when they showed 2° of
-parallax; after two noisy hovers that put the next move's length off by more than 23% in a quarter to two fifths of
-the trials.
+Translation is refused where the tracks give no evidence for it over a rotation, and a LOST step takes none. What such
+steps cost was the scale: a lost step dropped the triangulated points that carry the step length from one step to the
+next, so each time the next step restarted at the recent speed. A lost step whose essential pose had 15 inliers
+therefore carries its points on with that pose, still taking no translation, when at least 8 of the depth ratios it
+shares with the earlier points agree on one scale (their interquartile range at most half their median). A still
+camera's noise fits poses whose depth ratios scatter, so it nearly always drops its points.
+
+The lake camera's distortion is not centred in height: to first order it is a tangential term p1 of −0.02 in OpenCV's
+model, as a frame cropped off the lens's axis has, and without it every step pitched up a little. It was found without
+the reference, on the core's own tracks: with that term, the chain of 30 FPS steps agrees in pitch with direct
+rotations across 1.6 s of the same tracks, and the floating dock's straight bottom edge keeps its vanishing point
+through the clip. The C tools' lake runs therefore take it (`LENS` in
+[experiments/mono_vo.py](src/uwslam/experiments/mono_vo.py); the OpenCV prototype keeps the pinhole).
+
+What is left at 5 Hz is mostly scale, not rotation: rebuilt from a run's own steps (16 seeds, before the 60-baseline
+limit below), the full clip's path came out 0.200 m off with the reference's attitude and 0.140 m with its step lengths,
+against 0.214 m as it was. The scale itself had a bias. The step length is the median ratio of each shared point's
+earlier depth to its depth in the new pair, and the points counted were those the new pair put within 50 baselines
+(`MVO_MAX_DEPTH`). A ratio grows with the new pair's parallax, so cutting at the pair's own noisy depths dropped the
+points whose noise put them far and, on short steps, where many sit near that limit, biased the median. The points
+counted are now those the new pair puts within 60 baselines (`MVO_RATIO_DEPTH` in [core/mono_vo.h](core/mono_vo.h)),
+against the 50 before (16 seeds):
+
+| | Within 50 baselines | Within 60 baselines |
+|---|---:|---:|
+| 5 Hz, full clip: position RMSE / scale spread | 0.214 m [0.148–0.275] / 2.0× | 0.190 m [0.157–0.257] / 1.8× |
+| 10 Hz, full clip: position RMSE / scale spread | 0.394 m [0.359–0.434] / 8.3× | 0.327 m [0.257–0.366] / 5.3× |
+| 5 Hz, 10 s windows: position RMSE, median | 0.066 m | 0.064 m (lower in 66%) |
+| 10 Hz, 10 s windows: position RMSE, median | 0.088 m | 0.076 m (lower in 47%) |
+| 5 Hz voxel map: local / global median distance | 0.065 / 0.072 m | 0.068 / 0.070 m |
+| 10 Hz voxel map: local / global median distance | 0.057 / 0.055 m | 0.055 / 0.045 m |
+| 5 Hz plan: the chosen direction's known range within twice the reference's | 71% | 81% |
+
+The headings and the lost steps do not change. The plan row rests on few steps: the chosen direction had a known range
+in 12 of the 169 steps on the default seed (14 before). The limit of 60 was chosen from a scan of 50, 60, 75 and 100
+baselines and none on this one clip; it should be checked again on the robot's own footage. A wider limit gave the
+5 Hz path more (0.173 m at 100 baselines) for a worse local map (0.076 m) and worse 10 Hz windows (0.105 m); with none,
+the points too noisy to help made 10 Hz worse.
+
+Tried on the scale and dropped: a second decentring term of the lens (p2 of −0.02 or −0.03; the chained 30 FPS steps'
+yaw against direct estimates shrinks to about zero at −0.03) made the full clip's heading better (19.0° to 13.4° and
+12.7°) but not the windows', and the scale worse: the 5 Hz full clip came out 0.34–0.38 m instead of 0.21. A
+sliding-window fit of the last five frames (their poses, positions or step lengths, with the points tracked through
+them), prototyped on the PC, let the scale collapse: at 5 Hz 49% of the tracks survive a step and about a third two,
+and over tracks that short the window's scale drifted more than the odometry's chain; at 10 Hz, where tracks live
+longer, it came out 1.0–1.3 m against 0.39 (4 seeds). Tracking lost features again from their neighbours'
+displacement cut the lost steps from 13 to 11 but put the 5 Hz full clip at 0.38 m (started from one guess, both
+directions of the forward-backward check agree on wrong tracks too), also with new corners kept 12 px from the border.
+A pull of each step length towards the last gave 0.24–0.37 m (the diver's speed changes, and the ratios carry it), the
+length that best reprojects the shared points 0.55 m, and a median weighted by the inverse of the earlier depth 0.24 m.
+The tracks are short mostly because new corners die: just detected, they survive a step in 29% of the cases; tracked
+through four steps or more, in 80%.
 
 The camera is `mvo_camera_t`: the 320×240 frame's pinhole intrinsics and its lens distortion in OpenCV's model and
 order, k1, k2, p1, p2 and k3, as `cv2.calibrateCamera` gives them for a calibration at 320×240. Calibrate the robot's
 camera under water, behind its port: the water and a flat port change the lens. Before any model sees a step's pairs,
-the core undistorts them by Newton steps, which agree with OpenCV's undistortion to within 0.0001 px on the test
-lenses. The corners, the tracking and the masks stay in the raw image, and the obstacle directions take each mask
-column's and row's undistorted ray. With all five zero nothing changes: the core is bit-identical to the pinhole core.
-The lake clip's lens was never calibrated; the C tools' runs on it take the one term the clip itself shows,
-p1 = −0.02 (above), and the host sends it to the board with the rest of the camera. On frames rendered through a strong barrel lens, the odometry
-erred per step by at most 0.06° in turn and 0.7° in the direction of travel when told the lens, and by 2.8° and 11°
-when it took the same frames for a pinhole's. On the board, a run with all five terms non-zero matched the PC on all
-248 odometry steps and the sparse cloud, and cost at most about 1 ms a step: on the same frames motion estimation took
-54 against 53 ms, the whole step 161 against 160 ms. From Python: `mvo.Camera(fx, fy, cx, cy, k1, k2, p1, p2, k3)`, or
-`python -m uwslam.mono_cloud <video> --fx … --k1 … --k3 …`; the board's `start` line carries the five at its end,
-after the seed, cores and simd.
+the core undistorts them by Newton steps, which agree with OpenCV's undistortion to within 0.001 px in the tests. The
+corners, the tracking and the masks stay in the raw image, and the obstacle directions take each mask column's and
+row's undistorted ray. With all five zero nothing changes: the core is bit-identical to a pinhole core. The lake clip's
+lens was never calibrated; the C tools' runs on it take the one term the clip itself shows, p1 = −0.02 (above), and the
+host sends it to the board with the rest of the camera. The tests render a moving camera through a strong barrel lens:
+told the lens, the odometry keeps a pinhole's accuracy; taking the same frames for a pinhole's, it errs far more in
+turn and in direction of travel. From Python: `mvo.Camera(fx, fy, cx, cy, k1, k2, p1, p2, k3)` (`mvo.clip_camera()`
+is the lake clip's), or `python -m uwslam.mono_cloud <video> --fx … --k1 … --k3 …`; the board's `start` line carries
+the five at its end, after the seed, cores and simd.
 
 ## Continuing voxel map
 
 [core/voxel_map.h](core/voxel_map.h) files, after every odometry step, the well-triangulated tracked points that the
 mask marks as not water, voxel by voxel, in the odometry's frame. It goes on through LOST steps, since the odometry
-keeps its frame through them. The monocular unit drifts, so the voxel side follows the scene: an eighth of the median
+keeps its frame through them. The monocular unit drifts, so the voxel side follows the scene: a sixteenth of the median
 depth. It is reset, and the voxels re-keyed and merged, when the scene asks for twice or half the current side. A voxel
-seen in two frames is an obstacle; unobserved space is unknown, not free. The map holds at most 1024 voxels (14 KB;
-in the P4's configuration 4096 voxels of half the side, 56 KB, see ESP32-P4).
+seen in two frames is an obstacle; unobserved space is unknown, not free. The map holds at most 4096 voxels (56 KB).
 When it is full, far voxels make room first, then voxels seen only once, then the obstacles unseen longest. At 5 Hz on
-the lake clip that keeps the last 4 s of obstacles (median; 90% within 9 s).
+the lake clip that keeps the last 5.7 s of obstacles (median; 90% within 12.8 s).
 
 | Rate | Local: median distance | Local: within 0.1 / 0.2 m | Global: median distance | Obstacles held | LOST steps gone through |
 |---:|---:|---:|---:|---:|---:|
-| 10 Hz | 0.058 m [0.045–0.063] | 69% / 85% | 0.09 m [0.04–0.18] | 867 | 2.5 |
-| 5 Hz | 0.065 m [0.056–0.119] | 62% / 79% | 0.15 m [0.05–0.24] | 704 | 12 |
+| 10 Hz | 0.055 m [0.046–0.063] | 68% / 85% | 0.05 m [0.04–0.08] | 2078 | 2 |
+| 5 Hz | 0.068 m [0.061–0.087] | 60% / 76% | 0.07 m [0.05–0.11] | 1068 | 13 |
 
 Local: every 5 s, the obstacles the robot holds, with the last 5 s of its path aligned to the reference (what avoidance
 uses). Global: the obstacles held at the end, with one alignment of the whole path. Details and figures:
 [results/lake_clip/voxel_map/RESULTS.md](results/lake_clip/voxel_map/RESULTS.md).
 
 ![The obstacles the robot held over the clip, seen from above and from the side](results/lake_clip/voxel_map/map_5hz.png)
+
+The voxels are this fine, and this many, because the P4 has the memory. Against voxels twice as large and four times
+fewer, scored on the odometry of 15×15 windows, the obstacles held at 5 Hz lay 0.074 m from the reference's surface
+over the whole path instead of 0.106, and 0.064 m near the camera instead of 0.067 (at 10 Hz 0.055 and 0.050 m instead
+of 0.075 and 0.060); a larger map of the larger voxels had not helped. Single sightings land in different fine voxels
+more often, so the planner reads them two to a side (below).
+
+The extra features triangulate less well, so the map's points lie a little farther from the reference: with the
+pinhole camera of the time, 300 features put the 5 Hz map's local error at 7.1 cm instead of 6.1. Filing only points
+from rays at least 1.5° apart instead of 1° took that back but halved how often the range straight ahead was known (34%
+of the 5 Hz steps instead of 71%), because forward motion gives the least parallax there: driving straight at a wall in
+the synthetic test, it knew that range in none of 11 steps instead of 7, and with 1.25° in none either. The maps
+therefore file from 1°.
 
 ## Obstacle directions
 
@@ -244,7 +273,7 @@ planner joins the two.
 [core/path_plan.h](core/path_plan.h) decides after every step where to head, among the same 3 × 5 directions, towards a
 goal direction (straight ahead unless the caller gives one in the odometry's world). A single camera fixes no scale, so
 ranges count in steps: the odometry's recent speed is one step, and a range of n steps is n frames away at that speed.
-A direction's range is the distance to the second nearest obstacle voxel in it (one alone is too easily an outlier). A
+A direction's range is the distance to the second nearest obstacle in it (one alone is too easily an outlier). A
 direction is passable when the mask shows it free and the map puts no obstacle within 8 steps (1.6 s at 5 Hz) there.
 The map adds vetoes but lifts none: it holds only textured points, and where it holds none the mask may still see a
 surface. Letting a far map range reopen a direction the mask blocked sent the plan into corridors blocked within 0.25 m
@@ -257,39 +286,59 @@ reconstruction: the 10th percentile range over the central half of the direction
 
 | 5 Hz, 16 seeds | Free beyond 0.25 m | Free beyond 0.5 m | Free beyond 1 m |
 |---|---:|---:|---:|
-| The plan, going (96% of the steps) | 100% | 97% | 91% |
-| The plan, creeping (4% of the steps, where the mask sees no free direction) | 100% | 83% | 50% |
+| The plan, going (96% of the steps) | 100% | 97% | 92% |
+| The plan, creeping (4% of the steps, where the mask sees no free direction) | 100% | 83% | 75% |
 | Straight ahead | 92% | 85% | 51% |
 | The best direction, in hindsight | 100% | 100% | 100% |
 
-While it goes, it heads exactly where the mask's own choice does: on this clip the map's vetoes never changed a choice.
-That is no failure of the map. The reference never had a surface within 8 steps in a direction the mask saw as water,
-so there was nothing to veto. The map also holds almost no points there: the voxel map files none on water cells, and
-open water has no texture to track. In a probe over 8 seeds, 4% of the water directions at 5 Hz had the two voxels a range
-needs, against 79% of the blocked ones. The few vetoes it could cast in water directions came from stray points, and
-the reference confirmed none of them.
+While it goes, its corridors are as free as those of the mask's own choice (100%, 97% and 91%). On the default seed
+the map vetoed a direction the mask saw as water in 5 steps at 5 Hz and in 3 at 10 Hz (once, at 10 Hz, the mask's own
+choice), and the reference had a surface within 8 steps for none of those vetoes. That is no failure of the map: the
+reference had no surface within 8 steps in any direction the mask saw as water, so there was nothing to veto. The map
+also holds almost no points there: the voxel map files none on water cells, and open water has no texture to track.
+The few vetoes it cast in water directions came from stray points.
 
 So the plan bounds the water directions instead. Anything nearer than the visibility along a water ray would itself be
 seen, and every surface in view is nearer than the visibility, so a water direction is free at least as far as the
 surfaces the camera sees now. `clear` is 0.75 of the median range of the voxels filed in this frame, when there are at
-least 10. Over 16 seeds it was known for 82% (5 Hz) and 89% (10 Hz) of the water directions, a median 9.2 and 15.4 steps
-(beyond the 8-step margin in 70% and 99%), and the reference was nearer than it in at most 1% at 5 Hz and never at
-10 Hz. In a probe, every such direction still had 14 steps or more of free water. The full median as the bound missed
+least 10. Over 16 seeds it was known for 82% (5 Hz) and 92% (10 Hz) of the water directions, a median 9.5 and 15.3
+steps (beyond the 8-step margin in 70% and 98%), and the reference was nearer than it in at most 1% at 5 Hz and never at
+10 Hz. In a probe, every such direction still had 14 steps or more of free water; the full median as the bound missed
 in 1.4%. What the map adds is an answer where the mask has none, and the ranges, the bound included: a robot can slow
 down as the steps to the nearest obstacle run out.
-[results/lake_clip/path_plan/RESULTS.md](results/lake_clip/path_plan/RESULTS.md) has 10 Hz too.
+
+The plan reads the fine voxels two to a side (`PP_GROUP`), adding their frames, so that two voxels seen once each, even
+in the same frame, make their cell an obstacle. Read one by one, with 15×15 windows, the finer voxels left the range
+straight ahead known in 68% of the 5 Hz steps instead of 77%; grouped, in 83%, with as much free water ahead and 87% of
+the known ranges instead of 90% within twice the reference's. As built, the range straight ahead is known in 83% of the
+5 Hz steps and 52% of the 10 Hz ones. [results/lake_clip/path_plan/RESULTS.md](results/lake_clip/path_plan/RESULTS.md)
+has 10 Hz too.
 
 ![Example frames with the plan: green passable, numbers the map's range in steps, yellow the plan](results/lake_clip/path_plan/plan_frames_5hz.png)
 
-## ESP32-S3
+## ESP32-P4
 
 [firmware/mono_vo_stream](firmware/mono_vo_stream) runs the odometry, the voxel map, the obstacle directions, the
-planner and the two older maps on frames and masks streamed over USB, and answers every frame with its step's hash, map counts and
-stage times. [mvo_stream.py](src/uwslam/mvo_stream.py) checks all of it against the PC's expectations.
+planner and the two older maps on an ESP32-P4 (two RISC-V cores at 360 MHz, PSRAM not used), on frames and masks
+streamed from the PC, and answers every frame with its step's hash, map counts and stage times.
+[mvo_stream.py](src/uwslam/mvo_stream.py) checks all of it against the PC's expectations. The board names its build,
+`p4`, and the sources it was built from in its `ready` line; the host refuses a board built from other sources, and
+expectations made by another build.
+
+The link is the console. By default ([sdkconfig.defaults](firmware/mono_vo_stream/sdkconfig.defaults)) that is UART0,
+which P4 boards bring out on a USB-UART bridge; the firmware switches it to 921,600 baud once it runs (`--baud` on the
+host). At 2 Mbaud a CH340 bridge lost single bytes of the board's replies in two of three lake runs, so the host also
+refuses a damaged step line. For the chip's own USB-Serial-JTAG port, add
+[sdkconfig.usb_serial_jtag](firmware/mono_vo_stream/sdkconfig.usb_serial_jtag) to the defaults, in a build folder of
+its own; only the console changes.
 
 ```bash
-# in an ESP-IDF 5.3+ shell
-idf.py -C firmware/mono_vo_stream -B firmware/mono_vo_stream/build_240 -p <PORT> flash
+# in an ESP-IDF 5.3+ shell; the console on a USB-UART bridge:
+idf.py -C firmware/mono_vo_stream -B firmware/mono_vo_stream/build -D SDKCONFIG=build/sdkconfig -p <PORT> flash
+# or on the chip's USB-Serial-JTAG port:
+idf.py -C firmware/mono_vo_stream -B firmware/mono_vo_stream/build_usj -D SDKCONFIG=build_usj/sdkconfig \
+    -D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.usb_serial_jtag" -p <PORT> flash
+
 python -m uwslam.mvo_stream --port <PORT> --frames <frames file> --masks <masks file> \
     --expected results/lake_clip/mono_vo_c/board_expected_5hz.json \
     --expected-map results/lake_clip/mono_map/board_expected_map_5hz.json \
@@ -298,167 +347,43 @@ python -m uwslam.mvo_stream --port <PORT> --frames <frames file> --masks <masks 
     --expected-plan results/lake_clip/path_plan/board_expected_plan_5hz.json --label <name>
 ```
 
-Measured on an ESP32-S3 dev board without PSRAM, 240 MHz, two cores, vector kernels, before the lake runs took the lens
-([results/lake_clip/mono_vo_c/board](results/lake_clip/mono_vo_c/board)):
+The frames file is what `uwslam.mvo compare --board-frames` writes, the masks file what `uwslam.mono_map --board-masks`
+writes; with the 5 Hz expectations the board gets every second frame. The host needs only pyserial
+(`pip install -e ".[board]"`, or ESP-IDF's own Python). Before every stream it has the board check its vector kernels
+against the portable C ones on 2,000 random windows (`selftest`), and it refuses a board where any result differs.
+
+[mvo_vector.S](firmware/mono_vo_stream/main/mvo_vector.S) holds the tracker's window kernels in the P4's vector
+instructions: a row of the 19×19 window takes three vectors of eight 16-bit lanes, and the kernels give exactly the
+integers of the C ones. A call costs 19.6 µs (a window) and 6.5 µs (its sums), against 118 and 36 µs for the C kernels
+on the P4; the block copy stays in C (8 µs a call).
+
+Measured with the lake clip's lens over the USB-Serial-JTAG port (records `p4_360mhz_usj*` in
+[results/lake_clip/mono_vo_c/board](results/lake_clip/mono_vo_c/board)):
 
 | | 5 Hz (169 steps) | 10 Hz (338 steps) |
 |---|---:|---:|
 | Steps, voxel map, directions, plans and obstacle map equal to the PC's | all | all |
-| Odometry per step, mean / median / max | 161 / 169 / 207 ms | 135 / 136 / 192 ms |
-| Tracking / motion / detection, mean | 71 / 57 / 32 ms | 55 / 64 / 16 ms |
-| Voxel map update, mean / max | 1.02 / 3.3 ms | 1.09 / 3.0 ms |
-| Obstacle directions, mean | 0.25 ms | 0.26 ms |
-| Plan, mean / max | 1.15 / 1.5 ms | 1.27 / 1.6 ms |
-| Internal RAM free at the end | 12,072 B | 12,072 B |
+| Odometry per step, mean / median / max | 127 / 132 / 155 ms | 102 / 99 / 163 ms |
+| Tracking / motion / detection, mean | 86 / 26 / 16 ms | 66 / 28 / 8 ms |
+| Voxel map update, mean / max | 0.48 / 2.6 ms | 0.55 / 4.1 ms |
+| Obstacle directions, mean | 0.18 ms | 0.18 ms |
+| Plan, mean / max | 1.78 / 3.0 ms | 1.83 / 2.9 ms |
+| Internal RAM free at the end | 107,928 B | 107,928 B |
 
-Memory is the tight part: the two image pyramids take 200 KB, and the voxel map is allocated last. Allocated before the
-driver and the second core's task, it left so little internal RAM that two cores ran no faster than one (240 ms per
-step).
-
-### ESP32-P4
-
-The same firmware builds for an ESP32-P4 (two RISC-V cores at 360 MHz), in a build folder with its own sdkconfig. On a
-P4 board whose USB port is a USB-UART bridge (a CH340 here), frames and replies go over the console UART, which the
-firmware switches to 921,600 baud. At 2 Mbaud single bytes of the board's replies went missing in two of three lake
-runs, so the host now refuses a damaged step line and takes `--baud`. Through the P4's own USB-Serial-JTAG port
-instead, the firmware links as on the S3 once built with that console: a defaults file holding
-`CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y`, added after `sdkconfig.defaults.esp32p4`
-(`-D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;<that file>"`, in a build folder of its own). That link replayed the 5 Hz
-clip in 31 s, against 173 s for the earlier UART run.
-
-```bash
-idf.py -C firmware/mono_vo_stream -B firmware/mono_vo_stream/build_p4 -D SDKCONFIG=build_p4/sdkconfig \
-    -D IDF_TARGET=esp32p4 -p <PORT> flash
-python -m uwslam.mvo_stream --port <PORT> ...   # the same arguments as for the S3
-```
-
-Measured on an ESP32-P4 (chip revision v1.3) at 360 MHz, two cores, no PSRAM, in the default configuration, before
-the P4 firmware got its own (below) and before the lens ([results/lake_clip/mono_vo_c/board](results/lake_clip/mono_vo_c/board): records
-`p4_360mhz*`, and `p4_c_*` for the same runs tracking with the portable C kernels):
-
-| | 5 Hz (169 steps) | 10 Hz (338 steps) |
-|---|---:|---:|
-| Steps, voxel map, directions, plans and obstacle map equal to the PC's | all | all |
-| Odometry per step, mean / median / max | 74 / 78 / 96 ms | 61 / 61 / 92 ms |
-| Tracking / motion / detection, mean | 38 / 22 / 15 ms | 29 / 24 / 7 ms |
-| The same with the C tracker kernels, per step and tracking | 220 / 226 / 308 ms, 184 ms | 173 / 160 / 289 ms, 142 ms |
-| Voxel map update, mean / max | 0.40 / 1.4 ms | 0.43 / 1.2 ms |
-| Obstacle directions, mean | 0.17 ms | 0.17 ms |
-| Plan, mean / max | 0.49 / 0.7 ms | 0.53 / 0.7 ms |
-| Internal RAM free at the end | 217,036 B | 217,036 B |
-
-[mvo_pie_p4.S](firmware/mono_vo_stream/main/mvo_pie_p4.S) is the S3's window kernels in the P4's vector instructions,
-which belong to the same family: per call 8.6 µs (a window) and 3.0 µs (its sums), against 72 and 23 µs for the C
-kernels on the P4 and 14 and 4.7 µs for the S3's vector kernels. The board's self-test found them equal to the C
-kernels on 20,000 random windows, and every run checks 2,000 more. The block copy stays in C (6.0 µs a call); no vector
-version was written for the P4. Against the S3, tracking runs 1.9 times faster, motion 2.6 and detection 2.2 times, a 5 Hz
-step takes 74 ms instead of 161, and 18 times as much internal RAM stays free. At 10 Hz every step, the slowest
-included, computes within the 100 ms between frames. These are the board's compute times: the replay over the UART
-feeds about a frame a second, and the segmentation model is not in them.
-
-#### The p4 configuration
-
-With the time and memory the P4 leaves over, its firmware builds the `p4` configuration of the core (`MVO_CONFIG_P4` in
-[core/mono_vo.h](core/mono_vo.h); on the PC `UWSLAM_CONFIG=p4`, results in [results/lake_clip_p4](results/lake_clip_p4)).
-It tracks 300 features instead of 250, in 19×19 windows instead of 15×15, and keeps a voxel map of voxels half as
-large and four times as many (56 KB instead of 14), which the plan reads two to a side. With the lens, both
-configurations:
-
-| Lake clip, 16 seeds | default | p4 |
-|---|---:|---:|
-| 5 Hz, 10 s windows (192 paired runs): position RMSE, median | 0.077 m | 0.064 m (lower in 67%) |
-| 5 Hz, 10 s windows: heading RMSE, median | 7.7° | 6.2° (lower in 64%) |
-| 5 Hz, full clip: position RMSE | 0.28 m [0.20–0.38] | 0.19 m [0.16–0.26] |
-| 5 Hz, full clip: scale spread | 2.2× | 1.8× |
-| 10 Hz, 10 s windows: position / heading RMSE, median | 0.092 m / 12.8° | 0.076 m / 14.2° |
-| 5 Hz voxel map: local / global median distance, obstacles held | 0.065 / 0.15 m, 704 | 0.068 / 0.070 m, 1067.5 |
-| 5 Hz plan: steps with a known range straight ahead | 71% | 83% |
-
-The default column is the frozen s3 set, made before the step length's choice of points below (which both
-configurations now share).
-
-Each part was scored against the configuration before it. Of the ways tried, with the pinhole camera, to spend the
-P4's time on accuracy, more features helped, and only at 5 Hz: 300 instead of 250 brought the 10 s windows from 0.079 to
-0.067 m (640×480 frames, 10 Hz input, more RANSAC samples, refinement or tracking iterations and a larger map of the
-same voxels did not). With the lens, the 19×19 windows brought the heading over the 5 Hz windows from 8.1° to 6.2° in
-the median (lower in 59% of the paired runs) and its largest error from 20.1° to 15.3°, the position about the same
-(0.066 against 0.067 m, lower in 57%), the full clip's too (0.21 m); at 3 and 10 Hz the heading was worse. With them,
-350 or 400 features were worse at 5 Hz (full clip 0.23 and 0.24 m).
-[mvo_pie_p4.S](firmware/mono_vo_stream/main/mvo_pie_p4.S) holds the vector kernels for both window sizes: a row of 19
-pixels takes three vectors, and a call costs 19.6 µs (a window) and 6.5 µs (its sums) against 118 and 36 µs for the C
-kernels; the board found them equal to the C kernels on 20,000 random windows.
-
-The finer voxels hold the same surroundings in smaller cells. Scored on the 15×15 windows' odometry, at 5 Hz the
-obstacles held lay 0.074 m from the reference's surface over the whole path instead of 0.106, and 0.064 m near the
-camera instead of 0.067 (at 10 Hz 0.055 and 0.050 m instead of 0.075 and 0.060). Single sightings land in different
-fine voxels more often, so read one by one the finer voxels left the range straight ahead known in 68% of the 5 Hz
-steps instead of 77%. The plan therefore reads them two to a side (`PP_GROUP` in [core/path_plan.h](core/path_plan.h)),
-adding their frames, so that two voxels seen once each, even in the same frame, make their cell an obstacle. With that
-it knew the range ahead in 83%; its choices kept as much free water ahead, and 87% of its known ranges instead of 90% lay
-within twice the reference's (86% in the configuration as built, with 19×19 windows).
-
-Where the 5 Hz error lies now: rebuilt from the run's own steps (16 seeds, before the 19×19 windows), the full clip's
-path came out 0.200 m off with the reference's attitude and 0.140 m with its step lengths, against 0.214 m as it is.
-With the lens, what is left is mostly scale, not rotation. Two attempts on it did not help. A second decentring term of
-the lens (p2 of −0.02 or −0.03; the chained 30 FPS steps' yaw against direct estimates shrinks to about zero at −0.03)
-made the full clip's heading better (19.0° to 13.4° and 12.7°) but not the windows', and the scale worse: the 5 Hz full
-clip came out 0.34–0.38 m instead of 0.21. A sliding-window fit of the last
-five frames (their poses, positions or step lengths, with the points tracked through them), prototyped on the PC, let
-the scale collapse: at 5 Hz 49% of the tracks survive a step and about a third two, and over tracks that short the
-window's scale drifted more than the odometry's chain.
-
-The scale itself had a bias. The step length is the median ratio of each shared point's earlier depth to its depth in
-the new pair, and the points counted were those the new pair put within 50 baselines (`MVO_MAX_DEPTH`). A ratio grows
-with the new pair's parallax, so cutting at the pair's own noisy depths dropped the points whose noise put them far and,
-on short steps, where many sit near that limit, biased the median. Counting the points the new pair puts within 60
-baselines instead (`MVO_RATIO_DEPTH` in [core/mono_vo.h](core/mono_vo.h)), against the configuration before it (16
-seeds):
-
-| | before | now |
-|---|---:|---:|
-| 5 Hz, full clip: position RMSE / scale spread | 0.214 m [0.148–0.275] / 2.0× | 0.190 m [0.157–0.257] / 1.8× |
-| 10 Hz, full clip: position RMSE / scale spread | 0.394 m [0.359–0.434] / 8.3× | 0.327 m [0.257–0.366] / 5.3× |
-| 5 Hz, 10 s windows: position RMSE, median | 0.066 m | 0.064 m (lower in 66%) |
-| 10 Hz, 10 s windows: position RMSE, median | 0.088 m | 0.076 m (lower in 47%) |
-| 5 Hz voxel map: local / global median distance | 0.065 / 0.072 m | 0.068 / 0.070 m |
-| 10 Hz voxel map: local / global median distance | 0.057 / 0.055 m | 0.055 / 0.045 m |
-| 5 Hz plan: the chosen direction's known range within twice the reference's | 71% | 81% |
-
-The headings and the lost steps do not change. The plan row rests on few steps: the chosen direction had a known range
-in 12 of the 169 steps on the default seed (14 before). The limit of 60 was chosen from a scan of 50, 60, 75 and 100
-baselines and none on this one clip; it should be checked again on the robot's own footage. A wider limit gave the 5 Hz
-path more (0.173 m at 100 baselines) for a worse local map (0.076 m) and worse 10 Hz windows (0.105 m); with none, the
-points too noisy to help made 10 Hz worse. Also tried and dropped: tracking lost features again from their neighbours'
-displacement (fewer lost steps, 13 to 11, but the 5 Hz full clip came out 0.38 m: started from one guess, both
-directions of the forward-backward check agree on wrong tracks too), also with new corners kept 12 px from the border; a
-pull of each step length towards the last (0.24–0.37 m: the diver's speed changes, and the ratios carry it); the length
-that best reprojects the shared points (0.55 m) and a median weighted by the inverse of the earlier depth (0.24 m); and
-the window fit above at 10 Hz, where tracks live longer (1.0–1.3 m against 0.39, 4 seeds). The tracks are short mostly
-because new corners die: just detected, they survive a step in 29% of the cases; tracked through four steps or more, in
-80%.
-
-The extra features triangulate less well, so the map's points lie a little farther from the reference. With the
-pinhole camera, filing only points from rays at least 1.5° apart instead of 1°, as first tried, kept the local error at
-6.1 cm but halved how often the range straight ahead was known (34% of the 5 Hz steps instead of 71%), because forward
-motion gives the least parallax there: driving straight at a wall in the synthetic test, it knew that range in none of
-11 steps instead of 7, and 1.25° in none either. Both configurations therefore file from 1°.
-
-On the P4 board, with the lens, the p4 configuration gives every odometry step, the voxel map, the directions, the plans
-and the obstacle map exactly as the PC does, at 5 and 10 Hz (core `b7b36567`, header `ddffb012`, over the
-USB-Serial-JTAG port; records `p4_360mhz_usj*` in [results/lake_clip_p4/mono_vo_c/board](results/lake_clip_p4/mono_vo_c/board)).
-A 5 Hz step takes 127 / 132 / 155 ms (mean / median / max; tracking 86, motion 26, detection 16 ms), within the 200 ms between frames.
-At 10 Hz a step takes 102 / 99 / 163 ms, and 159 of the 338 steps take longer than the 100 ms between frames. At 5 Hz
-the voxel map adds 0.48 ms a step, the directions 0.17 ms and the plan 1.75 ms; 107,928 B of internal RAM stay free.
+A 5 Hz step stays within the 200 ms between frames; at 10 Hz 158 of the 338 steps take longer than the 100 ms between
+frames. Everything lives in internal RAM: the two image pyramids (about 100 KB each), the odometry's state and the
+voxel map (56 KB). These are the board's compute times: the replay is paced by the link (over the USB-Serial-JTAG port
+the 5 Hz clip's 170 frames took 38 s), and the segmentation model is not in them.
 
 ## Limitations
 
 - One clip, filmed by a diver rather than the robot, with the reference's own errors. The camera's 110° field of view
   was fitted on the same clip, and its lens was never calibrated: the C tools' lake runs take only the decentring term
-  the clip itself shows (p1 = −0.02).
-- A single camera: no metric scale, and the odometry drifts, its pitch upward by about 0.6° a second at 5 Hz, so the
-  path climbs; at 10 Hz the step lengths drift more with the lens than without. The map closes no loops and does not
+  the clip itself shows (p1 = −0.02). Settings such as the 60 baselines of the step length's points were chosen on
+  this clip alone.
+- A single camera: no metric scale, and the odometry drifts, in scale above all. The map closes no loops and does not
   relocalise after a loss.
 - The mask's directions are the camera's, not gravity-aligned; the mask cannot tell range.
 - The planner is local and scored open-loop on a clip the robot did not steer: it has not driven a robot yet.
-- The board check streams recorded frames and masks over a serial link; it does not include capture, the segmentation model or
-  the robot's other tasks.
+- The board check streams recorded frames and masks over a serial link; it does not include capture, the segmentation
+  model or the robot's other tasks.

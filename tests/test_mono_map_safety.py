@@ -6,8 +6,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from uwslam.mvo import config_defines
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -25,7 +23,6 @@ class MonoMapSafetyTests(unittest.TestCase):
                     "-Wextra",
                     "-Werror",
                     "-pedantic",
-                    *config_defines(),
                     f"-I{ROOT / 'core'}",
                     str(ROOT / "tests/c/mono_map_safety_check.c"),
                     str(ROOT / "core/mono_map.c"),

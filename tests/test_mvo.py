@@ -90,7 +90,7 @@ class MonoVoCTests(unittest.TestCase):
         shutil.rmtree(cls.folder, ignore_errors=True)
 
     def test_state_fits_the_board(self):
-        # The S3's largest free internal block is about 200 KB, so the two pyramids are separate blocks.
+        # The two pyramids are separate blocks, so that they fit a fragmented heap.
         self.assertLess(self.vo.mvo_state_size(), 16_000)
         self.assertLess(self.vo.mvo_pyramid_bytes(), 110_000)
 
@@ -163,7 +163,7 @@ class MonoVoCTests(unittest.TestCase):
 
     def test_far_features_stay_tracked(self):
         # Creeping towards the far wall: most points lie beyond MVO_MAX_DEPTH baselines, so they get no point, but they
-        # must stay tracked. Dropping them (as recoverPose's mask would) left a few dozen of 250 features per step and
+        # must stay tracked. Dropping them (as recoverPose's mask would) left a few dozen features per step and
         # broke the chain of depths that carries the scale.
         poses = [(np.eye(3), np.array([0.0, 0.0, 0.06 * k])) for k in range(8)]
         frames = [render(r, c, self.camera, self.wall, self.floor) for r, c in poses]
@@ -223,7 +223,6 @@ class MonoVoCTests(unittest.TestCase):
             [
                 "gcc",
                 *CFLAGS,
-                *mvo.config_defines(),
                 *STATIC,
                 f"-I{mvo.CORE_DIR}",
                 str(C_CHECKS / "mvo_jacobian_check.c"),
@@ -254,7 +253,6 @@ class MonoVoCTests(unittest.TestCase):
             [
                 "gcc",
                 *CFLAGS,
-                *mvo.config_defines(),
                 *STATIC,
                 f"-I{mvo.CORE_DIR}",
                 str(C_CHECKS / "mvo_turn_pull_check.c"),
@@ -277,8 +275,7 @@ class MonoVoCTests(unittest.TestCase):
     def test_tracker_kernels_follow_their_contract(self):
         # mvo_kernels_t in mono_vo.h: what a platform's vector kernels must reproduce (the board checks them against these).
         rng = np.random.default_rng(7)
-        config = mvo.CONFIGS[mvo.CONFIG]
-        side, lanes, stride = 2 * config["window"] + 1, config["lanes"], 40
+        side, lanes, stride = 2 * mvo.WINDOW + 1, mvo.LANES, 40
         image = rng.integers(0, 256, (side + 9, stride), dtype=np.uint8)
         weights = np.array([16384, 0, 0, 0], dtype=np.int16)
         while weights[0] == 16384:
@@ -317,7 +314,7 @@ class MonoVoCTests(unittest.TestCase):
         for w, h in ((40, 30), (80, 60), (320, 240)):
             image = rng.integers(0, 256, (h, w), dtype=np.uint8)
             for _ in range(20):
-                size = int(rng.choice([16, 18]))
+                size = int(rng.choice([2 * mvo.WINDOW + 2, 2 * mvo.WINDOW + 4]))  # MVO_SIDE + 1, + 3
                 stride = (size + 15) // 16 * 16
                 origin = np.array([rng.integers(-20, w + 20), rng.integers(-20, h + 20)], dtype=np.int32)
                 out = np.zeros(size * stride, dtype=np.uint8)

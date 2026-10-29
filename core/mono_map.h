@@ -13,7 +13,7 @@
  * The grid rolls with the robot: when the camera strays MM_SIZE / 4 cells from its centre, it is recentred on the
  * camera and what falls off is forgotten.
  *
- * C99, no heap, no libm, integer grid updates: a PC and an ESP32-S3 build the same map. One mm_map_t is about 16 KB;
+ * C99, no heap, no libm, integer grid updates: a PC and an ESP32-P4 build the same map. One mm_map_t is about 16 KB;
  * it is not thread-safe.
  */
 #ifndef MONO_MAP_H

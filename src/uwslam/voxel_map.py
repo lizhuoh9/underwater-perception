@@ -21,9 +21,7 @@ from uwslam import mvo
 from uwslam.paths import CLIP_RESULTS, CORE_DIR
 from uwslam.utils import dump_json
 
-# VM_CAPACITY, VM_SLOTS and VM_CELLS_PER_DEPTH of each build configuration (core/voxel_map.h)
-LAYOUTS = {"s3": (1024, 2048, 8), "p4": (4096, 8192, 16)}
-CAPACITY, SLOTS, CELLS_PER_DEPTH = LAYOUTS[mvo.CONFIG]
+CAPACITY, SLOTS, CELLS_PER_DEPTH = 4096, 8192, 16  # VM_CAPACITY, VM_SLOTS, VM_CELLS_PER_DEPTH (core/voxel_map.h)
 CONFIRM = 2  # VM_CONFIRM
 WINDOW_S = 5.0
 RATES = {10.0: 3, 5.0: 6}  # Hz: stride in 30 FPS frames

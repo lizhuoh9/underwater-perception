@@ -16,8 +16,7 @@ typedef struct { int tx_buffer_size, rx_buffer_size; } usb_serial_jtag_driver_co
 #define pdPASS 1
 #define MALLOC_CAP_INTERNAL 1
 #define MALLOC_CAP_8BIT 2
-#define CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ 240
-#define CONFIG_IDF_TARGET_ESP32S3 1 /* the S3's build: its vector kernels (forwarded to C below), the USB link */
+#define CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ 360
 #define CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG 1
 #define ESP_ERROR_CHECK(x) (x)
 
@@ -45,12 +44,10 @@ void vTaskDelay(int ticks) { (void)ticks; }
 
 #include "../../firmware/mono_vo_stream/main/main.c"
 
-void mvo_pie_lk_template(mvo_window_t *w, const uint8_t *s, int stride, const int16_t q[4], int64_t g[3])
+void mvo_vector_lk_template(mvo_window_t *w, const uint8_t *s, int stride, const int16_t q[4], int64_t g[3])
 { mvo_lk_template_c(w, s, stride, q, g); }
-void mvo_pie_lk_sums(const mvo_window_t *w, const uint8_t *s, int stride, const int16_t q[4], int64_t sums[2])
+void mvo_vector_lk_sums(const mvo_window_t *w, const uint8_t *s, int stride, const int16_t q[4], int64_t sums[2])
 { mvo_lk_sums_c(w, s, stride, q, sums); }
-void mvo_pie_block(uint8_t *out, int size, const uint8_t *img, int w, int h, const int origin[2])
-{ mvo_block_c(out, size, img, w, h, origin); }
 
 int main(void)
 {

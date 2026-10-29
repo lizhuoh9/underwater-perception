@@ -202,7 +202,6 @@ class MonoCloudBoardHostTests(unittest.TestCase):
         command = [
             "gcc",
             *CFLAGS,
-            *mvo.config_defines(),
             "-Wno-unused-function",
             "-ffunction-sections",
             "-fdata-sections",

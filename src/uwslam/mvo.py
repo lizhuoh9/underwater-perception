@@ -12,7 +12,6 @@ import argparse
 import ctypes
 import hashlib
 import json
-import os
 import struct
 import subprocess
 import tempfile
@@ -44,16 +43,11 @@ VOXEL_SOURCE = CORE_DIR / "voxel_map.c"
 DIRECTION_SOURCE = CORE_DIR / "obstacle_dir.c"
 PLAN_SOURCE = CORE_DIR / "path_plan.c"
 WIDTH, HEIGHT = 320, 240
-# The build configuration (core/mono_vo.h): "s3", the default, or "p4" (MVO_CONFIG_P4: 300 features), chosen with the
-# UWSLAM_CONFIG environment variable for every tool that builds the core.
-CONFIGS = {
-    "s3": {"defines": [], "max_features": 250, "window": 7, "lanes": 16},
-    "p4": {"defines": ["-DMVO_CONFIG_P4"], "max_features": 300, "window": 9, "lanes": 24},
-}  # MVO_WINDOW, MVO_LANES
-CONFIG = os.environ.get("UWSLAM_CONFIG", "s3")
-if CONFIG not in CONFIGS:
-    raise ValueError(f"UWSLAM_CONFIG must be one of {', '.join(CONFIGS)}, got {CONFIG!r}")
-MAX_FEATURES = CONFIGS[CONFIG]["max_features"]  # MVO_MAX_FEATURES of that configuration
+# The core's build (core/mono_vo.h) as the board names it: expectations carry it, so the host can refuse a board built
+# from another core.
+CONFIG = "p4"  # MVO_CONFIG_NAME
+MAX_FEATURES = 300  # MVO_MAX_FEATURES
+WINDOW, LANES = 9, 24  # MVO_WINDOW, MVO_LANES
 KINDS = {0: "lost", 1: "rotation", 2: "essential"}
 SEED = 12345
 SEEDS = (SEED, *range(1, 16))  # the seed alone can change the scores twofold: their median and range over 16 runs
@@ -110,27 +104,19 @@ def sources_sha256() -> dict:
 
 
 def build_config() -> dict:
-    """The build configuration, as the board reports it: expectations carry it, so the host can refuse a board built
-    another way."""
+    """The build, as the board reports it: expectations carry it, so the host can refuse a board built another way."""
     return {"config": CONFIG, "max_features": MAX_FEATURES}
 
 
-def config_defines() -> list[str]:
-    """The compiler definitions of the build configuration (CONFIG): every gcc command that compiles the core passes
-    them."""
-    return list(CONFIGS[CONFIG]["defines"])
-
-
 def build(output: Path) -> ctypes.CDLL:
-    """Compile the VO, obstacle grid, sparse cloud, voxel map, obstacle directions and planner in the build
-    configuration (CONFIG) with the board's floating-point flags and bind them."""
+    """Compile the VO, obstacle grid, sparse cloud, voxel map, obstacle directions and planner with the board's
+    floating-point flags and bind them."""
     output.mkdir(parents=True, exist_ok=True)
     library = output / f"mono_vo{LIBRARY_SUFFIX}"
     subprocess.run(
         [
             "gcc",
             *CFLAGS,
-            *config_defines(),
             "-shared",
             *LINK_FLAGS,
             f"-I{CORE_DIR}",
@@ -350,7 +336,7 @@ def write_report(output: Path, summary: dict) -> None:
         "travel and heading directly). It follows the prototype's design with its own numerics: its own pyramid "
         "and fixed-point Lucas-Kanade, and instead of OpenCV's five-point solver an eight-point MSAC with "
         "least-squares refits, a search over travel directions and a robust Levenberg-Marquardt, pairs behind a "
-        "camera counting as outliers (see core/mono_vo.h). Five changes in design. The prototype stops tracking the "
+        "camera counting as outliers (see core/mono_vo.h). Six changes in design. The prototype stops tracking the "
         "pairs that recoverPose drops as farther than 50 baselines, while the C port keeps every epipolar inlier "
         "tracked and gives only the nearer ones a point: on short steps the far pairs were most of the features, and "
         "dropping them broke the chain of shared depths that carries the scale. The prototype takes each step's "

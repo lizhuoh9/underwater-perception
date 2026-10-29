@@ -20,7 +20,7 @@
  * and the water surface above included (the surface bounds the robot too). The directions are the camera's: without an
  * IMU "up" is the image's up, not gravity's.
  *
- * C99, no heap, no libm. The layout is computed once in float, the updates in integers: a PC and an ESP32-S3 give the
+ * C99, no heap, no libm. The layout is computed once in float, the updates in integers: a PC and an ESP32-P4 give the
  * same results. Not thread-safe for the same state.
  */
 #ifndef OBSTACLE_DIR_H

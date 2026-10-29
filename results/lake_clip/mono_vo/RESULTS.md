@@ -29,7 +29,7 @@ The reference camera travels 8.9 reconstruction units (taken as metres). "Scale 
 
 - One diver clip, not the robot; the reference is a reconstruction interpolated between keyframes, in its own units.
 - A monocular run has no metric scale: the alignment supplies it after the fact.
-- PC timings are for the OpenCV implementation and say nothing about an ESP32-S3.
+- PC timings are for the OpenCV implementation and say nothing about the ESP32-P4.
 
 Re-run (the output folder must not exist or be empty):
 

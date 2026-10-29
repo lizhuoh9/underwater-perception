@@ -50,12 +50,11 @@
  * pairs reach the models untouched.
  *
  * C99, no heap, no libm (a local square root, by Newton steps without division), xorshift32 for RANSAC, so a PC build
- * and an ESP32-S3 build give identical results with -ffp-contract=off and without fast-math. It follows the OpenCV
+ * and an ESP32-P4 build give identical results with -ffp-contract=off and without fast-math. It follows the OpenCV
  * prototype's design, not its numbers: the prototype uses OpenCV's five-point solver and its own Lucas-Kanade, stops
  * tracking the pairs recoverPose drops as too far, and takes every median depth ratio as it comes. One mvo_t is about
- * 8 KB (9.8 KB in the p4 configuration); the caller also provides two image
- * pyramids of MVO_PYRAMID_BYTES (about 100 KB each, 16-byte aligned for vector kernels), separate blocks so that they
- * fit a fragmented heap. Most of a step splits in two halves that can run at once (mvo_t.parallel): pyramid level 1
+ * 9.8 KB; the caller also provides two image pyramids of MVO_PYRAMID_BYTES (about 100 KB each, 16-byte aligned for
+ * vector kernels), separate blocks so that they fit a fragmented heap. Most of a step splits in two halves that can run at once (mvo_t.parallel): pyramid level 1
  * (half the rows each), the tracking (half the features), each RANSAC batch (half the samples), the corner search (half
  * the rows), the direction search (half the directions), the two pose refinements, and a lone refinement's Jacobian
  * (its rows); the results are the same either way. The tracker's kernels (two fixed-point ones and a block copy)
@@ -70,27 +69,20 @@
 #define MVO_HEIGHT 240
 #define MVO_LEVELS 4 /* pyramid levels: 320x240, 160x120, 80x60, 40x30 */
 
-/* Build configurations. The default suits an ESP32-S3 at 5 Hz. MVO_CONFIG_P4 suits an ESP32-P4, where a step takes
- * about half as long: it tracks 300 features, which on the lake clip at 5 Hz brought the path after one alignment from
- * 0.33 to 0.26 m in the median of 16 seeds and from 0.079 to 0.067 m on 10 s windows (lower in 68% of 192 paired
- * runs), the heading unchanged; at 10 Hz it is worse, so it is a 5 Hz configuration. The extra features triangulate
- * less well: the 5 Hz voxel map's local error is 7.1 cm instead of 6.1. Filing only points from rays 1.5 degrees apart
- * took that back, but forward motion leaves the least parallax straight ahead, and the range there was then known in
- * 34% of the 5 Hz steps instead of 71%, so the maps file from 1 degree in both (MM_, VM_ and MC_MIN_SPREAD). It also
- * tracks 19x19 windows instead of 15x15: with the lake clip's lens, the heading over 10 s windows at 5 Hz came out 6.2
- * instead of 8.1 degrees in the median (lower in 59% of 192 paired runs), the position about the same (0.066 against
- * 0.067 m); at 3 and 10 Hz the heading was worse, and 350 or 400 features with them were worse at 5 Hz. */
-#if defined(MVO_CONFIG_P4)
+/* The build, for an ESP32-P4 at 5 Hz, named in the board's reports (mvo_config_name). It tracks 300 features: on the
+ * lake clip at 5 Hz, 300 instead of 250 brought the path after one alignment from 0.33 to 0.26 m in the median of 16
+ * seeds and from 0.079 to 0.067 m on 10 s windows (lower in 68% of 192 paired runs), the heading unchanged; at 10 Hz it
+ * was worse. The extra features triangulate less well: the 5 Hz voxel map's local error is 7.1 cm instead of 6.1.
+ * Filing only points from rays 1.5 degrees apart took that back, but forward motion leaves the least parallax straight
+ * ahead, and the range there was then known in 34% of the 5 Hz steps instead of 71%, so the maps file from 1 degree (MM_,
+ * VM_ and MC_MIN_SPREAD). It tracks 19x19 windows: with the lake clip's lens, the heading over 10 s windows at 5 Hz came
+ * out 6.2 degrees in the median instead of 8.1 with 15x15 windows (lower in 59% of 192 paired runs), the position about
+ * the same (0.066 against 0.067 m); at 3 and 10 Hz the heading was worse, and 350 or 400 features with them were worse
+ * at 5 Hz. */
 #define MVO_CONFIG_NAME "p4"
 #define MVO_MAX_FEATURES 300
 #define MVO_WINDOW 9 /* Lucas-Kanade half window: 19x19 */
 #define MVO_LANES 24 /* a window row as stored: MVO_SIDE values, then zeros (three vectors of eight 16-bit lanes) */
-#else
-#define MVO_CONFIG_NAME "s3"
-#define MVO_MAX_FEATURES 250
-#define MVO_WINDOW 7 /* Lucas-Kanade half window: 15x15 */
-#define MVO_LANES 16 /* a window row as stored: MVO_SIDE values, then zeros (two vectors of eight 16-bit lanes) */
-#endif
 
 #define MVO_REFILL 0.6f
 #define MVO_MIN_DISTANCE 8.0f
@@ -219,7 +211,7 @@ void mvo_step(mvo_t *s, mvo_step_t *out);
 float mvo_step_length(mvo_t *s, float *ratios, int count);
 uint32_t mvo_state_size(void);
 uint32_t mvo_pyramid_bytes(void);
-/* The build configuration (see above): its name ("s3" or "p4") and MVO_MAX_FEATURES. */
+/* The build's name ("p4", see above) and MVO_MAX_FEATURES. */
 const char *mvo_config_name(void);
 uint32_t mvo_max_features(void);
 float mvo_sqrt(float v);

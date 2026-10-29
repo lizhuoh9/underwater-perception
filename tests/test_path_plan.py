@@ -12,8 +12,6 @@ from pathlib import Path
 
 import numpy as np
 
-from uwslam.mvo import config_defines
-
 HAS_DEPENDENCIES = shutil.which("gcc") is not None and find_spec("cv2") is not None
 if HAS_DEPENDENCIES:
     from tests.test_mvo import WALL_Z, render, texture
@@ -53,7 +51,6 @@ class PathPlanContractTests(unittest.TestCase):
                     "-Werror",
                     "-pedantic",
                     "-ffp-contract=off",
-                    *config_defines(),
                     *STATIC,
                     f"-I{ROOT / 'core'}",
                     *map(str, sources),

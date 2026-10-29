@@ -31,7 +31,6 @@ void pp_init(pp_plan_t *plan)
 
 uint32_t pp_plan_size(void) { return (uint32_t)sizeof(pp_plan_t); }
 
-#if PP_GROUP > 1
 /* The voxels read PP_GROUP to a side (see path_plan.h): cells in the order their first voxel was seen, found through an
  * open-addressing index like the map's own. */
 typedef struct {
@@ -74,7 +73,6 @@ static uint32_t group_voxels(const vm_map_t *map)
     }
     return n;
 }
-#endif
 
 /* One step: the median of the odometry's last step lengths, as mvo_step_length takes it; 0 before the first step or
  * when one is not a positive finite length. */
@@ -218,21 +216,11 @@ int pp_update(pp_plan_t *plan, const vm_map_t *map, const mvo_t *vo, const od_la
         horizon2 = PP_HORIZON_STEPS * speed * (PP_HORIZON_STEPS * speed);
         safe2 = PP_SAFE_STEPS * speed * (PP_SAFE_STEPS * speed);
         creep2 = PP_CREEP_STEPS * speed * (PP_CREEP_STEPS * speed);
-#if PP_GROUP > 1
         const uint32_t count = group_voxels(map);
         const float side = PP_GROUP * map->side;
-#else
-        const uint32_t count = map->count;
-        const float side = map->side;
-#endif
         for (k = 0; k < count; ++k) {
-#if PP_GROUP > 1
             const pp_cell_t *v = &s_cells[k];
             const int now = v->now;
-#else
-            const vm_voxel_t *v = &map->voxel[k];
-            const int now = v->seen == (uint16_t)map->frames;
-#endif
             float p[3], q[3], d2;
             for (i = 0; i < 3; ++i) {
                 p[i] = ((float)v->key[i] + 0.5f) * side - vo->world_centre[i];

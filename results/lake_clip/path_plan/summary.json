@@ -1,17 +1,17 @@
 {
   "task": "Local avoidance and 3D path choice from the voxel map and the water masks on the lake clip, scored open-loop against the reference reconstruction",
   "sources_sha256": {
-    "core_sha256": "b7b36567dd5de3e9171494186afdc8406cf6dc4e5a5c7b5b9eb0447bfa68390b",
-    "header_sha256": "d0cd3abb3e3e4f67665f0a9aa059ee69bdb92f59ed27ce56732df98809fe10db",
+    "core_sha256": "18cc224519d93d64bf39725adee3c1900b7faade9abc8118ee4e418b330935ed",
+    "header_sha256": "1f8fcbaae57dc342d549496edd0d6aaa6c9254fea404ef4ec5f1165919b4fe49",
     "voxel_sha256": "b803ea6bf97c0334f71e65c3df31b06c2430e628b34f67a1c02d99f82a8eb0c5",
-    "voxel_header_sha256": "61f34f4d7c334957dd52a641b3be39a93d5b3c3a23ab42986c8d811c322e376c",
+    "voxel_header_sha256": "d45f150ef6cf43d2e43f45eff58dd09693159173415b27541256244c3b78eb1b",
     "dir_sha256": "ed8b510cdc05db181f41d5b8426ee2c7ee8d03d5ae04caa295ab71b7b3d12aa6",
-    "dir_header_sha256": "4ec7b465dba1fc9b51670029a93c806a4c9def2895b00a6bacbe8050b274813d",
-    "plan_sha256": "41a59c9bbabf2ecc3ac270eaa2793485d3ac2053066f31c238d71669d7d329ca",
-    "plan_header_sha256": "8690aebed23eca424dd8acf3f4c64da4c600fbbb4bfa627c860b0225afaf65d5"
+    "dir_header_sha256": "f7a9953e140288518d505dfbef2716ec683810ac886cfdd86337a5651758dcc6",
+    "plan_sha256": "fca11789672ae5c8202744e5e183ae470094094c95b164ace5cd6040e6157b73",
+    "plan_header_sha256": "0b3ba95b625fdaa3af4311413ddadf5be0f37a808d6e339663ba38cb18a581f4"
   },
-  "config": "s3",
-  "max_features": 250,
+  "config": "p4",
+  "max_features": 300,
   "masks": "frames.npz",
   "time_scale": 3.0,
   "hfov_deg": 110.0,
@@ -59,16 +59,16 @@
         "water_bound": {
           "water_directions": 863,
           "with_a_reference_surface_within_safe": 0,
-          "bounded_share": 0.9026651216685979,
-          "median_steps": 15.339963367493322,
+          "bounded_share": 0.9165701042873696,
+          "median_steps": 15.559211707401918,
           "nearer_than_the_bound": 0.0,
-          "clear_beyond_safe": 0.9897304236200257
+          "clear_beyond_safe": 0.9721871049304678
         },
         "water_vetoes": {
-          "steps": 9,
-          "on_the_mask_choice": 0,
+          "steps": 3,
+          "on_the_mask_choice": 1,
           "right": 0,
-          "wrong": 9
+          "wrong": 3
         },
         "plan": {
           "within_0.25_m_free": 1.0,
@@ -78,8 +78,8 @@
         },
         "plan_creeping": {
           "within_0.25_m_free": 1.0,
-          "within_0.5_m_free": 0.7272727272727273,
-          "within_1_m_free": 0.5454545454545454,
+          "within_0.5_m_free": 0.6363636363636364,
+          "within_1_m_free": 0.6363636363636364,
           "steps": 11
         },
         "straight_ahead": {
@@ -100,17 +100,17 @@
         },
         "steps_in_steps": {
           "all_known": {
-            "directions": 2911,
-            "median_log2_ratio": -0.24768209309194605,
-            "within_2x": 0.8643077980075575
+            "directions": 3017,
+            "median_log2_ratio": -0.35482784644652177,
+            "within_2x": 0.8203513423931057
           },
           "chosen": {
-            "directions": 19,
-            "median_log2_ratio": -1.4104174460122412,
-            "within_2x": 0.42105263157894735
+            "directions": 22,
+            "median_log2_ratio": -1.610564819494358,
+            "within_2x": 0.4090909090909091
           }
         },
-        "ahead_known": 0.4556213017751479
+        "ahead_known": 0.5177514792899408
       },
       "over_seeds": {
         "danger": {
@@ -119,19 +119,19 @@
           "max": 0.0
         },
         "bounded_share": {
-          "median": 0.8945538818076477,
-          "min": 0.8794901506373117,
-          "max": 0.9119351100811124
+          "median": 0.9188876013904983,
+          "min": 0.9061413673232909,
+          "max": 0.9339513325608343
         },
         "clear_steps": {
-          "median": 15.392597425435767,
-          "min": 15.151143317617835,
-          "max": 15.620317849892174
+          "median": 15.312453613731464,
+          "min": 15.042590933624844,
+          "max": 15.78018787904648
         },
         "clear_beyond_safe": {
-          "median": 0.9895218260979952,
-          "min": 0.9727979274611399,
-          "max": 0.9948519948519948
+          "median": 0.9782616075947804,
+          "min": 0.9613466334164589,
+          "max": 0.9949622166246851
         },
         "nearer_than_clear": {
           "median": 0.0,
@@ -139,18 +139,18 @@
           "max": 0.0
         },
         "known_within_2x": {
-          "median": 0.8612180396779772,
-          "min": 0.8419243986254296,
-          "max": 0.8827181786823043
+          "median": 0.8191030747282729,
+          "min": 0.8066316480630334,
+          "max": 0.8326166060205095
         },
         "ahead_known": {
-          "median": 0.38461538461538464,
-          "min": 0.3254437869822485,
-          "max": 0.47633136094674555
+          "median": 0.5207100591715976,
+          "min": 0.4881656804733728,
+          "max": 0.5828402366863905
         },
         "chosen_within_2x": {
-          "median": 0.4409722222222222,
-          "min": 0.15384615384615385,
+          "median": 0.5166852057842046,
+          "min": 0.3181818181818182,
           "max": 0.6774193548387096
         },
         "action_stop": {
@@ -194,13 +194,13 @@
           "max": 1.0
         },
         "plan_creeping_within_0.5_m_free": {
-          "median": 0.5454545454545454,
-          "min": 0.36363636363636365,
-          "max": 1.0
+          "median": 0.7272727272727273,
+          "min": 0.45454545454545453,
+          "max": 0.9090909090909091
         },
         "plan_creeping_within_1_m_free": {
-          "median": 0.45454545454545453,
-          "min": 0.18181818181818182,
+          "median": 0.7272727272727273,
+          "min": 0.45454545454545453,
           "max": 0.9090909090909091
         },
         "mask_choice_within_0.25_m_free": {
@@ -264,16 +264,16 @@
         "water_bound": {
           "water_directions": 418,
           "with_a_reference_surface_within_safe": 0,
-          "bounded_share": 0.7894736842105263,
-          "median_steps": 9.457005454093045,
-          "nearer_than_the_bound": 0.006060606060606061,
-          "clear_beyond_safe": 0.6818181818181818
+          "bounded_share": 0.8110047846889952,
+          "median_steps": 9.5402455947366,
+          "nearer_than_the_bound": 0.0058997050147492625,
+          "clear_beyond_safe": 0.6548672566371682
         },
         "water_vetoes": {
-          "steps": 3,
+          "steps": 5,
           "on_the_mask_choice": 0,
           "right": 0,
-          "wrong": 3
+          "wrong": 5
         },
         "plan": {
           "within_0.25_m_free": 1.0,
@@ -305,17 +305,17 @@
         },
         "steps_in_steps": {
           "all_known": {
-            "directions": 1523,
-            "median_log2_ratio": -0.19171461110435406,
-            "within_2x": 0.886408404464872
+            "directions": 1606,
+            "median_log2_ratio": -0.22941827526461722,
+            "within_2x": 0.8754669987546699
           },
           "chosen": {
-            "directions": 9,
-            "median_log2_ratio": -0.16150597142878517,
-            "within_2x": 0.8888888888888888
+            "directions": 12,
+            "median_log2_ratio": -1.0577559986815888,
+            "within_2x": 0.5
           }
         },
-        "ahead_known": 0.7633136094674556
+        "ahead_known": 0.8816568047337278
       },
       "over_seeds": {
         "danger": {
@@ -324,38 +324,38 @@
           "max": 0.0
         },
         "bounded_share": {
-          "median": 0.8217703349282297,
-          "min": 0.7894736842105263,
-          "max": 0.8564593301435407
+          "median": 0.8169856459330144,
+          "min": 0.7966507177033493,
+          "max": 0.8636363636363636
         },
         "clear_steps": {
-          "median": 9.180383764365736,
-          "min": 8.786719136040404,
-          "max": 9.55724568455862
+          "median": 9.54820071512461,
+          "min": 8.986139976077755,
+          "max": 9.638447203431209
         },
         "clear_beyond_safe": {
-          "median": 0.7015726636475916,
-          "min": 0.61731843575419,
-          "max": 0.7537091988130564
+          "median": 0.6986661177439275,
+          "min": 0.6275659824046921,
+          "max": 0.7567567567567568
         },
         "nearer_than_clear": {
-          "median": 0.0029070750092958795,
+          "median": 0.004253762627715627,
           "min": 0.0,
-          "max": 0.006060606060606061
+          "max": 0.0084985835694051
         },
         "known_within_2x": {
-          "median": 0.897890512709467,
-          "min": 0.8792172739541161,
-          "max": 0.9166106254203094
+          "median": 0.8661332855343686,
+          "min": 0.8302122347066168,
+          "max": 0.8973384030418251
         },
         "ahead_known": {
-          "median": 0.7130177514792899,
-          "min": 0.6272189349112426,
-          "max": 0.7692307692307693
+          "median": 0.8313609467455622,
+          "min": 0.7751479289940828,
+          "max": 0.8816568047337278
         },
         "chosen_within_2x": {
-          "median": 0.8166666666666667,
-          "min": 0.4,
+          "median": 0.80625,
+          "min": 0.5,
           "max": 1.0
         },
         "action_stop": {
@@ -389,9 +389,9 @@
           "max": 0.9693251533742331
         },
         "plan_within_1_m_free": {
-          "median": 0.9141104294478528,
+          "median": 0.9171779141104295,
           "min": 0.9141104294478528,
-          "max": 0.9141104294478528
+          "max": 0.9202453987730062
         },
         "plan_creeping_within_0.25_m_free": {
           "median": 1.0,
@@ -400,13 +400,13 @@
         },
         "plan_creeping_within_0.5_m_free": {
           "median": 0.8333333333333334,
-          "min": 0.5,
+          "min": 0.6666666666666666,
           "max": 1.0
         },
         "plan_creeping_within_1_m_free": {
-          "median": 0.5,
-          "min": 0.16666666666666666,
-          "max": 0.8333333333333334
+          "median": 0.75,
+          "min": 0.3333333333333333,
+          "max": 1.0
         },
         "mask_choice_within_0.25_m_free": {
           "median": 1.0,

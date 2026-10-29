@@ -8,7 +8,6 @@ import unittest
 from pathlib import Path
 
 from uwslam.core import CFLAGS
-from uwslam.mvo import config_defines
 from uwslam.paths import CORE_DIR
 
 
@@ -26,7 +25,6 @@ class MvoFailoverTests(unittest.TestCase):
                 [
                     "gcc",
                     *CFLAGS,
-                    *config_defines(),
                     *(["-static"] if sys.platform == "win32" else []),
                     f"-I{CORE_DIR}",
                     str(source),

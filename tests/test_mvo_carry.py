@@ -11,7 +11,6 @@ import unittest
 from pathlib import Path
 
 from uwslam.core import CFLAGS
-from uwslam.mvo import config_defines
 from uwslam.paths import CORE_DIR
 
 SOURCE = Path(__file__).resolve().parent / "c" / "mvo_carry_check.c"
@@ -25,7 +24,6 @@ def build(folder: Path) -> Path:
         [
             "gcc",
             *CFLAGS,
-            *config_defines(),
             *(["-static"] if sys.platform == "win32" else []),
             f"-I{CORE_DIR}",
             str(SOURCE),
@@ -91,7 +89,6 @@ class CarryTests(unittest.TestCase):
             [
                 "gcc",
                 *CFLAGS,
-                *config_defines(),
                 *(["-static"] if sys.platform == "win32" else []),
                 f"-I{CORE_DIR}",
                 str(RATIO_SOURCE),

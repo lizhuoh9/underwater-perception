@@ -9,11 +9,11 @@ argument-hint: "<label> [rates, default 5,10]"
 Shows whether the working tree is more accurate than the last commit on the lake clip, under identical settings.
 
 Arguments: $ARGUMENTS (a label for the output folder; the rates, default `5,10`). The Python, video and
-reconstruction come from `CLAUDE.local.md`. Run from the repository root; `<out>` is `local/lake-score/<label>`. Every
-run builds the core in the configuration `UWSLAM_CONFIG` names: set `UWSLAM_CONFIG=p4` for both trees (the board is the
-ESP32-P4; the s3 configuration is no longer scored). The scorings record it and `compare` prints it. A control tree
-needs `results/lake_clip/mask_motion/` beside its `src/` and `core/` for the map tools. Run at most three tools at a
-time: each loads the clip and the reference cloud.
+reconstruction come from `CLAUDE.local.md`. Run from the repository root; `<out>` is `local/lake-score/<label>`. The
+scorings record the core's build and `compare` prints it. A control tree from before the ESP32-P4-only core built a
+default configuration of its own: score it with `UWSLAM_CONFIG=p4` set (newer trees ignore the variable). A control
+tree needs `results/lake_clip/mask_motion/` beside its `src/` and `core/` for the map tools. Run at most three tools at
+a time: each loads the clip and the reference cloud.
 
 ## Steps
 
@@ -45,6 +45,6 @@ time: each loads the clip and the reference cloud.
   ranges.
 - Say plainly when the result is mixed or within the seed spread. A lower median with a win rate near 50% is not an
   improvement.
-- Results stay in `<out>`. Regenerate `results/lake_clip_p4/` only for a change the user accepts, then run
+- Results stay in `<out>`. Regenerate `results/lake_clip/` only for a change the user accepts, then run
   `board-check`.
 - Update `.claude/progress.md`.

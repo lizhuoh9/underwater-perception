@@ -1,5 +1,0 @@
-CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_360=y
-
-# Frames come in and results go out over the console UART (UART0, which P4 boards bring out on a USB-UART bridge): the
-# firmware switches it to LINK_BAUD (main.c) once it runs.
-CONFIG_ESP_CONSOLE_UART_DEFAULT=y

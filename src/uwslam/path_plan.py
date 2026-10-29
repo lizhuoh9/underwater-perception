@@ -443,12 +443,12 @@ def write_report(output: Path, summary: dict) -> None:
             f"[{percent(s['ahead_known']['min'])}–{percent(s['ahead_known']['max'])}] of the steps.",
             "",
             f"Water directions (the default seed: {bound['water_directions']} of them over the steps): the map "
-            f"vetoed one in {vetoes['steps']} steps, never the mask's own choice "
-            f"({vetoes['on_the_mask_choice']} times); the reference had a surface within 8 steps for "
-            f"{vetoes['right']} of those vetoes and none for {vetoes['wrong']}. The reference had a surface within "
-            f"8 steps in {bound['with_a_reference_surface_within_safe']} water directions in all: nothing to "
-            "veto. The plan bounds them instead (`clear`, 0.75 of the median range of the surfaces in view): "
-            f"known in {percent(s['bounded_share']['median'])} of them, median "
+            f"vetoed one in {vetoes['steps']} steps, the mask's own choice in {vetoes['on_the_mask_choice']} of "
+            f"them; the reference had a surface within 8 steps for {vetoes['right']} of those vetoes and none for "
+            f"{vetoes['wrong']}. The reference had a surface within 8 steps in "
+            f"{bound['with_a_reference_surface_within_safe']} water directions in all: nothing to veto. The plan "
+            "bounds them instead (`clear`, 0.75 of the median range of the surfaces in view); in the median of the "
+            f"seeds, known in {percent(s['bounded_share']['median'])} of them, "
             f"{number(s['clear_steps']['median'], '.1f')} steps, beyond 8 steps in "
             f"{percent(s['clear_beyond_safe']['median'])}; the reference was nearer than it in "
             f"{percent(s['nearer_than_clear']['median'])} [{percent(s['nearer_than_clear']['min'])}–"

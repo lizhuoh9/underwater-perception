@@ -22,13 +22,10 @@
 
 /* 2 ln(4 n) for n = MVO_MAX_FEATURES, to three decimals (no libm on the board): the size term of the translation
  * evidence's penalty (mono_vo_essential.c). */
-#if MVO_MAX_FEATURES == 250
-#define MVO_EVIDENCE_LOG 13.816f
-#elif MVO_MAX_FEATURES == 300
-#define MVO_EVIDENCE_LOG 14.180f
-#else
+#if MVO_MAX_FEATURES != 300
 #error "MVO_EVIDENCE_LOG needs 2 ln(4 n) for this MVO_MAX_FEATURES"
 #endif
+#define MVO_EVIDENCE_LOG 14.180f
 
 /* Scratch the units share (defined in mono_vo.c), not thread-safe (see mono_vo.h). */
 extern float mvo_pa[MVO_MAX_FEATURES][2], mvo_pb[MVO_MAX_FEATURES][2]; /* pixels in the previous / current frame */
@@ -38,9 +35,9 @@ extern uint8_t mvo_best[MVO_MAX_FEATURES];   /* the essential pose's inliers in 
 extern uint8_t mvo_epipolar[MVO_MAX_FEATURES]; /* all the essential pose's inliers, far ones too */
 extern float mvo_values[MVO_MAX_FEATURES];   /* per-pair values to take the median of */
 
-/* 1 / sqrt(v) for v > 0 without a division, which costs about twenty multiplications on the S3: three Newton steps
- * from the classic bit-level guess, near float precision and the same on every IEEE-754 platform when no multiply-add
- * is fused. Values below 1e-30 are scaled by 2^64 first, so that the guess sees a normal exponent. */
+/* 1 / sqrt(v) for v > 0 without a division, which is slow on a small FPU: three Newton steps from the classic
+ * bit-level guess, near float precision and the same on every IEEE-754 platform when no multiply-add is fused. Values
+ * below 1e-30 are scaled by 2^64 first, so that the guess sees a normal exponent. */
 static inline float mvo_rsqrt(float v)
 {
     union {

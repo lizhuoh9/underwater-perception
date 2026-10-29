@@ -194,7 +194,6 @@ static void water_is_clear_to_the_surfaces_in_view(void)
     printf("clear ok %.3f\n", (double)expected);
 }
 
-#if PP_GROUP > 1
 /* The plan reads the voxels PP_GROUP to a side (path_plan.h): a cell's frames are its voxels' added, it is in view when
  * any of its voxels was filed in this frame, and voxel indices divide rounding down (-1 and -2 share a cell, -3 not). */
 static void voxels_are_read_in_cells(void)
@@ -237,7 +236,6 @@ static void voxels_are_read_in_cells(void)
     assert(plan.clear > expected - 1e-4f && plan.clear < expected + 1e-4f);
     printf("cells ok\n");
 }
-#endif
 
 static void same_input_same_bytes(void)
 {
@@ -261,9 +259,7 @@ int main(void)
     goal_and_previous_choice();
     creep_turn();
     water_is_clear_to_the_surfaces_in_view();
-#if PP_GROUP > 1
     voxels_are_read_in_cells();
-#endif
     same_input_same_bytes();
     printf("path_plan_check ok plan_bytes=%u\n", (unsigned)pp_plan_size());
     return 0;

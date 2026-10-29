@@ -1,5 +1,6 @@
-"""Streams 320x240 grayscale frames (and optional water masks) to firmware/mono_vo_stream over its
-USB-Serial-JTAG port and checks the board against the PC build of the same C code (core/mono_vo*.c, core/mono_map.c).
+"""Streams 320x240 grayscale frames (and optional water masks) to firmware/mono_vo_stream on an ESP32-P4 over its
+console (a USB-UART bridge, or the chip's own USB-Serial-JTAG port) and checks the board against the PC build of the
+same C code (core/mono_vo*.c, core/mono_map.c).
 Needs pyserial and no numpy, so it also runs in the ESP-IDF Python environment. With --expected-cloud it also checks
 the mask-independent 3D point cloud, verifies every exported float's bits and can save that cloud to a PLY file. With
 --expected-voxels (from `python -m uwslam.voxel_map`) every step's voxel count and filed observations and the final voxel
@@ -15,8 +16,8 @@ obstacle map, and the map's hash must equal the one in board_expected_map_10hz.j
 the explicit continuity state at every step and at the end: it means no LOST was reported since start, not pose accuracy.
 With board_expected_5hz.json (and
 board_expected_map_5hz.json) the board gets every second frame and mask: the clip at 5 Hz. A board that reports other
-sources is refused, and so is one whose vector tracker kernels and safe edge dispatch give other integers than the
-portable ones on random windows (its `selftest`, run before every stream). Every step's hash must
+sources is refused, and so is one whose vector window kernels give other integers than the portable ones on random
+windows (its `selftest`, run before every stream). Every step's hash must
 match. The record
 (per-step kinds, counts and stage times, their summary, the memory report and the matches) goes to board/<label>.json
 beside the expected file, and the board's raw lines to board/<label>_serial.log.
@@ -43,7 +44,7 @@ READY_TIMEOUT_S = 20.0
 REPLY_TIMEOUT_S = 30.0
 LINK_BAUD = 921_600  # a UART link's rate (the firmware's LINK_BAUD); a USB-Serial-JTAG port ignores it. A CH340
 # bridge's link at 2 Mbaud lost single bytes of the board's replies in two of three lake runs.
-CONFIG_FEATURES = {"s3": 250, "p4": 300}  # uwslam.mvo.CONFIGS: MVO_MAX_FEATURES of each build configuration
+BUILD, MAX_FEATURES = "p4", 300  # the core's build as the board names it (uwslam.mvo.CONFIG), MVO_MAX_FEATURES
 STEP_FIELDS = (
     "index",
     "kind",
@@ -67,7 +68,7 @@ CLOUD_SOURCES = ("cloud_sha256", "cloud_header_sha256")
 VOXEL_SOURCES = ("voxel_sha256", "voxel_header_sha256")
 DIR_SOURCES = ("dir_sha256", "dir_header_sha256")
 PLAN_SOURCES = ("plan_sha256", "plan_header_sha256")
-VOXEL_LAYOUTS = {"s3": (1024, 2048), "p4": (4096, 8192)}  # VM_CAPACITY, VM_SLOTS of each build configuration
+VOXEL_CAPACITY, VOXEL_SLOTS = 4096, 8192  # VM_CAPACITY, VM_SLOTS
 DIRECTIONS = 15  # OD_DIRECTIONS
 
 
@@ -131,42 +132,42 @@ def check_continuity(reply: dict, expected: int, where: str) -> None:
 
 
 def expectation_config(expected: dict) -> str:
-    """The build configuration an expectation was made with: "s3" (the default) or "p4" (uwslam.mvo.CONFIGS);
-    expectations from before configurations existed are "s3"."""
-    config = expected.get("config", "s3")
-    if (
-        not isinstance(config, str)
-        or config not in CONFIG_FEATURES
-        or expected.get("max_features", CONFIG_FEATURES[config]) != CONFIG_FEATURES[config]
-    ):
-        raise ValueError(f"Unknown build configuration {config!r} with {expected.get('max_features')} features")
+    """The build an expectation was made with, which must be this one (BUILD with MAX_FEATURES)."""
+    config = expected.get("config")
+    if config != BUILD or expected.get("max_features", MAX_FEATURES) != MAX_FEATURES:
+        raise ValueError(
+            f"The expectation was made with the {config!r} build and {expected.get('max_features')} features, not "
+            f"{BUILD!r} with {MAX_FEATURES}: make it again with this tree"
+        )
     return config
 
 
 def max_features(expected: dict) -> int:
-    """MVO_MAX_FEATURES of the expectation's build configuration: no step tracks, maps or files more points."""
-    return CONFIG_FEATURES[expectation_config(expected)]
+    """MVO_MAX_FEATURES of the expectation's build: no step tracks, maps or files more points."""
+    expectation_config(expected)
+    return MAX_FEATURES
 
 
 def voxel_capacity(expected: dict) -> int:
-    """VM_CAPACITY of the expectation's build configuration."""
-    return VOXEL_LAYOUTS[expectation_config(expected)][0]
+    """VM_CAPACITY of the expectation's build."""
+    expectation_config(expected)
+    return VOXEL_CAPACITY
 
 
 def voxel_bytes(expected: dict) -> int:
-    """sizeof(vm_map_t) in the expectation's build configuration."""
-    capacity, slots = VOXEL_LAYOUTS[expectation_config(expected)]
-    return capacity * 10 + slots * 2 + 4 + 7 * 4
+    """sizeof(vm_map_t) in the expectation's build."""
+    expectation_config(expected)
+    return VOXEL_CAPACITY * 10 + VOXEL_SLOTS * 2 + 4 + 7 * 4
 
 
 def check_same_config(name: str, auxiliary: dict, expected: dict) -> None:
-    """Refuse a map, cloud, voxel or plan expectation made in another build configuration than the odometry's (the
-    obstacle directions come from the masks alone and are the same in both)."""
-    if expectation_config(auxiliary) != expectation_config(expected):
-        raise ValueError(
-            f"The {name} expectation was made in the {expectation_config(auxiliary)!r} build "
-            f"configuration, the odometry's in {expectation_config(expected)!r}"
-        )
+    """Refuse a map, cloud, voxel or plan expectation made with another build than the odometry's (the obstacle
+    directions come from the masks alone)."""
+    try:
+        expectation_config(auxiliary)
+    except ValueError as error:
+        raise ValueError(f"The {name} expectation: {error}") from None
+    expectation_config(expected)
 
 
 def validate_expected_cloud(cloud: dict, expected: dict) -> None:
@@ -438,7 +439,7 @@ def stream(
     vector kernels or (simd False) the portable ones and, with masks, building the map; the record and the board's
     lines."""
     expected = json.loads(expected_path.read_text(encoding="utf-8"))
-    expectation_config(expected)  # refuse an unknown configuration before opening the board
+    expectation_config(expected)  # refuse expectations of another build before opening the board
     if masks_path is not None and expected_map_path is None:
         raise ValueError("A map expectation is required when streaming masks")
     expected_map = json.loads(expected_map_path.read_text(encoding="utf-8")) if masks_path is not None else None
@@ -527,9 +528,8 @@ def stream(
                 )
         if ready.get("config") != expectation_config(expected) or ready.get("max_features") != max_features(expected):
             raise RuntimeError(
-                f"The board runs the {ready.get('config')!r} build configuration with "
-                f"{ready.get('max_features')} features, the PC run {expectation_config(expected)!r}: flash the "
-                "matching firmware, or re-run the PC side with UWSLAM_CONFIG set to the board's"
+                f"The board runs the {ready.get('config')!r} build with {ready.get('max_features')} features, the "
+                f"PC run {expectation_config(expected)!r}: flash the firmware of this tree"
             )
         camera = expected["camera_bits"]  # fx fy cx cy, then the lens's k1 k2 p1 p2 k3 (none: a pinhole)
         if len(camera) not in (4, 9) or not all(type(bits) is int and 0 <= bits <= 0xFFFFFFFF for bits in camera):
@@ -786,8 +786,7 @@ BOARD_HEADING = "## ESP32 boards"
 
 
 def write_board_section(results: Path) -> None:
-    """Replace only the boards section of RESULTS.md (headed BOARD_HEADING, or the older "## ESP32-S3") from records
-    in board/."""
+    """Replace only the boards section of RESULTS.md (headed BOARD_HEADING) from records in board/."""
     rows = []
     for path in sorted((results / "board").glob("*.json")):
         record = json.loads(path.read_text(encoding="utf-8"))
@@ -835,7 +834,7 @@ def write_board_section(results: Path) -> None:
         rate_text = f"{rate:g} Hz" if isinstance(rate, (int, float)) and math.isfinite(rate) and rate > 0 else "unknown"
         clock = f"{record['cpu_mhz']} MHz" if "cpu_mhz" in record else "—"
         rows.append(
-            f"| `{path.stem}` | {clock} | {record.get('config', 's3')} | {rate_text} | {record['cores']} | {kernels} | "
+            f"| `{path.stem}` | {clock} | {record.get('config', '')} | {rate_text} | {record['cores']} | {kernels} | "
             f"{record['frames']} | "
             f"{record['steps'] - len(record['mismatched_steps'])} of {record['steps']} | {map_cell} | "
             f"{step_time} | {' | '.join(stage_times)} | {map_time} | {extra_cell} |"
@@ -844,12 +843,11 @@ def write_board_section(results: Path) -> None:
         BOARD_HEADING,
         "",
         "The host streams grayscale frames and optional masks over the board's serial link (`python -m "
-        "uwslam.mvo_stream`): the ESP32-S3's USB-Serial-JTAG port, or an ESP32-P4 board's USB-UART bridge. The "
+        "uwslam.mvo_stream`) of an ESP32-P4: its USB-UART bridge, or the chip's own USB-Serial-JTAG port. The "
         "board reports each step's hash and stage times. These timings exclude capture and transfer. Each record "
-        "provides its own clock, build configuration (core/mono_vo.h: s3, the default, or p4), rate, core count "
-        "and kernel choice (the vector kernels are mvo_pie.S on the S3 and mvo_pie_p4.S on the P4). Before "
-        "streaming, the board checks its vector dispatch against C on random windows. Records and raw serial "
-        "lines are in `board/`.",
+        "provides its own clock, build (core/mono_vo.h), rate, core count and kernel choice (the vector kernels are "
+        "mvo_vector.S). Before streaming, the board checks its vector dispatch against C on random windows. Records "
+        "and raw serial lines are in `board/`.",
         "",
         "| Record | Clock | Config | Rate | Cores | Kernels | Frames | Steps equal to the PC | Map | Per step, "
         "mean / median / max | Tracking | Motion | Detection | Map update | Voxel map / directions / plan "
@@ -861,25 +859,24 @@ def write_board_section(results: Path) -> None:
     if any("_usj" in path.stem for path in sorted((results / "board").glob("*.json"))):
         section += [
             "Records named `*_usj*` were streamed over the ESP32-P4's own USB-Serial-JTAG port, not its USB-UART "
-            "bridge: the firmware was built as in the P4 line below with `CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y` "
-            'added after `sdkconfig.defaults.esp32p4` (`-D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;<that file>"`, '
-            "in a build folder of its own), which changes only the console.",
+            "bridge: the firmware was built as in the second line below, which changes only the console.",
             "",
         ]
     section += [
         "Re-run (after `uwslam.mvo compare --board-frames` and `uwslam.mono_map --board-masks`):",
         "",
         "```bash",
-        "idf.py -C firmware/mono_vo_stream -B firmware/mono_vo_stream/build_240 -p <port> flash",
-        "idf.py -C firmware/mono_vo_stream -B firmware/mono_vo_stream/build_p4 -D SDKCONFIG=build_p4/sdkconfig "
-        "-D IDF_TARGET=esp32p4 -p <port> flash   # an ESP32-P4: the p4 configuration (UWSLAM_CONFIG=p4 on the PC)",
+        "idf.py -C firmware/mono_vo_stream -B firmware/mono_vo_stream/build -D SDKCONFIG=build/sdkconfig "
+        "-p <port> flash   # the console on a USB-UART bridge",
+        "idf.py -C firmware/mono_vo_stream -B firmware/mono_vo_stream/build_usj -D SDKCONFIG=build_usj/sdkconfig "
+        '-D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.usb_serial_jtag" -p <port> flash   # on USB-Serial-JTAG',
         "python -m uwslam.mvo_stream --port <port> --frames <frames file> --masks <masks file> --label <name>",
         "```",
         "",
     ]
     report = results / "RESULTS.md"
     text = report.read_text(encoding="utf-8") if report.exists() else ""
-    heading = re.search(r"(?m)^## (?:ESP32-S3|ESP32 boards)[ \t]*$", text)
+    heading = re.search(r"(?m)^## ESP32 boards[ \t]*$", text)
     prefix, suffix = text, ""
     if heading:
         prefix = text[: heading.start()]
@@ -922,7 +919,7 @@ def main() -> None:
         help="Plan expectation from uwslam.path_plan "
         "(board_expected_plan_<rate>hz.json); give the masks and directions it was made with",
     )
-    parser.add_argument("--label", required=True, help="Name of the saved record, e.g. 240mhz")
+    parser.add_argument("--label", required=True, help="Name of the saved record, e.g. p4_360mhz_usj_5hz")
     parser.add_argument("--frames-limit", type=int, help="Stream only the first this many frames")
     parser.add_argument("--cores", type=int, choices=(1, 2), default=2, help="Run on one core or on both")
     parser.add_argument("--no-simd", action="store_true", help="Track with the portable C kernels, not the vector ones")

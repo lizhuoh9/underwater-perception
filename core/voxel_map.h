@@ -27,14 +27,14 @@
  * holds the robot's surroundings and its recent past, in the odometry's frame, which drifts: it is not a global
  * reconstruction and closes no loops.
  *
- * Under MVO_CONFIG_P4 (an ESP32-P4 has the memory) the voxels are half as large and four times as many, holding the
- * same surroundings in finer cells: on the lake clip at 5 Hz, with 15x15 windows, the median distance of the obstacles
- * held to the reference's surface came out 0.064 m instead of 0.067 near the camera and 0.074 m instead of 0.106 over
- * the whole path (16 seeds). Single sightings land in different fine voxels more often, so the planner reads them two
- * to a side (PP_GROUP in path_plan.h).
+ * The voxels are fine, 16 to a scene depth, and 4096 of them are held (the ESP32-P4 has the memory): against voxels
+ * twice as large and four times fewer, on the lake clip at 5 Hz with 15x15 windows, the median distance of the
+ * obstacles held to the reference's surface came out 0.064 m instead of 0.067 near the camera and 0.074 m instead of
+ * 0.106 over the whole path (16 seeds). Single sightings land in different fine voxels more often, so the planner reads
+ * them two to a side (PP_GROUP in path_plan.h).
  *
- * C99, no heap, no libm: a PC and an ESP32-S3 build the same map bit for bit. One vm_map_t is about 14 KB (56 KB under
- * MVO_CONFIG_P4); it is not thread-safe.
+ * C99, no heap, no libm: a PC and an ESP32-P4 build the same map bit for bit. One vm_map_t is about 56 KB; it is not
+ * thread-safe.
  */
 #ifndef VOXEL_MAP_H
 #define VOXEL_MAP_H
@@ -43,19 +43,11 @@
 
 #include "mono_vo.h"
 
-#if defined(MVO_CONFIG_P4)
 #define VM_CAPACITY 4096 /* voxels held at most */
 #define VM_SLOTS 8192    /* index slots, a power of two above VM_CAPACITY */
 #define VM_EVICT 512     /* voxels dropped at once when full (more when more of them are far) */
 #define VM_RADIUS 96     /* voxels from the camera, along any axis, beyond which voxels go first (6 scene depths) */
 #define VM_CELLS_PER_DEPTH 16.0f
-#else
-#define VM_CAPACITY 1024
-#define VM_SLOTS 2048
-#define VM_EVICT 128
-#define VM_RADIUS 48
-#define VM_CELLS_PER_DEPTH 8.0f
-#endif
 #define VM_MIN_POINTS 20 /* observations that measure the scene's depth */
 #define VM_RESCALE 2.0f  /* the side is reset when the scene says it should be this many times larger or smaller */
 #define VM_MIN_SPREAD 3.0e-4f /* squared sine of 1 degree, as in mono_map.h */

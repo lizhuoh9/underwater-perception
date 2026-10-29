@@ -12,8 +12,6 @@ from pathlib import Path
 
 import numpy as np
 
-from uwslam.mvo import config_defines
-
 HAS_DEPENDENCIES = shutil.which("gcc") is not None and find_spec("cv2") is not None
 if HAS_DEPENDENCIES:
     from tests.test_mvo import FLOOR_Y, WALL_Z, render, texture
@@ -39,7 +37,6 @@ class VoxelMapContractTests(unittest.TestCase):
                     "-Werror",
                     "-pedantic",
                     "-ffp-contract=off",
-                    *config_defines(),
                     *STATIC,
                     f"-I{ROOT / 'core'}",
                     str(ROOT / "tests/c/voxel_map_check.c"),

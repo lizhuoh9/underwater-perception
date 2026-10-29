@@ -11,7 +11,7 @@ typedef struct { int tx_buffer_size, rx_buffer_size; } usb_serial_jtag_driver_co
 #define pdPASS 1
 #define MALLOC_CAP_INTERNAL 1
 #define MALLOC_CAP_8BIT 2
-#define CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ 240
+#define CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ 360
 #define ESP_ERROR_CHECK(x) (x)
 #define MVO_CORE_SHA256 "core"
 #define MVO_HEADER_SHA256 "header"
@@ -25,7 +25,6 @@ typedef struct { int tx_buffer_size, rx_buffer_size; } usb_serial_jtag_driver_co
 #define OD_HEADER_SHA256 "dirheader"
 #define PP_CORE_SHA256 "plan"
 #define PP_HEADER_SHA256 "planheader"
-#define CONFIG_IDF_TARGET_ESP32S3 1 /* the S3's build: vector kernels (stubbed below) and the USB-Serial-JTAG link */
 #define CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG 1
 
 static uint8_t input[320 * 240 + 600], pixels[320 * 240];
@@ -99,16 +98,14 @@ int mm_add(mm_map_t *map, const mvo_t *vo, const float (*points)[3], int count)
     ++map->observations; ++map->frames; map->slice_y = 3.0f; ++map->height_resets;
     return count;
 }
-void mvo_pie_lk_template(mvo_window_t *w, const uint8_t *s, int stride, const int16_t q[4], int64_t g[3])
+void mvo_vector_lk_template(mvo_window_t *w, const uint8_t *s, int stride, const int16_t q[4], int64_t g[3])
 { (void)w; (void)s; (void)stride; (void)q; memset(g, 0, 3 * sizeof *g); }
-void mvo_pie_lk_sums(const mvo_window_t *w, const uint8_t *s, int stride, const int16_t q[4], int64_t sums[2])
+void mvo_vector_lk_sums(const mvo_window_t *w, const uint8_t *s, int stride, const int16_t q[4], int64_t sums[2])
 { (void)w; (void)s; (void)stride; (void)q; memset(sums, 0, 2 * sizeof *sums); }
 void mvo_lk_template_c(mvo_window_t *w, const uint8_t *s, int stride, const int16_t q[4], int64_t g[3])
 { (void)w; (void)s; (void)stride; (void)q; memset(g, 0, 3 * sizeof *g); }
 void mvo_lk_sums_c(const mvo_window_t *w, const uint8_t *s, int stride, const int16_t q[4], int64_t sums[2])
 { (void)w; (void)s; (void)stride; (void)q; memset(sums, 0, 2 * sizeof *sums); }
-void mvo_pie_block(uint8_t *out, int size, const uint8_t *img, int w, int h, const int origin[2])
-{ (void)out; (void)size; (void)img; (void)w; (void)h; (void)origin; }
 void mvo_block_c(uint8_t *out, int size, const uint8_t *img, int w, int h, const int origin[2])
 { (void)out; (void)size; (void)img; (void)w; (void)h; (void)origin; }
 
