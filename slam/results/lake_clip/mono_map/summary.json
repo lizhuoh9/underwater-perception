@@ -1,0 +1,156 @@
+{
+  "task": "Top-view obstacle map from the C monocular odometry and the segmentation's water masks on the lake clip, scored against the reconstruction's cloud after aligning the camera path",
+  "sources_sha256": {
+    "core_sha256": "18cc224519d93d64bf39725adee3c1900b7faade9abc8118ee4e418b330935ed",
+    "header_sha256": "1f8fcbaae57dc342d549496edd0d6aaa6c9254fea404ef4ec5f1165919b4fe49",
+    "map_sha256": "af787363388c606fa0c2a17521cbe5ccd35e90584eca4c89b5ed6c7eb9d7ac75",
+    "map_header_sha256": "d857c23130ce7cde6e9a8ed38b1d6d40641babbd040612bf6e25e0be59d09c64"
+  },
+  "config": "p4",
+  "max_features": 300,
+  "masks": "frames.npz",
+  "time_scale": 3.0,
+  "hfov_deg": 110.0,
+  "lens": [
+    0.0,
+    0.0,
+    -0.02,
+    0.0,
+    0.0
+  ],
+  "cloud_voxel_m": 0.03,
+  "runs": [
+    {
+      "rate_hz": 10.0,
+      "alignment_scale_m_per_unit": 0.06724559488757981,
+      "alignment_spread_ratio": 0.018786894050176334,
+      "ate_rmse_m": 0.093309244527409,
+      "first_lost_frame": 42,
+      "map_continuous": false,
+      "continuous_frames": 42,
+      "scored_frames": 42,
+      "total_frames": 339,
+      "alignment_reason": null,
+      "observations": 4656,
+      "frames_with_observations": 41,
+      "distance_to_cloud_m": {
+        "median": 0.23282963037490845,
+        "within_0.1": 0.09493127147766323,
+        "within_0.2": 0.3634020618556701,
+        "within_0.3": 0.7463487972508591
+      },
+      "grid": {
+        "cell_units": 1.4889302253723145,
+        "origin_cells": [
+          -65,
+          -64
+        ],
+        "occupied_cells": 121,
+        "unknown_cells": 16263,
+        "slice_y_units": -2.8772037029266357,
+        "height_resets": 2,
+        "hits": 2555,
+        "updates": 41,
+        "hash": 273306506
+      },
+      "over_seeds": {
+        "seeds": [
+          12345,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "distance_median_m": {
+          "median": 0.22647731006145477,
+          "min": 0.19920144975185394,
+          "max": 0.2573608160018921
+        },
+        "distance_valid_seeds": 16,
+        "ate_rmse_m": {
+          "median": 0.08759324893675755,
+          "min": 0.06422496061524732,
+          "max": 0.11043165173762746
+        },
+        "ate_valid_seeds": 16
+      }
+    },
+    {
+      "rate_hz": 5.0,
+      "alignment_scale_m_per_unit": 0.14344837550084066,
+      "alignment_spread_ratio": 0.01739840250746802,
+      "ate_rmse_m": 0.10213714700520501,
+      "first_lost_frame": 22,
+      "map_continuous": false,
+      "continuous_frames": 22,
+      "scored_frames": 22,
+      "total_frames": 170,
+      "alignment_reason": null,
+      "observations": 2100,
+      "frames_with_observations": 21,
+      "distance_to_cloud_m": {
+        "median": 0.2294928953051567,
+        "within_0.1": 0.08904761904761904,
+        "within_0.2": 0.36333333333333334,
+        "within_0.3": 0.7423809523809524
+      },
+      "grid": {
+        "cell_units": 1.0252094268798828,
+        "origin_cells": [
+          -65,
+          -64
+        ],
+        "occupied_cells": 202,
+        "unknown_cells": 16182,
+        "slice_y_units": -0.9640963077545166,
+        "height_resets": 1,
+        "hits": 1628,
+        "updates": 20,
+        "hash": 534606581
+      },
+      "over_seeds": {
+        "seeds": [
+          12345,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "distance_median_m": {
+          "median": 0.2298467718064785,
+          "min": 0.17455530166625977,
+          "max": 0.24985669553279877
+        },
+        "distance_valid_seeds": 16,
+        "ate_rmse_m": {
+          "median": 0.102297720693267,
+          "min": 0.08149888505240135,
+          "max": 0.11983022095037528
+        },
+        "ate_valid_seeds": 16
+      }
+    }
+  ]
+}

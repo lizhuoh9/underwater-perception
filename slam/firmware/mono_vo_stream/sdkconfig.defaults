@@ -1,0 +1,18 @@
+# The ESP32-P4 at 360 MHz. Give each console its own build folder and sdkconfig (-D SDKCONFIG=<build>/sdkconfig): an
+# existing sdkconfig keeps its console setting over these defaults (see README.md).
+CONFIG_IDF_TARGET="esp32p4"
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_360=y
+
+# No PSRAM: the odometry state (two image pyramids, about 210 KB) and its scratch live in internal RAM.
+# CONFIG_SPIRAM is not set
+
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+CONFIG_LOG_DEFAULT_LEVEL_WARN=y
+
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+
+# Frames come in and results go out over the console UART (UART0, which P4 boards bring out on a USB-UART bridge): the
+# firmware switches it to LINK_BAUD (main.c) once it runs. For a board connected through the chip's own
+# USB-Serial-JTAG port, add sdkconfig.usb_serial_jtag to SDKCONFIG_DEFAULTS.
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y

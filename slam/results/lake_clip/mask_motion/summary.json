@@ -1,0 +1,300 @@
+{
+  "task": "Rotation recoverable from 60x80 water masks (symmetric chamfer search on boundary cells) against reconstructed reference poses, with Canny edges, full-resolution SIFT and zero rotation as references",
+  "source": {
+    "name": "lake.mp4",
+    "sha256": "ada829ecb11ff4149a34998b941ad690c34144af540e53f135c770e8126aefbd",
+    "fps": 30.0,
+    "frames": 1014,
+    "duration_s": 33.766666666666666,
+    "width": 960,
+    "height": 544,
+    "keyframes": 88,
+    "poses_sha256": "77790dec8594ead91ccf0820ab60b9cce11258d2be40f39db8713c5a75bcdf5c"
+  },
+  "time_scale": 3.0,
+  "alignment_check": {
+    "chosen_scale": {
+      "pairs": 334,
+      "yaw_correlation": 0.8569845546260603,
+      "median_angle_deg": 1.1215056271479553
+    },
+    "one_to_one": {
+      "pairs": 109,
+      "yaw_correlation": -0.011162768290255578,
+      "median_angle_deg": 3.852842924353283
+    }
+  },
+  "camera": {
+    "hfov_deg": 110.0,
+    "fx": 28.008301528388394,
+    "fy": 37.0698108463964,
+    "cx": 40.0,
+    "cy": 30.0
+  },
+  "hfov_table": [
+    [
+      60,
+      5.878617851355941,
+      52
+    ],
+    [
+      65,
+      4.151519470167443,
+      52
+    ],
+    [
+      70,
+      3.387258550686842,
+      54
+    ],
+    [
+      75,
+      2.940108531642933,
+      53
+    ],
+    [
+      80,
+      2.5349278395933705,
+      52
+    ],
+    [
+      85,
+      2.2247734562052046,
+      47
+    ],
+    [
+      90,
+      1.7368669045850087,
+      43
+    ],
+    [
+      95,
+      1.5851466542270933,
+      48
+    ],
+    [
+      100,
+      1.5949798529927208,
+      47
+    ],
+    [
+      105,
+      1.5613597429838095,
+      49
+    ],
+    [
+      110,
+      1.3587108505136642,
+      52
+    ],
+    [
+      115,
+      1.6720832844441462,
+      52
+    ],
+    [
+      120,
+      2.1376375223901025,
+      51
+    ],
+    [
+      125,
+      2.637381381783181,
+      53
+    ],
+    [
+      130,
+      2.9877294378741692,
+      54
+    ]
+  ],
+  "settings": {
+    "truncate": 15,
+    "min_boundary": 20,
+    "max_points": 400,
+    "grids": [
+      [
+        [
+          60.0,
+          15.0,
+          12.0
+        ],
+        3.0
+      ],
+      [
+        [
+          2.0,
+          2.0,
+          2.0
+        ],
+        1.0
+      ],
+      [
+        [
+          0.5,
+          0.5,
+          0.5
+        ],
+        0.25
+      ]
+    ],
+    "canny": [
+      40,
+      100
+    ],
+    "strides": {
+      "10.0": 3,
+      "5.0": 6,
+      "3.0": 10
+    },
+    "pair_spacing": 3,
+    "sift": {
+      "features": 1000,
+      "ratio": 0.75,
+      "ransac_pixels": 1.0,
+      "min_pose_inliers": 30
+    }
+  },
+  "segmenter": {
+    "locked_sha256": "9462ea28355fd0c5f86fbace1f21c17c438ed1406e2487c5eb3678f27a882af0",
+    "threshold_code": 3
+  },
+  "rates": {
+    "10.0": {
+      "pairs": 337,
+      "ref_angle_median_deg": 0.9340635861934099,
+      "ref_angle_p90_deg": 4.580981979988135,
+      "ref_shift_median": 0.024892750338352122,
+      "zero": {
+        "median_deg": 0.9340635861934099,
+        "p90_deg": 4.580981979988135,
+        "under_2_deg": 0.7863501483679525,
+        "under_5_deg": 0.9198813056379822
+      },
+      "mask": {
+        "answered_share": 0.9940652818991098,
+        "median_deg": 1.9869847309884001,
+        "p90_deg": 6.988291505591005,
+        "under_2_deg": 0.5014836795252225,
+        "under_5_deg": 0.8041543026706232,
+        "beats_zero_share_of_answered": 0.20597014925373133,
+        "yaw_slope": 0.7373037106840912,
+        "yaw_correlation": 0.5764046258084689
+      },
+      "edges": {
+        "answered_share": 1.0,
+        "median_deg": 0.9352064376246702,
+        "p90_deg": 4.1186272239623785,
+        "under_2_deg": 0.8041543026706232,
+        "under_5_deg": 0.9347181008902077,
+        "beats_zero_share_of_answered": 0.27299703264094954,
+        "yaw_slope": 0.3431691270297653,
+        "yaw_correlation": 0.5605188520884901
+      },
+      "features": {
+        "answered_share": 0.9910979228486647,
+        "median_deg": 1.1291985415151278,
+        "p90_deg": 2.634707469291923,
+        "under_2_deg": 0.7952522255192879,
+        "under_5_deg": 0.9821958456973294,
+        "beats_zero_share_of_answered": 0.4221556886227545,
+        "yaw_slope": 1.0215939382307404,
+        "yaw_correlation": 0.8569845546260603
+      },
+      "changed_raw_median": 0.05333333333333334,
+      "changed_after_reference_rotation_median": 0.05344494526722473
+    },
+    "5.0": {
+      "pairs": 336,
+      "ref_angle_median_deg": 1.7210734588718666,
+      "ref_angle_p90_deg": 9.449025899152737,
+      "ref_shift_median": 0.048868281379239605,
+      "zero": {
+        "median_deg": 1.7210734588718666,
+        "p90_deg": 9.449025899152737,
+        "under_2_deg": 0.6369047619047619,
+        "under_5_deg": 0.8065476190476191
+      },
+      "mask": {
+        "answered_share": 0.9940476190476191,
+        "median_deg": 3.293308453979006,
+        "p90_deg": 10.086945229030729,
+        "under_2_deg": 0.3244047619047619,
+        "under_5_deg": 0.6636904761904762,
+        "beats_zero_share_of_answered": 0.23652694610778444,
+        "yaw_slope": 0.6251416772043997,
+        "yaw_correlation": 0.6262592778126457
+      },
+      "edges": {
+        "answered_share": 1.0,
+        "median_deg": 1.6315089904253406,
+        "p90_deg": 9.16193960482243,
+        "under_2_deg": 0.6071428571428571,
+        "under_5_deg": 0.8184523809523809,
+        "beats_zero_share_of_answered": 0.34226190476190477,
+        "yaw_slope": 0.2364500067164955,
+        "yaw_correlation": 0.4568374068299089
+      },
+      "features": {
+        "answered_share": 0.9821428571428571,
+        "median_deg": 1.9727156201954554,
+        "p90_deg": 4.2918684394936415,
+        "under_2_deg": 0.5089285714285714,
+        "under_5_deg": 0.9375,
+        "beats_zero_share_of_answered": 0.4575757575757576,
+        "yaw_slope": 1.0238436217901061,
+        "yaw_correlation": 0.8710093864558458
+      },
+      "changed_raw_median": 0.06354166666666666,
+      "changed_after_reference_rotation_median": 0.06224683029908973
+    },
+    "3.0": {
+      "pairs": 335,
+      "ref_angle_median_deg": 2.5315353910028904,
+      "ref_angle_p90_deg": 15.398780808330947,
+      "ref_shift_median": 0.08174573483092755,
+      "zero": {
+        "median_deg": 2.5315353910028904,
+        "p90_deg": 15.398780808330947,
+        "under_2_deg": 0.41194029850746267,
+        "under_5_deg": 0.755223880597015
+      },
+      "mask": {
+        "answered_share": 0.9940298507462687,
+        "median_deg": 4.5241951341995925,
+        "p90_deg": 13.575430252204844,
+        "under_2_deg": 0.16716417910447762,
+        "under_5_deg": 0.5582089552238806,
+        "beats_zero_share_of_answered": 0.32732732732732733,
+        "yaw_slope": 0.7699623936773696,
+        "yaw_correlation": 0.7385977819810612
+      },
+      "edges": {
+        "answered_share": 1.0,
+        "median_deg": 2.490592653728131,
+        "p90_deg": 15.580181192950553,
+        "under_2_deg": 0.42388059701492536,
+        "under_5_deg": 0.7671641791044777,
+        "beats_zero_share_of_answered": 0.41194029850746267,
+        "yaw_slope": -0.013402808797436166,
+        "yaw_correlation": -0.0526458670184886
+      },
+      "features": {
+        "answered_share": 0.9582089552238806,
+        "median_deg": 2.7712250639080005,
+        "p90_deg": 7.368190036117202,
+        "under_2_deg": 0.3044776119402985,
+        "under_5_deg": 0.8,
+        "beats_zero_share_of_answered": 0.4953271028037383,
+        "yaw_slope": 1.0357797187018745,
+        "yaw_correlation": 0.8573979440984837
+      },
+      "changed_raw_median": 0.071875,
+      "changed_after_reference_rotation_median": 0.06946264744429882
+    }
+  },
+  "frames_with_few_mask_cells": 0.0019723865877712033,
+  "source_sha256": {
+    "mask_motion.py": "f5604b686bbd6cd4c81afdb3feb587bab54c2210d5ceacbadead0770186b43ba"
+  }
+}

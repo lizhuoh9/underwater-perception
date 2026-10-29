@@ -1,0 +1,266 @@
+{
+  "task": "Obstacle directions from the segmentation's water masks on the lake clip, scored against the reference reconstruction's depth",
+  "sources_sha256": {
+    "dir_sha256": "ed8b510cdc05db181f41d5b8426ee2c7ee8d03d5ae04caa295ab71b7b3d12aa6",
+    "dir_header_sha256": "f7a9953e140288518d505dfbef2716ec683810ac886cfdd86337a5651758dcc6"
+  },
+  "config": "p4",
+  "max_features": 300,
+  "masks": "frames.npz",
+  "time_scale": 3.0,
+  "hfov_deg": 110.0,
+  "lens": [
+    0.0,
+    0.0,
+    -0.02,
+    0.0,
+    0.0
+  ],
+  "ranges_m": [
+    0.5,
+    1.0,
+    2.0
+  ],
+  "reference_cell": {
+    "min_points": 2,
+    "depth_percentile": 0.05
+  },
+  "runs": [
+    {
+      "rate_hz": 10.0,
+      "frames": 339,
+      "no_free_direction": 0.032448377581120944,
+      "blocked_rate": {
+        "up hard left": 0.696165191740413,
+        "up left": 0.831858407079646,
+        "up ahead": 0.9587020648967551,
+        "up right": 0.9793510324483776,
+        "up hard right": 0.9734513274336283,
+        "level hard left": 0.032448377581120944,
+        "level left": 0.20058997050147492,
+        "level ahead": 0.8849557522123894,
+        "level right": 0.9321533923303835,
+        "level hard right": 0.9616519174041298,
+        "down hard left": 1.0,
+        "down left": 1.0,
+        "down ahead": 1.0,
+        "down right": 1.0,
+        "down hard right": 1.0
+      },
+      "within_0.5_m": {
+        "bands": {
+          "up": {
+            "reference_blocked": 0.24424778761061947,
+            "mask_blocked": 0.887905604719764,
+            "recall": 1.0,
+            "precision": 0.2750830564784053
+          },
+          "level": {
+            "reference_blocked": 0.2584070796460177,
+            "mask_blocked": 0.6023598820058997,
+            "recall": 1.0,
+            "precision": 0.4289911851126347
+          },
+          "down": {
+            "reference_blocked": 0.6076696165191741,
+            "mask_blocked": 1.0,
+            "recall": 1.0,
+            "precision": 0.6076696165191741
+          },
+          "all": {
+            "reference_blocked": 0.37010816125860374,
+            "mask_blocked": 0.8300884955752212,
+            "recall": 1.0,
+            "precision": 0.4458659085524757
+          }
+        },
+        "choice_free": 1.0,
+        "ahead_free": 0.8702064896755162,
+        "random_free": 0.6607669616519174,
+        "share_correlation": 0.5383444261603517
+      },
+      "within_1_m": {
+        "bands": {
+          "up": {
+            "reference_blocked": 0.3551622418879056,
+            "mask_blocked": 0.887905604719764,
+            "recall": 0.9983388704318937,
+            "precision": 0.39933554817275746
+          },
+          "level": {
+            "reference_blocked": 0.44778761061946903,
+            "mask_blocked": 0.6023598820058997,
+            "recall": 0.9986824769433466,
+            "precision": 0.742409402546523
+          },
+          "down": {
+            "reference_blocked": 0.8359882005899705,
+            "mask_blocked": 1.0,
+            "recall": 1.0,
+            "precision": 0.8359882005899705
+          },
+          "all": {
+            "reference_blocked": 0.5463126843657817,
+            "mask_blocked": 0.8300884955752212,
+            "recall": 0.9992800575953924,
+            "precision": 0.6576640606491353
+          }
+        },
+        "choice_free": 1.0,
+        "ahead_free": 0.6106194690265486,
+        "random_free": 0.45132743362831856,
+        "share_correlation": 0.6844155334936437
+      },
+      "within_2_m": {
+        "bands": {
+          "up": {
+            "reference_blocked": 0.35811209439528024,
+            "mask_blocked": 0.887905604719764,
+            "recall": 0.9983525535420099,
+            "precision": 0.4026578073089701
+          },
+          "level": {
+            "reference_blocked": 0.5421828908554572,
+            "mask_blocked": 0.6023598820058997,
+            "recall": 0.9934711643090316,
+            "precision": 0.8942213516160626
+          },
+          "down": {
+            "reference_blocked": 0.8572271386430679,
+            "mask_blocked": 1.0,
+            "recall": 1.0,
+            "precision": 0.8572271386430679
+          },
+          "all": {
+            "reference_blocked": 0.5858407079646017,
+            "mask_blocked": 0.8300884955752212,
+            "recall": 0.9976502181940249,
+            "precision": 0.7040985548448235
+          }
+        },
+        "choice_free": 0.9878048780487805,
+        "ahead_free": 0.19469026548672566,
+        "random_free": 0.40707964601769914,
+        "share_correlation": 0.7125566772727508
+      }
+    },
+    {
+      "rate_hz": 5.0,
+      "frames": 170,
+      "no_free_direction": 0.03529411764705882,
+      "blocked_rate": {
+        "up hard left": 0.7176470588235294,
+        "up left": 0.8117647058823529,
+        "up ahead": 0.9941176470588236,
+        "up right": 0.9823529411764705,
+        "up hard right": 0.9823529411764705,
+        "level hard left": 0.03529411764705882,
+        "level left": 0.21176470588235294,
+        "level ahead": 0.8941176470588236,
+        "level right": 0.9411764705882353,
+        "level hard right": 0.9647058823529412,
+        "down hard left": 1.0,
+        "down left": 1.0,
+        "down ahead": 1.0,
+        "down right": 1.0,
+        "down hard right": 1.0
+      },
+      "within_0.5_m": {
+        "bands": {
+          "up": {
+            "reference_blocked": 0.24588235294117647,
+            "mask_blocked": 0.8976470588235295,
+            "recall": 1.0,
+            "precision": 0.27391874180865006
+          },
+          "level": {
+            "reference_blocked": 0.2576470588235294,
+            "mask_blocked": 0.6094117647058823,
+            "recall": 1.0,
+            "precision": 0.42277992277992277
+          },
+          "down": {
+            "reference_blocked": 0.6070588235294118,
+            "mask_blocked": 1.0,
+            "recall": 1.0,
+            "precision": 0.6070588235294118
+          },
+          "all": {
+            "reference_blocked": 0.37019607843137253,
+            "mask_blocked": 0.8356862745098039,
+            "recall": 1.0,
+            "precision": 0.44298451431252933
+          }
+        },
+        "choice_free": 1.0,
+        "ahead_free": 0.8705882352941177,
+        "random_free": 0.6529411764705882,
+        "share_correlation": 0.5380306510512411
+      },
+      "within_1_m": {
+        "bands": {
+          "up": {
+            "reference_blocked": 0.3564705882352941,
+            "mask_blocked": 0.8976470588235295,
+            "recall": 1.0,
+            "precision": 0.39711664482306686
+          },
+          "level": {
+            "reference_blocked": 0.44941176470588234,
+            "mask_blocked": 0.6094117647058823,
+            "recall": 1.0,
+            "precision": 0.7374517374517374
+          },
+          "down": {
+            "reference_blocked": 0.8329411764705882,
+            "mask_blocked": 1.0,
+            "recall": 1.0,
+            "precision": 0.8329411764705882
+          },
+          "all": {
+            "reference_blocked": 0.5462745098039216,
+            "mask_blocked": 0.8356862745098039,
+            "recall": 1.0,
+            "precision": 0.6536837165649929
+          }
+        },
+        "choice_free": 1.0,
+        "ahead_free": 0.611764705882353,
+        "random_free": 0.40588235294117647,
+        "share_correlation": 0.6839464984887134
+      },
+      "within_2_m": {
+        "bands": {
+          "up": {
+            "reference_blocked": 0.3588235294117647,
+            "mask_blocked": 0.8976470588235295,
+            "recall": 1.0,
+            "precision": 0.399737876802097
+          },
+          "level": {
+            "reference_blocked": 0.5423529411764706,
+            "mask_blocked": 0.6094117647058823,
+            "recall": 0.9956616052060737,
+            "precision": 0.8861003861003861
+          },
+          "down": {
+            "reference_blocked": 0.8541176470588235,
+            "mask_blocked": 1.0,
+            "recall": 1.0,
+            "precision": 0.8541176470588235
+          },
+          "all": {
+            "reference_blocked": 0.5850980392156863,
+            "mask_blocked": 0.8356862745098039,
+            "recall": 0.9986595174262735,
+            "precision": 0.6992022524636321
+          }
+        },
+        "choice_free": 0.9939024390243902,
+        "ahead_free": 0.19411764705882353,
+        "random_free": 0.36470588235294116,
+        "share_correlation": 0.7130832951707158
+      }
+    }
+  ]
+}
