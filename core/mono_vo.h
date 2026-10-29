@@ -71,19 +71,25 @@
  * runs), the heading unchanged; at 10 Hz it is worse, so it is a 5 Hz configuration. The extra features triangulate
  * less well: the 5 Hz voxel map's local error is 7.1 cm instead of 6.1. Filing only points from rays 1.5 degrees apart
  * took that back, but forward motion leaves the least parallax straight ahead, and the range there was then known in
- * 34% of the 5 Hz steps instead of 71%, so the maps file from 1 degree in both (MM_, VM_ and MC_MIN_SPREAD). */
+ * 34% of the 5 Hz steps instead of 71%, so the maps file from 1 degree in both (MM_, VM_ and MC_MIN_SPREAD). It also
+ * tracks 19x19 windows instead of 15x15: with the lake clip's lens, the heading over 10 s windows at 5 Hz came out 6.2
+ * instead of 8.1 degrees in the median (lower in 59% of 192 paired runs), the position about the same (0.066 against
+ * 0.067 m); at 3 and 10 Hz the heading was worse, and 350 or 400 features with them were worse at 5 Hz. */
 #if defined(MVO_CONFIG_P4)
 #define MVO_CONFIG_NAME "p4"
 #define MVO_MAX_FEATURES 300
+#define MVO_WINDOW 9 /* Lucas-Kanade half window: 19x19 */
+#define MVO_LANES 24 /* a window row as stored: MVO_SIDE values, then zeros (three vectors of eight 16-bit lanes) */
 #else
 #define MVO_CONFIG_NAME "s3"
 #define MVO_MAX_FEATURES 250
+#define MVO_WINDOW 7 /* Lucas-Kanade half window: 15x15 */
+#define MVO_LANES 16 /* a window row as stored: MVO_SIDE values, then zeros (two vectors of eight 16-bit lanes) */
 #endif
 
 #define MVO_REFILL 0.6f
 #define MVO_MIN_DISTANCE 8.0f
 #define MVO_QUALITY 0.01f
-#define MVO_WINDOW 7 /* Lucas-Kanade half window: 15x15 */
 #define MVO_LK_ITERATIONS 10 /* at 5 Hz most windows still moving after 10 end up failing the forward-backward check */
 #define MVO_LK_EPSILON 0.01f
 #define MVO_LK_COARSE_EPSILON 0.05f /* above full resolution: the finer levels refine it anyway */
@@ -107,7 +113,6 @@
 #define MVO_TURN_SOFT 0.0048738787f /* (4 degrees)^2 in radians: a rotation this far from the pose pulls half as hard */
 #define MVO_PYRAMID_BYTES (MVO_WIDTH * MVO_HEIGHT * 4 / 3 + 64) /* one frame's pyramid, level 0 first */
 #define MVO_SIDE (2 * MVO_WINDOW + 1) /* the tracking window's side */
-#define MVO_LANES 16 /* a window row as stored: MVO_SIDE values, then zeros (two vectors of eight 16-bit lanes) */
 
 #if defined(__GNUC__)
 #define MVO_ALIGN16 __attribute__((aligned(16))) /* where vector kernels load whole 16-byte blocks */
@@ -147,8 +152,8 @@ typedef struct {
     uint32_t id;      /* lasting identity, given when detected: the same id in two frames is the same track */
 } mvo_feature_t;
 
-/* A feature's tracking window at one pyramid level, row-major, MVO_SIDE rows of MVO_LANES values with the last lane 0:
- * the previous frame interpolated at the window's pixels and its central differences across x and y, all Q7 (see
+/* A feature's tracking window at one pyramid level, row-major, MVO_SIDE rows of MVO_LANES values, those from MVO_SIDE
+ * on 0: the previous frame interpolated at the window's pixels and its central differences across x and y, all Q7 (see
  * mvo_kernels_t). */
 typedef struct {
     int16_t patch[MVO_SIDE * MVO_LANES] MVO_ALIGN16;

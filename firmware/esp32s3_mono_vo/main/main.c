@@ -144,6 +144,13 @@ void mvo_pie_p4_lk_template(mvo_window_t *window, const uint8_t *src, int stride
                             int64_t g[3]);
 void mvo_pie_p4_lk_sums(const mvo_window_t *window, const uint8_t *src, int stride, const int16_t weights[4],
                         int64_t sums[2]);
+/* mvo_pie_p4.S is assembled for the configuration's window: 19x19 in rows of 24 lanes under MVO_CONFIG_P4, else 15x15
+ * in rows of 16. */
+#if defined(MVO_CONFIG_P4)
+typedef char mvo_pie_p4_fits_the_window[(MVO_SIDE == 19 && MVO_LANES == 24) ? 1 : -1];
+#else
+typedef char mvo_pie_p4_fits_the_window[(MVO_SIDE == 15 && MVO_LANES == 16) ? 1 : -1];
+#endif
 #define HAS_VECTOR_KERNELS 1
 static const mvo_kernels_t s_vector = {mvo_pie_p4_lk_template, mvo_pie_p4_lk_sums, mvo_block_c};
 #else

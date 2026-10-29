@@ -2,7 +2,7 @@
   "task": "Top-view obstacle map from the C monocular odometry and the segmentation's water masks on the lake clip, scored against the reconstruction's cloud after aligning the camera path",
   "sources_sha256": {
     "core_sha256": "b7b36567dd5de3e9171494186afdc8406cf6dc4e5a5c7b5b9eb0447bfa68390b",
-    "header_sha256": "c5c620d24046e5f9f6c17cf6e29bffae321c1d0d11f67991a00e284caa181f2e",
+    "header_sha256": "ddffb01256a7fa77e56465cd0143ab1d325dd128d0f4c461d4cd80cdc32318f6",
     "map_sha256": "af787363388c606fa0c2a17521cbe5ccd35e90584eca4c89b5ed6c7eb9d7ac75",
     "map_header_sha256": "008c1503644d44d81ede11bb065f1113eb3cc0a5f676296296a390acc875aea1"
   },
@@ -11,40 +11,47 @@
   "masks": "frames.npz",
   "time_scale": 3.0,
   "hfov_deg": 110.0,
+  "lens": [
+    0.0,
+    0.0,
+    -0.02,
+    0.0,
+    0.0
+  ],
   "cloud_voxel_m": 0.03,
   "runs": [
     {
       "rate_hz": 10.0,
-      "alignment_scale_m_per_unit": 0.07046708965793991,
-      "alignment_spread_ratio": 0.013895979488999252,
-      "ate_rmse_m": 0.13364808846571816,
-      "first_lost_frame": 44,
+      "alignment_scale_m_per_unit": 0.0650696275532456,
+      "alignment_spread_ratio": 0.018812859937949643,
+      "ate_rmse_m": 0.09326407562219259,
+      "first_lost_frame": 42,
       "map_continuous": false,
-      "continuous_frames": 44,
-      "scored_frames": 44,
+      "continuous_frames": 42,
+      "scored_frames": 42,
       "total_frames": 339,
       "alignment_reason": null,
-      "observations": 4540,
-      "frames_with_observations": 43,
+      "observations": 4656,
+      "frames_with_observations": 41,
       "distance_to_cloud_m": {
-        "median": 0.2385612055659294,
-        "within_0.1": 0.12268722466960352,
-        "within_0.2": 0.3773127753303965,
-        "within_0.3": 0.723568281938326
+        "median": 0.2354568913578987,
+        "within_0.1": 0.10824742268041238,
+        "within_0.2": 0.36619415807560135,
+        "within_0.3": 0.7326030927835051
       },
       "grid": {
-        "cell_units": 1.4315379858016968,
+        "cell_units": 1.4889302253723145,
         "origin_cells": [
           -65,
           -64
         ],
-        "occupied_cells": 58,
-        "unknown_cells": 16326,
-        "slice_y_units": -2.7444663047790527,
+        "occupied_cells": 116,
+        "unknown_cells": 16268,
+        "slice_y_units": -2.9550445079803467,
         "height_resets": 2,
-        "hits": 2472,
+        "hits": 2437,
         "updates": 40,
-        "hash": 2409627640
+        "hash": 638156729
       },
       "over_seeds": {
         "seeds": [
@@ -66,51 +73,51 @@
           15
         ],
         "distance_median_m": {
-          "median": 0.20659979432821274,
-          "min": 0.12401215732097626,
-          "max": 0.251235768198967
+          "median": 0.22655818238854408,
+          "min": 0.19832055270671844,
+          "max": 0.25753551721572876
         },
         "distance_valid_seeds": 16,
         "ate_rmse_m": {
-          "median": 0.09997785359201965,
-          "min": 0.08581300419747123,
-          "max": 0.317384973425552
+          "median": 0.08728726682081035,
+          "min": 0.06358352275219134,
+          "max": 0.10949202461823451
         },
         "ate_valid_seeds": 16
       }
     },
     {
       "rate_hz": 5.0,
-      "alignment_scale_m_per_unit": 0.13877996207790635,
-      "alignment_spread_ratio": 0.018656751851232986,
-      "ate_rmse_m": 0.07717024513203327,
-      "first_lost_frame": 21,
+      "alignment_scale_m_per_unit": 0.14289980672046168,
+      "alignment_spread_ratio": 0.01740637893580855,
+      "ate_rmse_m": 0.10201466475710314,
+      "first_lost_frame": 22,
       "map_continuous": false,
-      "continuous_frames": 21,
-      "scored_frames": 21,
+      "continuous_frames": 22,
+      "scored_frames": 22,
       "total_frames": 170,
       "alignment_reason": null,
-      "observations": 1985,
-      "frames_with_observations": 20,
+      "observations": 2100,
+      "frames_with_observations": 21,
       "distance_to_cloud_m": {
-        "median": 0.19928686320781708,
-        "within_0.1": 0.1355163727959698,
-        "within_0.2": 0.5017632241813602,
-        "within_0.3": 0.8191435768261964
+        "median": 0.2290821373462677,
+        "within_0.1": 0.09,
+        "within_0.2": 0.36904761904761907,
+        "within_0.3": 0.7395238095238095
       },
       "grid": {
-        "cell_units": 1.0087974071502686,
+        "cell_units": 1.0252094268798828,
         "origin_cells": [
           -65,
           -64
         ],
-        "occupied_cells": 201,
-        "unknown_cells": 16183,
-        "slice_y_units": -0.9247844815254211,
+        "occupied_cells": 202,
+        "unknown_cells": 16182,
+        "slice_y_units": -0.9663693904876709,
         "height_resets": 1,
-        "hits": 1541,
+        "hits": 1623,
         "updates": 20,
-        "hash": 2578035780
+        "hash": 2554445803
       },
       "over_seeds": {
         "seeds": [
@@ -132,15 +139,15 @@
           15
         ],
         "distance_median_m": {
-          "median": 0.19900856167078018,
-          "min": 0.15179474651813507,
-          "max": 0.2715277671813965
+          "median": 0.22952041029930115,
+          "min": 0.1736658215522766,
+          "max": 0.24895253032445908
         },
         "distance_valid_seeds": 16,
         "ate_rmse_m": {
-          "median": 0.07711200706940084,
-          "min": 0.0394685023890879,
-          "max": 0.0984657930919448
+          "median": 0.10209348845253341,
+          "min": 0.08127213460705811,
+          "max": 0.11960077680325425
         },
         "ate_valid_seeds": 16
       }

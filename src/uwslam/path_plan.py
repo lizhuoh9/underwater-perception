@@ -377,7 +377,7 @@ def write_board_files(output: Path, result: dict, rate: float) -> None:
 def run(video: Path, reconstruction: Path, output: Path, time_scale: float) -> dict:
     import tempfile
     from uwslam.experiments.mask_motion import Camera, reference_poses
-    from uwslam.experiments.mono_vo import ASPECT, HFOV_DEG, read_frames
+    from uwslam.experiments.mono_vo import ASPECT, HFOV_DEG, LENS, read_frames
     from uwslam.mono_map import load_matched_masks
     if output.exists() and any(output.iterdir()):
         raise FileExistsError("Refusing to overwrite results; choose a fresh --output")
@@ -389,7 +389,7 @@ def run(video: Path, reconstruction: Path, output: Path, time_scale: float) -> d
     rotations, centres = reference_poses(poses, np.arange(len(grey)) / fps, time_scale)
     cloud = obstacle_dir.load_cloud(reconstruction)
     grid_camera = Camera.from_fov(HFOV_DEG, ASPECT)
-    camera = mvo.camera_for(HFOV_DEG, ASPECT)
+    camera = mvo.lake_camera()
     output.mkdir(parents=True, exist_ok=True)
     runs, depth_cache = [], {}
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as scratch:
@@ -435,7 +435,7 @@ def run(video: Path, reconstruction: Path, output: Path, time_scale: float) -> d
                        "scored open-loop against the reference reconstruction",
                "sources_sha256": {**mvo.sources_sha256(), **voxel_map.sources_sha256(), **obstacle_dir.sources_sha256(),
                                   **sources_sha256()},
-               **mvo.build_config(), "masks": "frames.npz", "time_scale": time_scale, "hfov_deg": HFOV_DEG, "seeds": list(mvo.SEEDS),
+               **mvo.build_config(), "masks": "frames.npz", "time_scale": time_scale, "hfov_deg": HFOV_DEG, "lens": list(LENS), "seeds": list(mvo.SEEDS),
                "corridor": {"part": "central half of each direction's rows and columns",
                             "percentile": CORRIDOR_PERCENTILE}, "runs": runs}
     dump_json(output / "summary.json", summary)

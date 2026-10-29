@@ -38,8 +38,16 @@
  * says where to head and how many steps of free water lie there (the map's range, or `clear` for a water direction the
  * map knows nothing of); the robot's controller turns that into thrust.
  *
+ * Under MVO_CONFIG_P4 the voxel map's voxels are half as large (voxel_map.h), and the plan reads them PP_GROUP to a
+ * side: a cell holds the voxels whose indices halve to its own, its frames are theirs added, and it is in view when one
+ * of them was filed in this frame. Adding the frames lets two voxels seen once each, even in the same frame, make their
+ * cell an obstacle. Read one by one, with 15x15 windows, the finer voxels left the range straight ahead known in 68% of
+ * the lake clip's 5 Hz steps instead of 77% (single sightings land in different fine voxels more often); grouped, in
+ * 83%. The plan's choices kept as much free water ahead, and 87% of the known ranges instead of 90% lay within twice the
+ * reference's (16-seed medians).
+ *
  * C99, no heap, no libm (mvo_sqrt for the ranges reported): a PC and an ESP32-S3 give the same plan. Not thread-safe
- * for the same plan.
+ * for the same plan, nor (under MVO_CONFIG_P4, whose grouping uses a static table) for two plans at once.
  */
 #ifndef PATH_PLAN_H
 #define PATH_PLAN_H
@@ -55,6 +63,11 @@
 #define PP_CREEP_STEPS 3.0f    /* known free water worth creeping into when nothing is passable */
 #define PP_CLEAR_SHARE 0.75f   /* of the median range of the surfaces in view: the water directions' bound */
 #define PP_MIN_VIEW 10         /* surfaces in view the bound needs */
+#if defined(MVO_CONFIG_P4)
+#define PP_GROUP 2 /* voxels to a side that the plan reads as one cell */
+#else
+#define PP_GROUP 1
+#endif
 
 enum { PP_STOP = 0, PP_GO = 1, PP_CREEP = 2, PP_TURN = 3 };
 

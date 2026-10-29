@@ -6,20 +6,20 @@ Each row of the first table is one run with one RANSAC seed. On this clip the se
 
 | Rate | Version | Steps (lost / rotation only) | Position RMSE after alignment | Heading RMSE / max | Direction of travel, median | Scale ratio over 5 s windows | ms per step (PC) |
 |---:|---|---:|---:|---:|---:|---:|---:|
-| 10 Hz | C | 338 (1 / 12) | 0.37 m | 26.0° / 48° | 12.6° | 0.14–1.41 | 8.0 |
+| 10 Hz | C | 338 (1 / 12) | 0.42 m | 26.9° / 52° | 13.7° | 0.10–1.52 | 8.8 |
 | 10 Hz | OpenCV prototype | 338 (0 / 1) | 0.41 m | 27.4° / 46° | 14.4° | 0.73–1.69 | 5.8 |
-| 5 Hz | C | 169 (12 / 6) | 0.25 m | 8.5° / 32° | 11.5° | 0.74–1.33 | 10.7 |
+| 5 Hz | C | 169 (12 / 7) | 0.38 m | 9.1° / 30° | 12.3° | 0.33–1.58 | 11.8 |
 | 5 Hz | OpenCV prototype | 169 (3 / 0) | 0.44 m | 25.7° / 49° | 12.7° | 0.48–1.61 | 7.9 |
-| 3 Hz | C | 101 (20 / 0) | 0.43 m | 9.8° / 48° | 9.4° | 0.28–2.30 | 13.8 |
+| 3 Hz | C | 101 (20 / 1) | 0.40 m | 20.8° / 57° | 10.1° | 0.29–2.41 | 16.2 |
 | 3 Hz | OpenCV prototype | 101 (7 / 0) | 0.33 m | 18.5° / 47° | 11.2° | 0.35–2.12 | 9.1 |
 
 C port over 16 RANSAC seeds, median [smallest–largest]:
 
 | Rate | Position RMSE after alignment | Heading RMSE | Scale ratio spread over 5 s windows (largest / smallest) | Lost steps |
 |---:|---:|---:|---:|---:|
-| 10 Hz | 0.33 m [0.26–0.38] | 34.2° [26–39] | 5.3× [1.7–11.1] | 2 [1–5] |
-| 5 Hz | 0.33 m [0.24–0.45] | 18.3° [9–25] | 2.6× [1.4–7.4] | 11 [9–14] |
-| 3 Hz | 0.42 m [0.38–0.54] | 27.1° [8–43] | 9.1× [6.6–11.1] | 21 [19–23] |
+| 10 Hz | 0.41 m [0.27–0.50] | 31.8° [19–38] | 15.2× [1.9–38.0] | 2.5 [1–3] |
+| 5 Hz | 0.28 m [0.20–0.38] | 17.1° [6–33] | 2.2× [1.9–4.8] | 12 [9–13] |
+| 3 Hz | 0.37 m [0.32–0.47] | 23.4° [8–44] | 6.1× [2.7–11.2] | 21.5 [20–24] |
 
 `board_expected_10hz.json` holds the FNV-1a hash of every 10 Hz step (338 steps) for the board stream test (uwslam.mvo_stream).
 
@@ -41,6 +41,8 @@ The host streams grayscale frames and optional masks over the board's serial lin
 | `p4_360mhz_5hz` | 360 MHz | s3 | 5 Hz | 2 | vector | 170 | 169 of 169 | 1348 observations, hash equal to the PC's | 74 / 78 / 96 ms | 38 ms | 22 ms | 15 ms | 0.0 ms | 913 voxels, hash equal to the PC's (0.4 ms); directions equal to the PC's (0.17 ms); plans equal to the PC's (0.49 ms) |
 | `p4_c_360mhz` | 360 MHz | s3 | 10 Hz | 2 | C | 339 | 338 of 338 | 2108 observations, hash equal to the PC's | 173 / 160 / 289 ms | 142 ms | 24 ms | 7 ms | 0.0 ms | 947 voxels, hash equal to the PC's (0.4 ms); directions equal to the PC's (0.18 ms); plans equal to the PC's (0.54 ms) |
 | `p4_c_360mhz_5hz` | 360 MHz | s3 | 5 Hz | 2 | C | 170 | 169 of 169 | 1348 observations, hash equal to the PC's | 220 / 226 / 308 ms | 184 ms | 22 ms | 14 ms | 0.0 ms | 913 voxels, hash equal to the PC's (0.4 ms); directions equal to the PC's (0.18 ms); plans equal to the PC's (0.50 ms) |
+
+These records were streamed with core `aae0dbc7`, before the lake runs took their lens (`LENS` in `uwslam.experiments.mono_vo`), so they were checked against the pinhole camera's expectations of their day. The expectations in this folder now carry the lens, which the host sends in the board's `start` line; the board has not been streamed against them yet.
 
 Re-run (after `uwslam.mvo compare --board-frames` and `uwslam.mono_map --board-masks`):
 

@@ -38,6 +38,11 @@ from uwslam.utils import dump_json
 
 ASPECT = 544 / 960  # the lake clip's source frame
 HFOV_DEG = 110.0  # fitted in mask_motion on SIFT rotations of turns above 3 degrees
+# The lens distortion the C tools give the lake camera (k1, k2, p1, p2, k3 in OpenCV's model): p1 alone, a distortion
+# centred off the frame's middle in height, as a frame cropped off the lens's axis has. Found without the reference: with
+# it the chain of 30 FPS steps agrees in pitch with direct rotations across 1.6 s of the same tracks, and the floating
+# dock's straight bottom edge keeps its vanishing point through the clip; without it every step pitched up a little.
+LENS = (0.0, 0.0, -0.02, 0.0, 0.0)
 RATES = {10.0: 3, 5.0: 6, 3.0: 10}  # Hz: stride in 30 FPS frames
 RESOLUTIONS = {"320x240": (320, 240), "160x120": (160, 120)}
 MAX_CORNERS, QUALITY, MIN_DISTANCE = 250, 0.01, 8.0

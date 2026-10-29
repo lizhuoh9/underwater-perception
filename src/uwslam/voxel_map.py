@@ -21,7 +21,9 @@ from uwslam import mvo
 from uwslam.paths import CORE_DIR, LAKE_CLIP_RESULTS
 from uwslam.utils import dump_json
 
-CAPACITY, SLOTS = 1024, 2048  # VM_CAPACITY, VM_SLOTS
+# VM_CAPACITY, VM_SLOTS and VM_CELLS_PER_DEPTH of each build configuration (core/voxel_map.h)
+LAYOUTS = {"s3": (1024, 2048, 8), "p4": (4096, 8192, 16)}
+CAPACITY, SLOTS, CELLS_PER_DEPTH = LAYOUTS[mvo.CONFIG]
 CONFIRM = 2  # VM_CONFIRM
 WINDOW_S = 5.0
 RATES = {10.0: 3, 5.0: 6}  # Hz: stride in 30 FPS frames
@@ -232,10 +234,11 @@ def write_report(output: Path, summary: dict) -> None:
     lines = ["# The continuing voxel map from the monocular odometry (lake clip)", "",
              "`core/voxel_map.c` files the odometry's well-triangulated tracked points on cells the segmentation marks "
              "as not water, voxel by voxel, after every step and through LOST steps (the map goes on in the odometry's "
-             "frame; it is not frozen at the first loss). The voxel side follows the scene: an eighth of the median "
-             "depth, reset when the scene asks for twice or half of it (the monocular unit drifts tenfold over the "
-             "clip). A voxel seen in two frames is an obstacle. It holds at most 1024 voxels (14 KB): far voxels, "
-             "then single sightings, then the longest unseen obstacles make room.", "",
+             "frame; it is not frozen at the first loss). The voxel side follows the scene: the median depth over "
+             f"{CELLS_PER_DEPTH}, reset when the scene asks for twice or half of it (the monocular unit drifts tenfold "
+             "over the clip). A voxel seen in two frames is an obstacle. It holds at most "
+             f"{CAPACITY} voxels ({ctypes.sizeof(VoxelMapC) // 1024} KB): far voxels, then single sightings, then the "
+             "longest unseen obstacles make room.", "",
              "Scores, after similarity alignments of the camera path (the map's unit is the odometry's): **global**, the "
              "obstacles held at the end with one alignment of the whole path (drift included); **local**, every 5 s "
              "the obstacles held at that moment with an alignment of the last 5 s of the path, what avoidance uses. "
@@ -283,7 +286,7 @@ def write_board_files(output: Path, result: dict, rate: float) -> None:
 def run(video: Path, reconstruction: Path, output: Path, time_scale: float) -> dict:
     import tempfile
     from uwslam.experiments.mask_motion import reference_poses
-    from uwslam.experiments.mono_vo import ASPECT, HFOV_DEG, read_frames
+    from uwslam.experiments.mono_vo import HFOV_DEG, LENS, read_frames
     from uwslam.mono_map import load_cloud_world, load_matched_masks
     if output.exists() and any(output.iterdir()):
         raise FileExistsError("Refusing to overwrite results; choose a fresh --output")
@@ -294,7 +297,7 @@ def run(video: Path, reconstruction: Path, output: Path, time_scale: float) -> d
     masks = load_matched_masks(video, fps)
     ref_rotations, ref_centres = reference_poses(poses, np.arange(len(grey)) / fps, time_scale)
     cloud = (load_cloud_world(reconstruction) - ref_centres[0]) @ ref_rotations[0]
-    camera = mvo.camera_for(HFOV_DEG, ASPECT)
+    camera = mvo.lake_camera()
     output.mkdir(parents=True, exist_ok=True)
     runs = []
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as scratch:
@@ -333,7 +336,7 @@ def run(video: Path, reconstruction: Path, output: Path, time_scale: float) -> d
     summary = {"task": "Continuing voxel map from the C monocular odometry and the water masks on the lake clip, "
                        "scored against the reference cloud", "sources_sha256": {**mvo.sources_sha256(), **sources_sha256()},
                **mvo.build_config(),
-               "masks": "frames.npz", "time_scale": time_scale, "hfov_deg": HFOV_DEG, "seeds": list(mvo.SEEDS),
+               "masks": "frames.npz", "time_scale": time_scale, "hfov_deg": HFOV_DEG, "lens": list(LENS), "seeds": list(mvo.SEEDS),
                "window_s": WINDOW_S, "runs": runs}
     dump_json(output / "summary.json", summary)
     write_report(output, summary)

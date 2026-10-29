@@ -31,6 +31,51 @@ void pp_init(pp_plan_t *plan)
 
 uint32_t pp_plan_size(void) { return (uint32_t)sizeof(pp_plan_t); }
 
+#if PP_GROUP > 1
+/* The voxels read PP_GROUP to a side (see path_plan.h): cells in the order their first voxel was seen, found through an
+ * open-addressing index like the map's own. */
+typedef struct {
+    int16_t key[3];  /* the voxels' indices divided by PP_GROUP, rounded down */
+    uint16_t frames; /* the frames that observed its voxels, added (at most PP_GROUP^3 voxels of 255 each) */
+    uint8_t now;     /* one of its voxels was filed in the map's latest frame */
+} pp_cell_t;
+
+static pp_cell_t s_cells[VM_CAPACITY];
+static uint16_t s_slots[VM_SLOTS]; /* 1 + a cell's place in s_cells, 0 where free */
+
+static int16_t group_of(int16_t k) { return (int16_t)(k >= 0 ? k / PP_GROUP : -((-k + PP_GROUP - 1) / PP_GROUP)); }
+
+/* Groups the map's voxels into s_cells; returns how many cells. */
+static uint32_t group_voxels(const vm_map_t *map)
+{
+    uint32_t k, n = 0;
+    memset(s_slots, 0, sizeof s_slots);
+    for (k = 0; k < map->count; ++k) {
+        const vm_voxel_t *v = &map->voxel[k];
+        int16_t key[3];
+        uint32_t i, frames;
+        key[0] = group_of(v->key[0]);
+        key[1] = group_of(v->key[1]);
+        key[2] = group_of(v->key[2]);
+        i = ((uint32_t)(uint16_t)key[0] * 73856093u ^ (uint32_t)(uint16_t)key[1] * 19349663u
+             ^ (uint32_t)(uint16_t)key[2] * 83492791u) & (VM_SLOTS - 1u);
+        while (s_slots[i] && memcmp(s_cells[s_slots[i] - 1].key, key, sizeof key) != 0) {
+            i = (i + 1u) & (VM_SLOTS - 1u);
+        }
+        if (!s_slots[i]) {
+            memcpy(s_cells[n].key, key, sizeof key);
+            s_cells[n].frames = 0;
+            s_cells[n].now = 0;
+            s_slots[i] = (uint16_t)(++n);
+        }
+        frames = (uint32_t)s_cells[s_slots[i] - 1].frames + v->frames;
+        s_cells[s_slots[i] - 1].frames = (uint16_t)(frames > 65535u ? 65535u : frames);
+        s_cells[s_slots[i] - 1].now |= (uint8_t)(v->seen == (uint16_t)map->frames);
+    }
+    return n;
+}
+#endif
+
 /* One step: the median of the odometry's last step lengths, as mvo_step_length takes it; 0 before the first step or
  * when one is not a positive finite length. */
 static float recent_speed(const mvo_t *vo)
@@ -173,18 +218,31 @@ int pp_update(pp_plan_t *plan, const vm_map_t *map, const mvo_t *vo, const od_la
         horizon2 = PP_HORIZON_STEPS * speed * (PP_HORIZON_STEPS * speed);
         safe2 = PP_SAFE_STEPS * speed * (PP_SAFE_STEPS * speed);
         creep2 = PP_CREEP_STEPS * speed * (PP_CREEP_STEPS * speed);
-        for (k = 0; k < map->count; ++k) {
+#if PP_GROUP > 1
+        const uint32_t count = group_voxels(map);
+        const float side = PP_GROUP * map->side;
+#else
+        const uint32_t count = map->count;
+        const float side = map->side;
+#endif
+        for (k = 0; k < count; ++k) {
+#if PP_GROUP > 1
+            const pp_cell_t *v = &s_cells[k];
+            const int now = v->now;
+#else
             const vm_voxel_t *v = &map->voxel[k];
+            const int now = v->seen == (uint16_t)map->frames;
+#endif
             float p[3], q[3], d2;
             for (i = 0; i < 3; ++i) {
-                p[i] = ((float)v->key[i] + 0.5f) * map->side - vo->world_centre[i];
+                p[i] = ((float)v->key[i] + 0.5f) * side - vo->world_centre[i];
             }
             to_camera(vo, p, q);
             d2 = q[0] * q[0] + q[1] * q[1] + q[2] * q[2];
             if (!(d2 <= horizon2)) { /* NaN too */
                 continue;
             }
-            if (v->seen == (uint16_t)map->frames && q[2] > 0.0f && in_view < MVO_MAX_FEATURES) {
+            if (now && q[2] > 0.0f && in_view < MVO_MAX_FEATURES) {
                 view[in_view++] = d2; /* filed in this frame: a surface in view */
             }
             if (v->frames < VM_CONFIRM) {

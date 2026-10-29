@@ -19,7 +19,7 @@ import unittest
 
 import numpy as np
 
-from uwslam import mvo
+from uwslam import mvo, mvo_stream, voxel_map
 from uwslam.core import CFLAGS
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -65,6 +65,15 @@ class ConfigTests(unittest.TestCase):
                 evidence = struct.unpack("<f", struct.pack("<I", int(fields["evidence_log"])))[0]
                 count = mvo.CONFIGS[config]["max_features"]
                 self.assertAlmostEqual(evidence, 2 * math.log(4 * count), delta=5e-4)  # the penalty's 2 ln(4n)
+                # what the Python side repeats: the tracking window, the voxel map's layout, the plan's grouping
+                self.assertEqual((int(fields["window"]), int(fields["lanes"])),
+                                 (mvo.CONFIGS[config]["window"], mvo.CONFIGS[config]["lanes"]))
+                capacity, slots, cells = voxel_map.LAYOUTS[config]
+                layout = (int(fields["voxel_capacity"]), int(fields["voxel_slots"]))
+                self.assertEqual(layout, (capacity, slots))
+                self.assertEqual(layout, mvo_stream.VOXEL_LAYOUTS[config])
+                self.assertEqual(int(fields["cells_per_depth"]), float_bits(float(cells)))
+                self.assertEqual(int(fields["plan_group"]), 2 if config == "p4" else 1)
 
     def test_the_build_reports_its_configuration(self):
         for config in mvo.CONFIGS:

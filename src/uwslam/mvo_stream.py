@@ -57,8 +57,8 @@ CLOUD_SOURCES = ("cloud_sha256", "cloud_header_sha256")
 VOXEL_SOURCES = ("voxel_sha256", "voxel_header_sha256")
 DIR_SOURCES = ("dir_sha256", "dir_header_sha256")
 PLAN_SOURCES = ("plan_sha256", "plan_header_sha256")
-VOXEL_CAPACITY, VOXEL_SLOTS, DIRECTIONS = 1024, 2048, 15  # VM_CAPACITY, VM_SLOTS, OD_DIRECTIONS
-VOXEL_BYTES = VOXEL_CAPACITY * 10 + VOXEL_SLOTS * 2 + 4 + 7 * 4  # sizeof(vm_map_t)
+VOXEL_LAYOUTS = {"s3": (1024, 2048), "p4": (4096, 8192)}  # VM_CAPACITY, VM_SLOTS of each build configuration
+DIRECTIONS = 15  # OD_DIRECTIONS
 
 
 def fnv(data: bytes) -> int:
@@ -131,6 +131,17 @@ def max_features(expected: dict) -> int:
     return CONFIG_FEATURES[expectation_config(expected)]
 
 
+def voxel_capacity(expected: dict) -> int:
+    """VM_CAPACITY of the expectation's build configuration."""
+    return VOXEL_LAYOUTS[expectation_config(expected)][0]
+
+
+def voxel_bytes(expected: dict) -> int:
+    """sizeof(vm_map_t) in the expectation's build configuration."""
+    capacity, slots = VOXEL_LAYOUTS[expectation_config(expected)]
+    return capacity * 10 + slots * 2 + 4 + 7 * 4
+
+
 def check_same_config(name: str, auxiliary: dict, expected: dict) -> None:
     """Refuse a map, cloud, voxel or plan expectation made in another build configuration than the odometry's (the
     obstacle directions come from the masks alone and are the same in both)."""
@@ -186,7 +197,7 @@ def validate_expected_voxels(voxels: dict, expected: dict) -> None:
     if (voxels.get("frames") != expected.get("frames") or not isinstance(progress, list)
             or len(progress) != len(expected["step_hashes"])
             or any(not isinstance(item, dict) or type(item.get("count")) is not int or type(item.get("filed")) is not int
-                   or not 0 <= item["count"] <= VOXEL_CAPACITY or not 0 <= item["filed"] <= max_features(expected)
+                   or not 0 <= item["count"] <= voxel_capacity(expected) or not 0 <= item["filed"] <= max_features(expected)
                    for item in progress)):
         raise ValueError("The voxel expectation needs one voxel count and filed number per step")
     if type(voxels.get("voxel_hash")) is not int or not all(is_sha256(voxels.get(key)) for key in VOXEL_SOURCES):
@@ -402,7 +413,7 @@ def stream(port_name: str, frames_path: Path, expected_path: Path, limit: int | 
                 ([(key, expected_plan) for key in PLAN_SOURCES] if expected_plan is not None else []):
             if ready.get(key) != source[key]:
                 raise RuntimeError(f"The board's {key} differs from the PC run's: rebuild and flash the firmware")
-        if expected_voxels is not None and ready.get("voxel_bytes") != VOXEL_BYTES:
+        if expected_voxels is not None and ready.get("voxel_bytes") != voxel_bytes(expected):
             raise RuntimeError("The board's voxel map has another memory layout")
         for key in SOURCES + (MAP_SOURCES if expected_map is not None else ()):
             source = expected_map if expected_map is not None else expected

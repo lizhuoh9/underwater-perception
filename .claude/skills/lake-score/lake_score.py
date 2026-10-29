@@ -49,7 +49,7 @@ def windows(video: Path, reconstruction: Path, output: Path, rates: list[float],
     grey = frames["320x240"]
     times = np.arange(len(grey)) / fps
     reference_rotations, reference_centres = reference_poses(poses, times, time_scale)
-    camera = mvo.camera_for(HFOV_DEG, ASPECT)
+    camera = mvo.lake_camera() if hasattr(mvo, "lake_camera") else mvo.camera_for(HFOV_DEG, ASPECT)  # older trees: no lens
     starts = np.arange(0.0, times[-1] - length_s + 1e-6, every_s)
     runs = []
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as scratch:  # Windows keeps the loaded library locked

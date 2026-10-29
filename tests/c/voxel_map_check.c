@@ -11,6 +11,9 @@ static mvo_t vo;
 static mvo_step_t step;
 static uint8_t mask[60 * 80];
 
+/* The scene depth that gives voxels of side s, in either build configuration (VM_CELLS_PER_DEPTH). */
+#define DEPTH(s) ((float)(s) * VM_CELLS_PER_DEPTH)
+
 static void setup(void)
 {
     memset(&vo, 0, sizeof vo);
@@ -55,13 +58,13 @@ static void check_index(const vm_map_t *m)
     assert(named == m->count);
 }
 
-/* A frame of 20 features at depth 8 on a row at height y: the side becomes 1. */
+/* A frame of 20 features at DEPTH(1) on a row at height y: the side becomes 1. */
 static void first_frame_at(float y)
 {
     int k;
     vo.count = 0;
     for (k = 0; k < VM_MIN_POINTS; ++k) {
-        put(k, (float)k, y, 8.0f);
+        put(k, (float)k, y, DEPTH(1));
     }
     assert(vm_update(&map, &vo, &step, NULL, 0, 0) == VM_MIN_POINTS);
     assert(map.side == 1.0f && map.count == VM_MIN_POINTS);
@@ -71,10 +74,10 @@ static void first_frame(void) { first_frame_at(0.0f); }
 
 static void files_observations_and_goes_on_after_lost(void)
 {
-    const float inside[3] = {3.5f, 0.5f, 8.5f}, empty[3] = {3.5f, 1.5f, 8.5f};
+    const float inside[3] = {3.5f, 0.5f, DEPTH(1) + 0.5f}, empty[3] = {3.5f, 1.5f, DEPTH(1) + 0.5f};
     int k;
     setup();
-    assert(vm_map_size() == sizeof map && sizeof map < 20000);
+    assert(vm_map_size() == sizeof map && sizeof map == (size_t)VM_CAPACITY * 10 + (size_t)VM_SLOTS * 2 + 32);
     /* refused, the map as it was */
     saved = map;
     assert(vm_update(NULL, &vo, &step, NULL, 0, 0) == 0 && vm_update(&map, &vo, NULL, NULL, 0, 0) == 0);
@@ -85,11 +88,11 @@ static void files_observations_and_goes_on_after_lost(void)
     /* too few observations to set the side: nothing filed yet */
     vo.count = 0;
     for (k = 0; k < VM_MIN_POINTS - 1; ++k) {
-        put(k, (float)k, 0.0f, 8.0f);
+        put(k, (float)k, 0.0f, DEPTH(1));
     }
     assert(vm_update(&map, &vo, &step, NULL, 0, 0) == 0 && map.side == 0.0f && map.frames == 1);
     first_frame();
-    assert(map.voxel[3].key[0] == 3 && map.voxel[3].key[1] == 0 && map.voxel[3].key[2] == 8);
+    assert(map.voxel[3].key[0] == 3 && map.voxel[3].key[1] == 0 && map.voxel[3].key[2] == (int)DEPTH(1));
     assert(map.voxel[3].hits == 1 && map.voxel[3].frames == 1 && !vm_occupied(&map, inside));
     /* a feature without a good point is no observation */
     vo.feature[0].spread = VM_MIN_SPREAD * 0.5f;
@@ -121,13 +124,13 @@ static void files_observations_and_goes_on_after_lost(void)
 
 static void a_new_side_rekeys_and_merges(void)
 {
-    const float far_point[3] = {0.5f, 0.5f, 8.5f};
+    const float far_point[3] = {0.5f, 0.5f, DEPTH(1) + 0.5f};
     int k;
     setup();
     first_frame(); /* voxels x = 0..19 at side 1 */
     vo.count = 0;
     for (k = 0; k < VM_MIN_POINTS; ++k) { /* the scene three times as deep: side 3 */
-        put(k, 30.0f + (float)k, 0.0f, 24.0f);
+        put(k, 30.0f + (float)k, 0.0f, DEPTH(3));
     }
     assert(vm_update(&map, &vo, &step, NULL, 0, 0) == VM_MIN_POINTS);
     assert(map.side == 3.0f && map.rescales == 1);
@@ -138,24 +141,26 @@ static void a_new_side_rekeys_and_merges(void)
     /* a side within VM_RESCALE of the current one stays */
     vo.count = 0;
     for (k = 0; k < VM_MIN_POINTS; ++k) {
-        put(k, 30.0f + (float)k, 0.0f, 40.0f);
+        put(k, 30.0f + (float)k, 0.0f, DEPTH(5));
     }
     vm_update(&map, &vo, &step, NULL, 0, 0);
     assert(map.side == 3.0f && map.rescales == 1);
     printf("rescale ok voxels=%u merged=%u\n", (unsigned)map.count, (unsigned)map.merged);
 }
 
-#define FILL 245 /* voxels a fill frame adds */
+#define ROWS 5 /* rows of 49 voxels a fill frame adds */
+#define FILL (49 * ROWS) /* voxels a fill frame adds (no more than a frame's features) */
 #define FILLS ((VM_CAPACITY - VM_MIN_POINTS) / FILL) /* fill frames that fit after the first frame's 20 */
+#define FIRST_ROW (-40.0f) /* the first frame's row, below every fill frame's */
+#define MOVE ((float)VM_RADIUS + 52.0f) /* far enough that every fill frame's voxel is beyond VM_RADIUS */
 
-/* Fill frame f (1 to FILLS + 1, at most 10) adds FILL voxels within VM_RADIUS: x -24..24, five rows of y from
- * 5 (f - 1) - 20. */
+/* Fill frame f (1 to FILLS + 1) adds FILL voxels within VM_RADIUS: x -24..24, ROWS rows of y from ROWS (f - 1) - 20. */
 static void fill_frame(int f)
 {
     int k;
     vo.count = 0;
     for (k = 0; k < FILL; ++k) {
-        put(k, (float)(k % 49 - 24) + 0.5f, (float)(k / 49 + 5 * (f - 1) - 20) + 0.5f, 8.0f);
+        put(k, (float)(k % 49 - 24) + 0.5f, (float)(k / 49 + ROWS * (f - 1) - 20) + 0.5f, DEPTH(1));
     }
 }
 
@@ -165,9 +170,9 @@ static void check_dropped_in_order(uint32_t dropped)
 {
     uint32_t k, held = 0;
     for (k = 0; k < map.count; ++k) {
-        const int x = map.voxel[k].key[0], y = map.voxel[k].key[1], f = (y + 20) / 5 + 1;
+        const int x = map.voxel[k].key[0], y = map.voxel[k].key[1], f = (y + 20) / ROWS + 1;
         if (y >= -20 && f <= FILLS) {
-            const uint32_t place = (uint32_t)(f - 1) * FILL + (uint32_t)((y + 20 - 5 * (f - 1)) * 49 + x + 24);
+            const uint32_t place = (uint32_t)(f - 1) * FILL + (uint32_t)((y + 20 - ROWS * (f - 1)) * 49 + x + 24);
             assert(place >= dropped);
             ++held;
         }
@@ -177,10 +182,10 @@ static void check_dropped_in_order(uint32_t dropped)
 
 static void room_is_made_far_first_then_oldest(void)
 {
-    uint32_t k;
-    int f;
+    uint32_t k, evicted;
+    int f, moved;
     setup();
-    first_frame_at(40.0f); /* 20 voxels, the oldest, on a row the fill frames never reach */
+    first_frame_at(FIRST_ROW); /* 20 voxels, the oldest, on a row the fill frames never reach */
     for (f = 1; f <= FILLS; ++f) {
         fill_frame(f);
         assert(vm_update(&map, &vo, &step, NULL, 0, 0) == FILL);
@@ -191,22 +196,25 @@ static void room_is_made_far_first_then_oldest(void)
     assert(map.evicted > VM_MIN_POINTS && map.evicted % VM_EVICT == 0);
     assert(map.count == VM_MIN_POINTS + (FILLS + 1) * FILL - map.evicted);
     for (k = 0; k < map.count; ++k) {
-        assert(map.voxel[k].key[1] != 40);
+        assert(map.voxel[k].key[1] != (int)FIRST_ROW);
     }
     check_dropped_in_order(map.evicted - VM_MIN_POINTS);
     check_index(&map);
-    /* far first: move the camera 100 voxels away; the next frame's voxels push out everything behind */
-    vo.world_centre[0] = 100.0f;
-    fill_frame(1);
-    for (f = 0; f < FILL; ++f) {
-        vo.feature[f].point[1] = (float)(f / 49 + 60) + 0.5f; /* new rows */
+    /* far first: move the camera MOVE voxels away; the next frame's voxels push out everything behind */
+    vo.world_centre[0] = MOVE;
+    evicted = map.evicted;
+    for (moved = 0; map.evicted == evicted; ++moved) { /* new rows until room is made */
+        fill_frame(1);
+        for (f = 0; f < FILL; ++f) {
+            vo.feature[f].point[1] = (float)(f / 49 + 60 + ROWS * moved) + 0.5f;
+        }
+        assert(vm_update(&map, &vo, &step, NULL, 0, 0) == FILL);
     }
-    assert(vm_update(&map, &vo, &step, NULL, 0, 0) == FILL);
     check_index(&map);
     for (k = 0; k < map.count; ++k) { /* everything near the old place was far, and went in one batch */
-        assert(map.voxel[k].key[0] >= 100 - 24);
+        assert(map.voxel[k].key[0] >= (int)MOVE - 24);
     }
-    assert(map.count == FILL);
+    assert(map.count == (uint32_t)moved * FILL);
     printf("eviction ok voxels=%u evicted=%u\n", (unsigned)map.count, (unsigned)map.evicted);
 }
 
@@ -215,7 +223,7 @@ static void obstacles_outlive_single_sightings(void)
     uint32_t k, kept = 0;
     int f;
     setup();
-    first_frame_at(40.0f);
+    first_frame_at(FIRST_ROW);
     assert(vm_update(&map, &vo, &step, NULL, 0, 0) == VM_MIN_POINTS); /* seen twice: 20 obstacles, the oldest */
     for (f = 1; f <= FILLS; ++f) {
         fill_frame(f);
@@ -226,7 +234,7 @@ static void obstacles_outlive_single_sightings(void)
     assert(map.evicted > 0 && map.evicted % VM_EVICT == 0);
     assert(map.count == VM_MIN_POINTS + (FILLS + 1) * FILL - map.evicted);
     for (k = 0; k < map.count; ++k) {
-        kept += map.voxel[k].key[1] == 40;
+        kept += map.voxel[k].key[1] == (int)FIRST_ROW;
     }
     assert(kept == VM_MIN_POINTS);
     check_dropped_in_order(map.evicted);
@@ -239,7 +247,7 @@ static void a_long_pause_drops_only_a_batch(void)
 {
     int f;
     setup();
-    first_frame_at(40.0f);
+    first_frame_at(FIRST_ROW);
     for (f = 1; f <= FILLS; ++f) {
         fill_frame(f);
         assert(vm_update(&map, &vo, &step, NULL, 0, 0) == FILL);

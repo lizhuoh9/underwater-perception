@@ -6,20 +6,20 @@ Each row of the first table is one run with one RANSAC seed. On this clip the se
 
 | Rate | Version | Steps (lost / rotation only) | Position RMSE after alignment | Heading RMSE / max | Direction of travel, median | Scale ratio over 5 s windows | ms per step (PC) |
 |---:|---|---:|---:|---:|---:|---:|---:|
-| 10 Hz | C | 338 (1 / 11) | 0.39 m | 37.2° / 63° | 13.1° | 0.33–1.69 | 10.7 |
+| 10 Hz | C | 338 (4 / 10) | 0.39 m | 33.0° / 59° | 14.0° | 0.22–1.58 | 13.4 |
 | 10 Hz | OpenCV prototype | 338 (0 / 1) | 0.41 m | 27.4° / 46° | 14.4° | 0.73–1.69 | 5.8 |
-| 5 Hz | C | 169 (11 / 5) | 0.26 m | 17.0° / 44° | 11.7° | 0.63–1.44 | 13.9 |
+| 5 Hz | C | 169 (15 / 5) | 0.19 m | 11.9° / 22° | 12.2° | 0.73–1.35 | 17.8 |
 | 5 Hz | OpenCV prototype | 169 (3 / 0) | 0.44 m | 25.7° / 49° | 12.7° | 0.48–1.61 | 7.9 |
-| 3 Hz | C | 101 (20 / 1) | 0.51 m | 49.6° / 83° | 8.7° | 0.28–2.27 | 14.9 |
+| 3 Hz | C | 101 (18 / 1) | 0.36 m | 26.2° / 51° | 9.9° | 0.31–1.47 | 13.2 |
 | 3 Hz | OpenCV prototype | 101 (7 / 0) | 0.33 m | 18.5° / 47° | 11.2° | 0.35–2.12 | 9.1 |
 
 C port over 16 RANSAC seeds, median [smallest–largest]:
 
 | Rate | Position RMSE after alignment | Heading RMSE | Scale ratio spread over 5 s windows (largest / smallest) | Lost steps |
 |---:|---:|---:|---:|---:|
-| 10 Hz | 0.39 m [0.32–0.46] | 32.4° [27–43] | 6.8× [3.0–18.3] | 2 [0–3] |
-| 5 Hz | 0.26 m [0.21–0.31] | 17.1° [9–25] | 2.1× [1.6–2.7] | 11 [9–13] |
-| 3 Hz | 0.45 m [0.37–0.51] | 21.1° [8–50] | 8.1× [6.7–9.7] | 18 [16–20] |
+| 10 Hz | 0.39 m [0.36–0.43] | 39.5° [30–46] | 8.3× [4.0–16.5] | 2 [1–4] |
+| 5 Hz | 0.21 m [0.15–0.27] | 19.4° [5–26] | 2.0× [1.4–2.9] | 13 [11–15] |
+| 3 Hz | 0.38 m [0.34–0.56] | 39.1° [26–66] | 4.2× [1.6–8.6] | 17 [16–19] |
 
 `board_expected_10hz.json` holds the FNV-1a hash of every 10 Hz step (338 steps) for the board stream test (uwslam.mvo_stream).
 
@@ -27,4 +27,23 @@ Re-run (the output folder must not exist or be empty):
 
 ```bash
 python -m uwslam.mvo compare <video> --reconstruction <folder with images.txt> --output results/lake_clip/mono_vo_c_2 --board-frames <file for the board's frames>
+```
+
+## ESP32 boards
+
+The host streams grayscale frames and optional masks over the board's serial link (`python -m uwslam.mvo_stream`): the ESP32-S3's USB-Serial-JTAG port, or an ESP32-P4 board's USB-UART bridge. The board reports each step's hash and stage times. These timings exclude capture and transfer. Each record provides its own clock, build configuration (core/mono_vo.h: s3, the default, or p4), rate, core count and kernel choice (the vector kernels are mvo_pie.S on the S3 and mvo_pie_p4.S on the P4). Before streaming, the board checks its vector dispatch against C on random windows. Records and raw serial lines are in `board/`.
+
+| Record | Clock | Config | Rate | Cores | Kernels | Frames | Steps equal to the PC | Map | Per step, mean / median / max | Tracking | Motion | Detection | Map update | Voxel map / directions / plan (update) |
+|---|---:|---|---:|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---|
+| `p4_360mhz_usj` | 360 MHz | p4 | 10 Hz | 2 | vector | 339 | 338 of 338 | 2437 observations, hash equal to the PC's | 102 / 99 / 163 ms | 66 ms | 28 ms | 8 ms | 0.0 ms | 3035 voxels, hash equal to the PC's (0.5 ms); directions equal to the PC's (0.17 ms); plans equal to the PC's (1.77 ms) |
+| `p4_360mhz_usj_5hz` | 360 MHz | p4 | 5 Hz | 2 | vector | 170 | 169 of 169 | 1623 observations, hash equal to the PC's | 127 / 132 / 155 ms | 86 ms | 26 ms | 16 ms | 0.0 ms | 3611 voxels, hash equal to the PC's (0.5 ms); directions equal to the PC's (0.17 ms); plans equal to the PC's (1.75 ms) |
+
+These two records were streamed over the ESP32-P4's own USB-Serial-JTAG port, not its USB-UART bridge: the firmware was built as in the P4 line below with `CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y` added after `sdkconfig.defaults.esp32p4` (`-D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;<that file>"`, in a build folder of its own), which changes only the console.
+
+Re-run (after `uwslam.mvo compare --board-frames` and `uwslam.mono_map --board-masks`):
+
+```bash
+idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_240 -p <port> flash
+idf.py -C firmware/esp32s3_mono_vo -B firmware/esp32s3_mono_vo/build_p4 -D SDKCONFIG=build_p4/sdkconfig -D IDF_TARGET=esp32p4 -p <port> flash   # an ESP32-P4: the p4 configuration (UWSLAM_CONFIG=p4 on the PC)
+python -m uwslam.mvo_stream --port <port> --frames <frames file> --masks <masks file> --label <name>
 ```

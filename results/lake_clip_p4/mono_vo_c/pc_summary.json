@@ -7,34 +7,41 @@
   "pyramid_bytes_each": 102464,
   "time_scale": 3.0,
   "hfov_deg": 110.0,
+  "lens": [
+    0.0,
+    0.0,
+    -0.02,
+    0.0,
+    0.0
+  ],
   "runs": [
     {
       "rate_hz": 10.0,
       "c": {
         "steps": 338,
-        "lost": 1,
-        "rotation_only": 11,
+        "lost": 4,
+        "rotation_only": 10,
         "kinds": {
-          "essential": 326,
-          "lost": 1,
-          "rotation": 11
+          "essential": 324,
+          "lost": 4,
+          "rotation": 10
         },
-        "median_tracks": 189.0,
-        "ate_rmse": 0.39121482779137334,
-        "ate_max": 1.2937448632677553,
-        "final_error": 0.42806345533159446,
+        "median_tracks": 190.0,
+        "ate_rmse": 0.3931833639696728,
+        "ate_max": 1.215843228078767,
+        "final_error": 0.5373000884234178,
         "path_length_reference": 8.932997424309496,
-        "alignment_scale": 0.020024055988297075,
-        "pair_rotation_median_deg": 1.0937503377093674,
-        "pair_rotation_p90_deg": 2.6116479340857186,
+        "alignment_scale": 0.014085802630850389,
+        "pair_rotation_median_deg": 1.1255155086346078,
+        "pair_rotation_p90_deg": 2.5923384991138847,
         "zero_rotation_median_deg": 0.9340647366841479,
-        "direction_median_deg": 13.051282537207486,
-        "direction_pairs": 198,
-        "heading_rmse_deg": 37.20902289974379,
-        "heading_max_deg": 63.34688817203874,
-        "scale_drift_window_ratio_min": 0.33014585835141685,
-        "scale_drift_window_ratio_max": 1.6921402725514088,
-        "ms_per_frame": 10.6996813607843
+        "direction_median_deg": 13.97804773250441,
+        "direction_pairs": 196,
+        "heading_rmse_deg": 33.00815396580514,
+        "heading_max_deg": 58.6361621019836,
+        "scale_drift_window_ratio_min": 0.21994276939860155,
+        "scale_drift_window_ratio_max": 1.5833676602017301,
+        "ms_per_frame": 13.415527514859857
       },
       "c_over_seeds": {
         "seeds": [
@@ -56,24 +63,24 @@
           15
         ],
         "ate_rmse": {
-          "median": 0.393808277476256,
-          "min": 0.317384973425552,
-          "max": 0.45818264349733706
+          "median": 0.3935203999644399,
+          "min": 0.35855715365364627,
+          "max": 0.4340667206888695
         },
         "heading_rmse_deg": {
-          "median": 32.35746701435234,
-          "min": 26.95064656017523,
-          "max": 43.2531763553134
+          "median": 39.479914759438564,
+          "min": 29.66256656021499,
+          "max": 45.58307921057324
         },
         "scale_spread": {
-          "median": 6.7837501539835525,
-          "min": 3.0173066671685356,
-          "max": 18.31580903263527
+          "median": 8.265353163185997,
+          "min": 4.011760820765265,
+          "max": 16.488974396136555
         },
         "lost": {
           "median": 2.0,
-          "min": 0.0,
-          "max": 3.0
+          "min": 1.0,
+          "max": 4.0
         }
       },
       "prototype": {
@@ -109,29 +116,29 @@
       "rate_hz": 5.0,
       "c": {
         "steps": 169,
-        "lost": 11,
+        "lost": 15,
         "rotation_only": 5,
         "kinds": {
-          "essential": 153,
-          "lost": 11,
+          "essential": 149,
+          "lost": 15,
           "rotation": 5
         },
-        "median_tracks": 145.0,
-        "ate_rmse": 0.2579397837385948,
-        "ate_max": 0.6632879195441446,
-        "final_error": 0.3838553006064933,
+        "median_tracks": 150.0,
+        "ate_rmse": 0.18987458012818098,
+        "ate_max": 0.44031842085489925,
+        "final_error": 0.2220851853840987,
         "path_length_reference": 8.881177235471185,
-        "alignment_scale": 0.105073578137977,
-        "pair_rotation_median_deg": 1.9467502701869681,
-        "pair_rotation_p90_deg": 4.3147320298009175,
+        "alignment_scale": 0.12041747934803733,
+        "pair_rotation_median_deg": 1.8866641760097917,
+        "pair_rotation_p90_deg": 4.022001257118719,
         "zero_rotation_median_deg": 1.7379290340112632,
-        "direction_median_deg": 11.654364589138162,
-        "direction_pairs": 147,
-        "heading_rmse_deg": 17.028757874945484,
-        "heading_max_deg": 44.07336847560182,
-        "scale_drift_window_ratio_min": 0.6337243754053502,
-        "scale_drift_window_ratio_max": 1.444273597951488,
-        "ms_per_frame": 13.940679881385577
+        "direction_median_deg": 12.156946762160247,
+        "direction_pairs": 143,
+        "heading_rmse_deg": 11.851744090763852,
+        "heading_max_deg": 21.528414181348914,
+        "scale_drift_window_ratio_min": 0.7337395949871954,
+        "scale_drift_window_ratio_max": 1.3527014363666066,
+        "ms_per_frame": 17.849828994188172
       },
       "c_over_seeds": {
         "seeds": [
@@ -153,24 +160,24 @@
           15
         ],
         "ate_rmse": {
-          "median": 0.25885373664490774,
-          "min": 0.21166967211901386,
-          "max": 0.3051643314633946
+          "median": 0.21352794085980115,
+          "min": 0.1483871693742926,
+          "max": 0.2748320653505884
         },
         "heading_rmse_deg": {
-          "median": 17.07450392335903,
-          "min": 8.561817532309986,
-          "max": 24.6361365818499
+          "median": 19.44425092592406,
+          "min": 4.940942141677143,
+          "max": 25.899355807450217
         },
         "scale_spread": {
-          "median": 2.1183489197279544,
-          "min": 1.6266789801671169,
-          "max": 2.723030439062909
+          "median": 2.0018657253170318,
+          "min": 1.442755418274666,
+          "max": 2.93778912570771
         },
         "lost": {
-          "median": 11.0,
-          "min": 9.0,
-          "max": 13.0
+          "median": 13.0,
+          "min": 11.0,
+          "max": 15.0
         }
       },
       "prototype": {
@@ -206,29 +213,29 @@
       "rate_hz": 3.0,
       "c": {
         "steps": 101,
-        "lost": 20,
+        "lost": 18,
         "rotation_only": 1,
         "kinds": {
-          "essential": 80,
-          "lost": 20,
+          "essential": 82,
+          "lost": 18,
           "rotation": 1
         },
         "median_tracks": 96.0,
-        "ate_rmse": 0.5071999457098864,
-        "ate_max": 1.4671097271778186,
-        "final_error": 0.9970572733153449,
+        "ate_rmse": 0.36069581237807097,
+        "ate_max": 1.1557381878515411,
+        "final_error": 0.45909812357219476,
         "path_length_reference": 8.755011057619953,
-        "alignment_scale": 0.07328318463654451,
-        "pair_rotation_median_deg": 3.0279057257829614,
-        "pair_rotation_p90_deg": 8.723407365918694,
+        "alignment_scale": 0.08033267621743351,
+        "pair_rotation_median_deg": 2.8887853156649115,
+        "pair_rotation_p90_deg": 14.012948623609097,
         "zero_rotation_median_deg": 2.426079879772317,
-        "direction_median_deg": 8.670440862619785,
-        "direction_pairs": 80,
-        "heading_rmse_deg": 49.56333317077851,
-        "heading_max_deg": 83.37542103164186,
-        "scale_drift_window_ratio_min": 0.2759760705034289,
-        "scale_drift_window_ratio_max": 2.271268070671926,
-        "ms_per_frame": 14.943691089260623
+        "direction_median_deg": 9.940580055754484,
+        "direction_pairs": 82,
+        "heading_rmse_deg": 26.222108847282612,
+        "heading_max_deg": 51.43812607573178,
+        "scale_drift_window_ratio_min": 0.3058876620093064,
+        "scale_drift_window_ratio_max": 1.4663450358725338,
+        "ms_per_frame": 13.228537624305353
       },
       "c_over_seeds": {
         "seeds": [
@@ -250,24 +257,24 @@
           15
         ],
         "ate_rmse": {
-          "median": 0.4507189053087235,
-          "min": 0.3722660456336282,
-          "max": 0.5071999457098864
+          "median": 0.38378347221556397,
+          "min": 0.3446984106858721,
+          "max": 0.5566394131780591
         },
         "heading_rmse_deg": {
-          "median": 21.12532059603371,
-          "min": 7.936381267096539,
-          "max": 49.56333317077851
+          "median": 39.06262700699672,
+          "min": 26.222108847282612,
+          "max": 66.06361088438837
         },
         "scale_spread": {
-          "median": 8.125224228386113,
-          "min": 6.679779536912052,
-          "max": 9.690594488936037
+          "median": 4.244288471656443,
+          "min": 1.6164326487512348,
+          "max": 8.609342910736528
         },
         "lost": {
-          "median": 18.0,
+          "median": 17.0,
           "min": 16.0,
-          "max": 20.0
+          "max": 19.0
         }
       },
       "prototype": {
@@ -306,6 +313,6 @@
     "steps": 338,
     "seed": 12345,
     "core_sha256": "b7b36567dd5de3e9171494186afdc8406cf6dc4e5a5c7b5b9eb0447bfa68390b",
-    "header_sha256": "c5c620d24046e5f9f6c17cf6e29bffae321c1d0d11f67991a00e284caa181f2e"
+    "header_sha256": "ddffb01256a7fa77e56465cd0143ab1d325dd128d0f4c461d4cd80cdc32318f6"
   }
 }

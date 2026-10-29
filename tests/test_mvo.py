@@ -227,8 +227,9 @@ class MonoVoCTests(unittest.TestCase):
     def test_tracker_kernels_follow_their_contract(self):
         # mvo_kernels_t in mono_vo.h: what a platform's vector kernels must reproduce (the board checks them against these).
         rng = np.random.default_rng(7)
-        side, lanes, stride = 2 * 7 + 1, 16, 40
-        image = rng.integers(0, 256, (24, stride), dtype=np.uint8)
+        config = mvo.CONFIGS[mvo.CONFIG]
+        side, lanes, stride = 2 * config["window"] + 1, config["lanes"], 40
+        image = rng.integers(0, 256, (side + 9, stride), dtype=np.uint8)
         weights = np.array([16384, 0, 0, 0], dtype=np.int16)
         while weights[0] == 16384:
             w = np.sort(rng.integers(0, 16385, 3))

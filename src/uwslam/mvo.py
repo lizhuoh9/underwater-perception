@@ -40,7 +40,8 @@ PLAN_SOURCE = CORE_DIR / "path_plan.c"
 WIDTH, HEIGHT = 320, 240
 # The build configuration (core/mono_vo.h): "s3", the default, or "p4" (MVO_CONFIG_P4: 300 features), chosen with the
 # UWSLAM_CONFIG environment variable for every tool that builds the core.
-CONFIGS = {"s3": {"defines": [], "max_features": 250}, "p4": {"defines": ["-DMVO_CONFIG_P4"], "max_features": 300}}
+CONFIGS = {"s3": {"defines": [], "max_features": 250, "window": 7, "lanes": 16},
+           "p4": {"defines": ["-DMVO_CONFIG_P4"], "max_features": 300, "window": 9, "lanes": 24}}  # MVO_WINDOW, MVO_LANES
 CONFIG = os.environ.get("UWSLAM_CONFIG", "s3")
 if CONFIG not in CONFIGS:
     raise ValueError(f"UWSLAM_CONFIG must be one of {', '.join(CONFIGS)}, got {CONFIG!r}")
@@ -181,10 +182,17 @@ def require_30fps(fps: float) -> None:
         raise ValueError(f"This experiment uses strides for 30 FPS, got {fps:g} FPS")
 
 
-def camera_for(hfov_deg: float, aspect: float) -> Camera:
-    """Intrinsics of the 320x240 frame, as uwslam.experiments.mask_motion.Camera.from_fov gives them."""
+def camera_for(hfov_deg: float, aspect: float, lens: tuple = (0.0,) * 5) -> Camera:
+    """Intrinsics of the 320x240 frame, as uwslam.experiments.mask_motion.Camera.from_fov gives them, and the lens
+    distortion (k1, k2, p1, p2, k3; zero for a pinhole)."""
     half = float(np.tan(np.radians(hfov_deg) / 2))
-    return Camera(WIDTH / 2 / half, HEIGHT / 2 / (aspect * half), WIDTH / 2, HEIGHT / 2)
+    return Camera(WIDTH / 2 / half, HEIGHT / 2 / (aspect * half), WIDTH / 2, HEIGHT / 2, *lens)
+
+
+def lake_camera() -> Camera:
+    """The lake clip's camera: its field of view and aspect, and its lens (uwslam.experiments.mono_vo.LENS)."""
+    from uwslam.experiments.mono_vo import ASPECT, HFOV_DEG, LENS
+    return camera_for(HFOV_DEG, ASPECT, LENS)
 
 
 def run_frames(vo: ctypes.CDLL, frames: list[np.ndarray], camera: Camera, seed: int = SEED) -> tuple[list[StepC], list[int], float]:
@@ -312,7 +320,7 @@ def write_report(output: Path, summary: dict) -> None:
 
 def compare(video: Path, reconstruction: Path, output: Path, board_frames: Path | None, time_scale: float) -> dict:
     from uwslam.experiments.mask_motion import reference_poses
-    from uwslam.experiments.mono_vo import ASPECT, HFOV_DEG, evaluate, read_frames
+    from uwslam.experiments.mono_vo import HFOV_DEG, LENS, evaluate, read_frames
     if output.exists() and any(output.iterdir()):
         raise FileExistsError("Refusing to overwrite results; choose a fresh --output")
     if board_frames is not None and board_frames.exists():
@@ -323,7 +331,7 @@ def compare(video: Path, reconstruction: Path, output: Path, board_frames: Path 
     grey = frames["320x240"]
     times = np.arange(len(grey)) / fps
     reference_rotations, reference_centres = reference_poses(poses, times, time_scale)
-    camera = camera_for(HFOV_DEG, ASPECT)
+    camera = lake_camera()
     prototype_path = LAKE_CLIP_RESULTS / "mono_vo/summary.json"
     prototype = json.loads(prototype_path.read_text(encoding="utf-8")) if prototype_path.exists() else {"runs": []}
     source = prototype.get("source", {})
@@ -369,7 +377,7 @@ def compare(video: Path, reconstruction: Path, output: Path, board_frames: Path 
                        "against the reference poses and set beside the OpenCV prototype",
                "core_sha256": board["core_sha256"], **build_config(), "state_bytes": state_bytes,
                "pyramid_bytes_each": pyramid_bytes,
-               "time_scale": time_scale, "hfov_deg": HFOV_DEG, "runs": runs,
+               "time_scale": time_scale, "hfov_deg": HFOV_DEG, "lens": list(LENS), "runs": runs,
                "board": {key: board[key] for key in ("rate_hz", "frames", "steps", "seed", "core_sha256", "header_sha256")}}
     dump_json(output / "pc_summary.json", summary)
     write_report(output, summary)

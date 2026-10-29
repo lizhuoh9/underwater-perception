@@ -16,7 +16,7 @@ static pp_plan_t plan, saved;
 static const mvo_camera_t lake = {112.0302963f, 148.2792358f, 160.0f, 120.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
 
 /* A camera at the origin looking along world z, one step being half a unit (so PP_SAFE_STEPS is 4 units), an empty
- * map of unit voxels, every direction seen and, from a first mask, none blocked. */
+ * map whose cells (PP_GROUP voxels to a side) are units, every direction seen and, from a first mask, none blocked. */
 static void setup(void)
 {
     memset(&vo, 0, sizeof vo);
@@ -26,17 +26,21 @@ static void setup(void)
     vo.recent_length[1] = 0.5f;
     vo.recent_length[2] = 0.9f;
     vm_init(&map);
-    map.side = 1.0f;
+    map.side = 1.0f / (float)PP_GROUP;
     assert(od_layout(&layout, &lake, 80, 60) == 1);
     od_init(&dirs);
     dirs.frames = 1;
     pp_init(&plan);
 }
 
-/* An obstacle voxel (seen in `frames` frames) holding world point (x, y, z); the planner measures to its centre. */
+/* An obstacle voxel (seen in `frames` frames) holding world point (x, y, z); the planner measures to the centre of
+ * its unit cell. */
 static void obstacle(float x, float y, float z, int frames)
 {
     vm_voxel_t *v = &map.voxel[map.count++];
+    x *= (float)PP_GROUP;
+    y *= (float)PP_GROUP;
+    z *= (float)PP_GROUP;
     v->key[0] = (int16_t)(x < 0.0f ? (int)x - 1 : (int)x);
     v->key[1] = (int16_t)(y < 0.0f ? (int)y - 1 : (int)y);
     v->key[2] = (int16_t)(z < 0.0f ? (int)z - 1 : (int)z);
@@ -140,7 +144,7 @@ static void creep_turn(void)
         dirs.blocked[d] = 1;
     }
     obstacle(-2.5f, 0.0f, 2.5f, 2); /* hard left, level, 3.6 units: 7.1 steps, too near to go, far enough to creep */
-    obstacle(-2.6f, 0.2f, 2.6f, 2);
+    obstacle(-2.6f, -0.4f, 2.6f, 2); /* the cell above, as far */
     assert(pp_update(&plan, &map, &vo, &layout, &dirs, NULL) == PP_CREEP && plan.direction == OD_COLUMNS);
     /* nothing to creep into: turn away from the side the map fills (right), towards the left */
     setup();
@@ -190,6 +194,51 @@ static void water_is_clear_to_the_surfaces_in_view(void)
     printf("clear ok %.3f\n", (double)expected);
 }
 
+#if PP_GROUP > 1
+/* The plan reads the voxels PP_GROUP to a side (path_plan.h): a cell's frames are its voxels' added, it is in view when
+ * any of its voxels was filed in this frame, and voxel indices divide rounding down (-1 and -2 share a cell, -3 not). */
+static void voxels_are_read_in_cells(void)
+{
+    int z;
+    float expected;
+    /* two single sightings in one cell make an obstacle: with a second cell ahead the range is known */
+    setup();
+    obstacle(0.2f, 0.3f, 3.0f, 1);
+    obstacle(0.7f, 0.8f, 3.7f, 1); /* another voxel of the unit cell (0, 0, 3) */
+    obstacle(-0.3f, 0.1f, 3.5f, 2);
+    assert(pp_update(&plan, &map, &vo, &layout, &dirs, NULL) == PP_GO);
+    assert((plan.known >> OD_CENTRE) & 1u && plan.range[OD_CENTRE] > 3.4f && plan.range[OD_CENTRE] < 3.7f);
+    setup(); /* one single sighting is no obstacle */
+    obstacle(0.2f, 0.3f, 3.0f, 1);
+    obstacle(-0.3f, 0.1f, 3.5f, 2);
+    assert(pp_update(&plan, &map, &vo, &layout, &dirs, NULL) == PP_GO && !((plan.known >> OD_CENTRE) & 1u));
+    /* negative indices: voxels -1 and -2 along x share cell -1 */
+    setup();
+    obstacle(-0.25f, 0.3f, 3.0f, 1);
+    obstacle(-0.75f, 0.3f, 3.2f, 1);
+    obstacle(0.2f, 0.3f, 3.0f, 2);
+    assert(pp_update(&plan, &map, &vo, &layout, &dirs, NULL) == PP_GO && (plan.known >> OD_CENTRE) & 1u);
+    setup(); /* voxels -2 and -3 lie in cells -1 and -2: two single sightings, no obstacle */
+    obstacle(-0.75f, 0.3f, 3.0f, 1);
+    obstacle(-1.25f, 0.3f, 3.2f, 1);
+    obstacle(0.2f, 0.3f, 3.0f, 2);
+    assert(pp_update(&plan, &map, &vo, &layout, &dirs, NULL) == PP_GO && !((plan.known >> OD_CENTRE) & 1u));
+    /* in view when any voxel of the cell was filed in this frame: ten cells, each a voxel seen before and one now */
+    setup();
+    map.frames = 5;
+    for (z = 2; z <= 11; ++z) {
+        obstacle(0.0f, 0.0f, (float)z, 1);
+        map.voxel[map.count - 1].seen = 4;
+        obstacle(0.6f, 0.6f, (float)z + 0.6f, 1);
+        map.voxel[map.count - 1].seen = 5;
+    }
+    assert(pp_update(&plan, &map, &vo, &layout, &dirs, NULL) == PP_GO);
+    expected = PP_CLEAR_SHARE * 0.5f * (mvo_sqrt(0.5f + 6.5f * 6.5f) + mvo_sqrt(0.5f + 7.5f * 7.5f));
+    assert(plan.clear > expected - 1e-4f && plan.clear < expected + 1e-4f);
+    printf("cells ok\n");
+}
+#endif
+
 static void same_input_same_bytes(void)
 {
     pp_plan_t other;
@@ -212,6 +261,9 @@ int main(void)
     goal_and_previous_choice();
     creep_turn();
     water_is_clear_to_the_surfaces_in_view();
+#if PP_GROUP > 1
+    voxels_are_read_in_cells();
+#endif
     same_input_same_bytes();
     printf("path_plan_check ok plan_bytes=%u\n", (unsigned)pp_plan_size());
     return 0;

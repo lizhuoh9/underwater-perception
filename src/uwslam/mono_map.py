@@ -349,7 +349,7 @@ def write_board_files(output: Path, board_masks: Path, result: dict, masks: list
 
 def run(video: Path, reconstruction: Path, output: Path, time_scale: float, board_masks: Path | None = None) -> dict:
     from uwslam.experiments.mask_motion import reference_poses
-    from uwslam.experiments.mono_vo import ASPECT, HFOV_DEG, read_frames
+    from uwslam.experiments.mono_vo import HFOV_DEG, LENS, read_frames
     if output.exists() and any(output.iterdir()):
         raise FileExistsError("Refusing to overwrite results; choose a fresh --output")
     if board_masks is not None and board_masks.exists():
@@ -364,7 +364,7 @@ def run(video: Path, reconstruction: Path, output: Path, time_scale: float, boar
     ref_rotations, ref_centres = reference_poses(poses, np.arange(len(grey)) / fps, time_scale)
     cloud = load_cloud_world(reconstruction)
     cloud_cam0 = (cloud - ref_centres[0]) @ ref_rotations[0]
-    camera = mvo.camera_for(HFOV_DEG, ASPECT)
+    camera = mvo.lake_camera()
     output.mkdir(parents=True, exist_ok=True)
     runs = []
     import tempfile
@@ -396,7 +396,7 @@ def run(video: Path, reconstruction: Path, output: Path, time_scale: float, boar
                   f"{number(median['median'] if median else None, '.2f', ' m')}", flush=True)
     summary = {"task": "Top-view obstacle map from the C monocular odometry and the segmentation's water masks on the "
                        "lake clip, scored against the reconstruction's cloud after aligning the camera path",
-               "sources_sha256": sources_sha256(), **mvo.build_config(), "masks": MASKS.name, "time_scale": time_scale, "hfov_deg": HFOV_DEG, "cloud_voxel_m": CLOUD_VOXEL,
+               "sources_sha256": sources_sha256(), **mvo.build_config(), "masks": MASKS.name, "time_scale": time_scale, "hfov_deg": HFOV_DEG, "lens": list(LENS), "cloud_voxel_m": CLOUD_VOXEL,
                "runs": runs}
     dump_json(output / "summary.json", summary)
     write_report(output, summary)

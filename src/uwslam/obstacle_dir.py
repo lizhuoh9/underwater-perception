@@ -287,7 +287,7 @@ def write_board_files(output: Path, result: dict, masks: list[np.ndarray | None]
 
 def run(video: Path, reconstruction: Path, output: Path, time_scale: float) -> dict:
     from uwslam.experiments.mask_motion import Camera, reference_poses
-    from uwslam.experiments.mono_vo import ASPECT, HFOV_DEG, read_frames
+    from uwslam.experiments.mono_vo import ASPECT, HFOV_DEG, LENS, read_frames
     from uwslam.mono_map import load_matched_masks
     if output.exists() and any(output.iterdir()):
         raise FileExistsError("Refusing to overwrite results; choose a fresh --output")
@@ -299,7 +299,7 @@ def run(video: Path, reconstruction: Path, output: Path, time_scale: float) -> d
     rotations, centres = reference_poses(poses, np.arange(len(grey)) / fps, time_scale)
     cloud = load_cloud(reconstruction)
     grid_camera = Camera.from_fov(HFOV_DEG, ASPECT)
-    camera = mvo.camera_for(HFOV_DEG, ASPECT)
+    camera = mvo.lake_camera()
     output.mkdir(parents=True, exist_ok=True)
     runs = []
     import tempfile
@@ -326,7 +326,7 @@ def run(video: Path, reconstruction: Path, output: Path, time_scale: float) -> d
     summary = {"task": "Obstacle directions from the segmentation's water masks on the lake clip, scored against the "
                        "reference reconstruction's depth", "sources_sha256": sources_sha256(), **mvo.build_config(),
                "masks": "frames.npz",
-               "time_scale": time_scale, "hfov_deg": HFOV_DEG, "ranges_m": list(RANGES),
+               "time_scale": time_scale, "hfov_deg": HFOV_DEG, "lens": list(LENS), "ranges_m": list(RANGES),
                "reference_cell": {"min_points": MIN_POINTS, "depth_percentile": DEPTH_PERCENTILE}, "runs": runs}
     dump_json(output / "summary.json", summary)
     write_report(output, summary)
