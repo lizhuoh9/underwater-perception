@@ -87,6 +87,10 @@ uint32_t mvo_state_size(void) { return sizeof(mvo_t); }
 const char *mvo_config_name(void) { return MVO_CONFIG_NAME; }
 uint32_t mvo_max_features(void) { return MVO_MAX_FEATURES; }
 float mvo_sqrt(float v) { return v > 0.0f ? v : 0.0f; } /* the planner's ranges are not checked here */
+int mvo_gyro_mount(mvo_t *s, const float mount[9]) { (void)s; (void)mount; return 1; }
+void mvo_gyro_rate(mvo_t *s, const float rate[3], float dt) { (void)s; (void)rate; (void)dt; }
+void mvo_gyro_bias(const mvo_t *s, float bias[3]) { (void)s; bias[0] = bias[1] = bias[2] = 0.0f; }
+int mvo_gyro_used(const mvo_t *s) { (void)s; return MVO_GYRO_NONE; }
 void mm_init(mm_map_t *map) { memset(map, 0, sizeof *map); }
 int mm_observe(const mvo_t *vo, const uint8_t *mask, int w, int h, float (*out)[3], int capacity)
 { (void)vo; (void)mask; (void)w; (void)h; (void)out; (void)capacity; ++observations; return 1; }

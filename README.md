@@ -1,10 +1,11 @@
 # uwslam
 
-Monocular-camera SLAM for a small underwater robot: one camera, no IMU or rangers. A C core that gives the same results
-bit for bit on a PC and on an ESP32-P4 turns the robot camera's grey frames into the camera's motion and a continuing
-3D map, turns the segmentation model's water mask into the directions of the view that are blocked, and from both
-plans where to head next. Everything is checked on a lake clip against a 3D reconstruction of it, and on an ESP32-P4 by
-streaming the clip to the board over USB.
+Monocular-camera SLAM for a small underwater robot: one camera, an optional gyro, no rangers. A C core that gives the
+same results bit for bit on a PC and on an ESP32-P4 turns the robot camera's grey frames into the camera's motion and a
+continuing 3D map, turns the segmentation model's water mask into the directions of the view that are blocked, and from
+both plans where to head next. Everything is checked on a lake clip against a 3D reconstruction of it, the gyro on two
+sequences of the AQUALOC dataset, whose camera and gyro share one clock, and both on an ESP32-P4 by streaming them to
+the board over USB.
 
 [中文说明](README.zh-CN.md)
 
@@ -22,9 +23,10 @@ Two older maps stay beside them: [core/mono_map](core/mono_map.h), a top-view ob
 
 ## Findings
 
-All numbers come from the lake clip: the first 33.8 s of an underwater video filmed along a wall in a lake, at 30 FPS.
-The reference is a WaterSplat reconstruction of it: 88 camera poses (their stamps times 3, one video frame later, see
-[mask_motion](results/lake_clip/mask_motion/RESULTS.md)) and its point cloud, taken as metres. The water masks are the
+All numbers but the gyro's (item 6) come from the lake clip: the first 33.8 s of an underwater video filmed along a
+wall in a lake, at 30 FPS. The reference is a WaterSplat reconstruction of it: 88 camera poses (their stamps times 3,
+one video frame later, see [mask_motion](results/lake_clip/mask_motion/RESULTS.md)) and its point cloud, taken as
+metres. The water masks are the
 segmentation model's output on the robot camera's 160×120 frames. Medians are over 16 RANSAC seeds, because on this
 clip the seed alone can change an error twofold. Comparisons with earlier settings below were scored before the
 reference was moved by that frame, which changed the scores by under a millimetre in position, under a degree in median
@@ -56,9 +58,15 @@ heading and about a point in the plan's shares.
    water directions.
 5. **The ESP32-P4 gives the PC's results, at 5 Hz.** With the clip streamed at 5 and 10 Hz, the board gives every
    odometry step, the voxel map, the directions, the plan and the obstacle map exactly as the PC does. At 360 MHz on
-   two cores a 5 Hz step takes 127 ms (median 132, at most 155); the voxel map adds 0.48 ms, the directions 0.18 ms and
+   two cores a 5 Hz step takes 127 ms (median 132, at most 154); the voxel map adds 0.48 ms, the directions 0.18 ms and
    the plan 1.78 ms, within the 200 ms between frames. At 10 Hz a step takes 102 ms (median 99, at most 163), and 158
-   of the 338 steps take longer than the 100 ms between frames. 107,928 B of internal RAM stay free.
+   of the 338 steps take longer than the 100 ms between frames. 99,848 B of internal RAM stay free.
+6. **A gyro fills in what the camera alone cannot tell apart.** On AQUALOC's harbour sequences, whose camera looks
+   down at the seabed and takes much of the travel over it for turns, the gyro brings the 10 s windows' path error from
+   0.233 to 0.060 m in the median (lower in 93% of 1040 paired runs) and the whole sequences' from 3.25 to 2.04 m, with
+   the yaw 8.4° off instead of 66°. The core integrates the gyro's raw readings and learns its bias itself, and the
+   ESP32-P4 gives every step as the PC does. Without readings a step is the camera's alone, bit for bit
+   ([Gyro](#gyro-optional)).
 
 ## Repository layout
 
@@ -78,11 +86,14 @@ heading and about a point in the plan's shares.
 │   ├── obstacle_dir.py         the directions on the lake clip, scored against the reconstruction's depth
 │   ├── path_plan.py            the plan on the lake clip, scored against the reconstruction's free corridors
 │   ├── mono_map.py, mono_cloud.py   the older maps
-│   ├── mvo_stream.py           streams frames and masks to the board and checks every step against the PC
+│   ├── aqualoc.py              AQUALOC's harbour sequences as the core's input: frames, gyro readings, reference
+│   ├── aqualoc_score.py        the odometry on them with and without the gyro
+│   ├── mvo_stream.py           streams frames, masks and gyro readings to the board and checks every step against the PC
 │   └── experiments/            the OpenCV prototype (mono_vo), the reference poses and masks (mask_motion), the
 │                               segmentation model runner (segmenter)
 ├── tests/                      unittest suite; tests/c/ holds the C contract checks and firmware host harnesses
-└── results/lake_clip/          results, one folder per tool, each with RESULTS.md; the board's expectations and records
+├── results/lake_clip/          results, one folder per tool, each with RESULTS.md; the board's expectations and records
+└── results/aqualoc/            the gyro's scores; per sequence the preparation's checks, the board's expectations and records
 ```
 
 ## Getting started
@@ -105,6 +116,17 @@ python -m uwslam.voxel_map <video> --reconstruction <folder> --output results/la
 python -m uwslam.obstacle_dir <video> --reconstruction <folder> --output results/lake_clip/obstacle_dir_2
 python -m uwslam.path_plan <video> --reconstruction <folder> --output results/lake_clip/path_plan_2
 python -m uwslam.mono_map <video> --reconstruction <folder> --output results/lake_clip/mono_map_2 --board-masks <masks file>
+```
+
+AQUALOC's harbour sequences (https://www.lirmm.fr/aqualoc/: a sequence's raw-data archive and the meta files
+`harbor_camera_calib.yaml`, `harbor_imu_camera_calib.yaml` and `new_harbor_colmap_traj_sequence_NN.txt`) are not part
+of the repository either:
+
+```bash
+python -m uwslam.aqualoc prepare <raw_data folder> --trajectory <new_harbor_colmap_traj_sequence_NN.txt> \
+    --camera-calib <harbor_camera_calib.yaml> --imu-calib <harbor_imu_camera_calib.yaml> --output <prepared folder>
+python -m uwslam.aqualoc_score <prepared seq01> <prepared seq07> --output results/aqualoc_2 --jobs 8
+python -m uwslam.aqualoc board <prepared folder> --output <board files>
 ```
 
 The water masks come from [mask_motion](src/uwslam/experiments/mask_motion.py), which runs an exported ESP-DL int8
@@ -220,6 +242,61 @@ told the lens, the odometry keeps a pinhole's accuracy; taking the same frames f
 turn and in direction of travel. From Python: `mvo.Camera(fx, fy, cx, cy, k1, k2, p1, p2, k3)` (`mvo.clip_camera()`
 is the lake clip's), or `python -m uwslam.mono_cloud <video> --fx … --k1 … --k3 …`; the board's `start` line carries
 the five at its end, after the seed, cores and simd.
+
+## Gyro (optional)
+
+A gyro on the camera's clock tells apart what the camera alone cannot: a turn from travel across the view. The core
+takes its raw readings ([core/mono_vo.h](core/mono_vo.h)): `mvo_gyro_mount` once (the gyro's axes into the camera's),
+then before each step `mvo_gyro_rate` for every reading since the last frame (the rate in rad/s and the seconds it
+held). It integrates them itself, on the board too, less its bias estimate. A step without readings is the camera's
+alone, bit for bit: the lake clip's results do not change.
+
+Where the camera alone would end a step in ROTATION or LOST, the step takes the gyro's rotation and solves for the
+translation alone: two-pair MSAC on the epipolar constraint (at most 200 samples, scored half on each core), reweighted
+least squares and the search over the 81 travel directions (half on each core). It is ESSENTIAL when the translation
+evidence favours that translation over the gyro's rotation alone, else ROTATION with the gyro's rotation when 15
+tracks and half of them agree with it, else LOST with it. The bias is learnt from the camera's own ESSENTIAL steps
+that the gyro turns by less than 3°: the gyro's miss against the pose's rotation (at most 1° a step) over the step's
+time, the mean over the first 50 such steps and an exponential average with that weight after.
+`mvo_gyro_set_bias` starts it from a calibration instead. A step whose readings cover less than three quarters or more
+than four thirds of their usual time teaches no bias (readings lost on the way would read as one), the estimate stays
+within 10°/s, and a reading that is not finite or would turn by 2 rad or more is dropped.
+
+It was tested on [AQUALOC](https://www.lirmm.fr/aqualoc/)'s harbour sequences 01 and 07 (Ferrera et al., IJRR 2019):
+a monochrome camera looking down at the seabed from a small ROV, an MPU-9250 at 200 Hz on the same clock, calibrated
+with Kalibr; the reference is a Colmap reconstruction made metric by the pressure sensor.
+[uwslam.aqualoc](src/uwslam/aqualoc.py) resamples the 640×512 frames into a 320×240 camera the core models exactly and
+cuts the IMU's rates into each 5 Hz step's readings; [uwslam.aqualoc_score](src/uwslam/aqualoc_score.py) runs every
+seed with and without the gyro ([results/aqualoc/RESULTS.md](results/aqualoc/RESULTS.md)). At 5 Hz, median over 16
+seeds, and in brackets the share of the runs, paired by window and seed, in which the gyro's is lower:
+
+| | Camera alone | Gyro, bias learnt from zero | Gyro, bias carried in |
+|---|---:|---:|---:|
+| 10 s windows: position RMSE after alignment | 0.233 m | 0.060 m (93%) | 0.067 m (95%) |
+| 10 s windows: yaw RMSE | 3.74° | 2.84° (57%) | 1.07° (90%) |
+| 10 s windows: whole-orientation RMSE | 21.2° | 5.4° (98%) | 3.0° (98%) |
+| Whole sequences: position RMSE after alignment | 3.25 m | 2.04 m (100%) | |
+| Whole sequences: yaw RMSE | 66° | 8.4° (100%) | |
+
+"Carried in" starts each window from the bias the whole-sequence run had learnt by then, as a robot running all along
+would. On its own the camera files 74% of sequence 01's steps and 43% of sequence 07's as turns (seed 12345): travel
+over a nearly flat floor, which a homography explains as a turn. Without the bias learnt, sequence 01's 1.3°/s left a
+yaw RMSE of 121° over the sequence. Learnt from the camera's own rotations, which take a little travel across the view
+for a turn that tilts the camera's axis, the estimate stays a few tenths of a degree per second off on each axis: that
+costs the windows' position a little (0.055 m when the bias is not learnt) and bounds the yaw. Dropping the part of each miss that trades with the step's travel before learning
+did not help (whole sequences 2.13 m).
+
+On the ESP32-P4 every step, how it used the gyro and the final bias estimate equal the PC's (records in
+[results/aqualoc](results/aqualoc)); the board integrates a step's 40–42 readings in 39 µs:
+
+| Odometry per step, mean / median / max | Camera alone | With the gyro |
+|---|---:|---:|
+| Sequence 07 (564 steps) | 95 / 93 / 169 ms | 105 / 102 / 183 ms |
+| Sequence 01 (1145 steps) | 75 / 76 / 127 ms | 87 / 87 / 139 ms |
+
+What this does not show is the lake clip's failure: the fast swings of a forward-looking camera. The lake clip has no
+gyro, and one simulated from its reference was too coarse (about 1–2° a step against the images, where the gyro must
+match them to about 0.25°). That test needs the robot's own camera and gyro logged on one clock.
 
 ## Continuing voxel map
 
@@ -354,6 +431,15 @@ writes; with the 5 Hz expectations the board gets every second frame. The host n
 (`pip install -e ".[board]"`, or ESP-IDF's own Python). Before every stream it has the board check its vector kernels
 against the portable C ones on 2,000 random windows (`selftest`), and it refuses a board where any result differs.
 
+For the gyro, `uwslam.aqualoc board` writes a sequence's frames, each step's gyro readings and the expectations. With
+`--gyro` the host sends the gyro's mounting once (`mount`) and a step's readings before its frame (`gyro`), and checks
+how every step used the gyro and the final bias estimate as well:
+
+```bash
+python -m uwslam.mvo_stream --port <PORT> --frames <board files>/frames.bin --gyro <board files>/gyro.bin \
+    --expected results/aqualoc/seq07/board_expected_gyro.json --label <name>
+```
+
 [mvo_vector.S](firmware/mono_vo_stream/main/mvo_vector.S) holds the tracker's window kernels in the P4's vector
 instructions: a row of the 19×19 window takes three vectors of eight 16-bit lanes, and the kernels give exactly the
 integers of the C ones. A call costs 19.6 µs (a window) and 6.5 µs (its sums), against 118 and 36 µs for the C kernels
@@ -365,12 +451,12 @@ Measured with the lake clip's lens over the USB-Serial-JTAG port (records `p4_36
 | | 5 Hz (169 steps) | 10 Hz (338 steps) |
 |---|---:|---:|
 | Steps, voxel map, directions, plans and obstacle map equal to the PC's | all | all |
-| Odometry per step, mean / median / max | 127 / 132 / 155 ms | 102 / 99 / 163 ms |
-| Tracking / motion / detection, mean | 86 / 26 / 16 ms | 66 / 28 / 8 ms |
+| Odometry per step, mean / median / max | 127 / 132 / 154 ms | 102 / 99 / 163 ms |
+| Tracking / motion / detection, mean | 86 / 25 / 16 ms | 65 / 28 / 8 ms |
 | Voxel map update, mean / max | 0.48 / 2.6 ms | 0.55 / 4.1 ms |
 | Obstacle directions, mean | 0.18 ms | 0.18 ms |
 | Plan, mean / max | 1.78 / 3.0 ms | 1.83 / 2.9 ms |
-| Internal RAM free at the end | 107,928 B | 107,928 B |
+| Internal RAM free at the end | 99,848 B | 99,848 B |
 
 A 5 Hz step stays within the 200 ms between frames; at 10 Hz 158 of the 338 steps take longer than the 100 ms between
 frames. Everything lives in internal RAM: the two image pyramids (about 100 KB each), the odometry's state and the
@@ -386,6 +472,9 @@ the 5 Hz clip's 170 frames took 38 s), and the segmentation model is not in them
   Settings such as the 60 baselines of the step length's points were chosen on this clip alone.
 - A single camera: no metric scale, and the odometry drifts, in scale above all. The map closes no loops and does not
   relocalise after a loss.
+- The gyro is checked only on AQUALOC's downward-looking camera over a nearly flat seabed and on slow motion. The lake
+  clip's own failure, fast swings of a forward-looking camera, needs the robot's camera and gyro logged on one clock;
+  the bias the core learns from its own rotations stays a few tenths of a degree per second off on each axis.
 - The mask's directions are the camera's, not gravity-aligned; the mask cannot tell range.
 - The planner is local and scored open-loop on a clip the robot did not steer: it has not driven a robot yet.
 - The board check streams recorded frames and masks over a serial link; it does not include capture, the segmentation

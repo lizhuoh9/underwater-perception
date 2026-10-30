@@ -16,6 +16,7 @@ import struct
 import subprocess
 import tempfile
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -204,6 +205,14 @@ def build(output: Path) -> ctypes.CDLL:
     vo.mvo_tracks.restype = ctypes.c_int
     vo.mvo_step_length.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
     vo.mvo_step_length.restype = ctypes.c_float
+    vo.mvo_gyro_mount.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    vo.mvo_gyro_mount.restype = ctypes.c_int
+    vo.mvo_gyro_rate.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_float]
+    vo.mvo_gyro_bias.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    vo.mvo_gyro_set_bias.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    vo.mvo_gyro_set_bias.restype = ctypes.c_int
+    vo.mvo_gyro_used.argtypes = [ctypes.c_void_p]
+    vo.mvo_gyro_used.restype = ctypes.c_int
     vo.mvo_sqrt.argtypes = [ctypes.c_float]
     vo.mvo_sqrt.restype = ctypes.c_float
     vo.mvo_lk_template_c.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p]
@@ -252,13 +261,57 @@ def clip_camera() -> Camera:
     return camera_for(HFOV_DEG, ASPECT, LENS)
 
 
-def run_frames(
-    vo: ctypes.CDLL, frames: list[np.ndarray], camera: Camera, seed: int = SEED
-) -> tuple[list[StepC], list[int], float]:
-    """One run over the frames (the first starts it): the steps, each step's FNV-1a hash and the PC's ms per step."""
+@dataclass(frozen=True)
+class GyroReadings:
+    """A gyro for run_odometry: its mounting (3x3, a rate in the gyro's axes turned into the camera's), each step's
+    readings as float32 rows of (dt seconds, rate x, y, z in rad/s in the gyro's axes), and optionally the bias estimate
+    to start from (rad/s, the gyro's axes; mvo_gyro_set_bias)."""
+
+    mount: np.ndarray
+    steps: list[np.ndarray]
+    bias: np.ndarray | None = None
+
+    def __post_init__(self):
+        if np.asarray(self.mount).shape != (3, 3) or not np.all(np.isfinite(self.mount)):
+            raise ValueError("The gyro's mount must be a finite 3x3 matrix")
+        if self.bias is not None and (np.asarray(self.bias).shape != (3,) or not np.all(np.isfinite(self.bias))):
+            raise ValueError("The gyro's starting bias must be three finite numbers")
+        for k, rows in enumerate(self.steps):
+            if rows.dtype != np.float32 or rows.ndim != 2 or rows.shape[1] != 4:
+                raise ValueError(f"Step {k}'s gyro readings must be float32 rows of (dt, x, y, z)")
+            if not np.all(np.isfinite(rows)) or np.any(rows[:, 0] <= 0):
+                raise ValueError(f"Step {k}'s gyro readings need finite values and positive durations")
+
+
+@dataclass(frozen=True)
+class Run:
+    """One run of run_odometry: the steps, each step's FNV-1a hash, the PC's ms per step and, with a gyro, how each
+    step used it (MVO_GYRO_*) and the bias estimate after it (rad/s, the gyro's axes)."""
+
+    steps: list
+    hashes: list[int]
+    ms_per_step: float
+    gyro_used: list[int]
+    gyro_bias: list[tuple[float, float, float]]
+
+
+def run_odometry(
+    vo: ctypes.CDLL, frames: list[np.ndarray], camera: Camera, seed: int = SEED, gyro: GyroReadings | None = None
+) -> Run:
+    """One run over the frames (the first starts it), with a gyro's readings before each step when given."""
+    if gyro is not None and len(gyro.steps) != len(frames) - 1:
+        raise ValueError(f"Expected gyro readings for {len(frames) - 1} steps, got {len(gyro.steps)}")
     state = ctypes.create_string_buffer(vo.mvo_state_size())
     pyramids = [ctypes.create_string_buffer(vo.mvo_pyramid_bytes()) for _ in range(2)]  # alive as long as state
     vo.mvo_init(state, ctypes.byref(camera), seed, pyramids[0], pyramids[1])
+    if gyro is not None:
+        mount = np.ascontiguousarray(gyro.mount, dtype=np.float32).reshape(9)
+        if not vo.mvo_gyro_mount(state, mount.ctypes.data):
+            raise ValueError("The core refused the gyro's mount")
+        if gyro.bias is not None:
+            start = np.ascontiguousarray(gyro.bias, dtype=np.float32)  # alive through the call
+            if not vo.mvo_gyro_set_bias(state, start.ctypes.data):
+                raise ValueError("The core refused the starting bias: beyond MVO_GYRO_BIAS_LIMIT")
 
     def load(frame: np.ndarray) -> None:
         if frame.shape != (HEIGHT, WIDTH) or frame.dtype != np.uint8:
@@ -268,15 +321,32 @@ def run_frames(
 
     load(frames[0])
     vo.mvo_start(state)
-    steps, hashes = [], []
+    steps, hashes, used, biases = [], [], [], []
+    bias = np.zeros(3, dtype=np.float32)
     started = time.perf_counter()
-    for frame in frames[1:]:
+    for k, frame in enumerate(frames[1:]):
         load(frame)
+        if gyro is not None:
+            for row in gyro.steps[k]:
+                rate = np.ascontiguousarray(row[1:])
+                vo.mvo_gyro_rate(state, rate.ctypes.data, float(row[0]))
         step = StepC()
         vo.mvo_step(state, ctypes.byref(step))
         steps.append(step)
         hashes.append(fnv(FNV_OFFSET, bytes(step)))
-    return steps, hashes, (time.perf_counter() - started) * 1000 / max(1, len(steps))
+        if gyro is not None:
+            used.append(int(vo.mvo_gyro_used(state)))
+            vo.mvo_gyro_bias(state, bias.ctypes.data)
+            biases.append(tuple(float(v) for v in bias))
+    return Run(steps, hashes, (time.perf_counter() - started) * 1000 / max(1, len(steps)), used, biases)
+
+
+def run_frames(
+    vo: ctypes.CDLL, frames: list[np.ndarray], camera: Camera, seed: int = SEED
+) -> tuple[list[StepC], list[int], float]:
+    """One run over the frames without a gyro: the steps, each step's FNV-1a hash and the PC's ms per step."""
+    run = run_odometry(vo, frames, camera, seed)
+    return run.steps, run.hashes, run.ms_per_step
 
 
 def as_steps(steps: list[StepC]):

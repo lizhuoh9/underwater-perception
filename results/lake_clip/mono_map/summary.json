@@ -1,8 +1,8 @@
 {
   "task": "Top-view obstacle map from the C monocular odometry and the segmentation's water masks on the lake clip, scored against the reconstruction's cloud after aligning the camera path",
   "sources_sha256": {
-    "core_sha256": "18cc224519d93d64bf39725adee3c1900b7faade9abc8118ee4e418b330935ed",
-    "header_sha256": "1f8fcbaae57dc342d549496edd0d6aaa6c9254fea404ef4ec5f1165919b4fe49",
+    "core_sha256": "bdcacc6386b6e819a97ed993fe5bff054b9e7c71ad058538834acb263c51fcc2",
+    "header_sha256": "5531c01e53ccdbb72719b1b73e02122bdc3e9067d6c1ad482586a1f45c6318dd",
     "map_sha256": "af787363388c606fa0c2a17521cbe5ccd35e90584eca4c89b5ed6c7eb9d7ac75",
     "map_header_sha256": "d857c23130ce7cde6e9a8ed38b1d6d40641babbd040612bf6e25e0be59d09c64"
   },

@@ -6,7 +6,10 @@ the mask-independent 3D point cloud, verifies every exported float's bits and ca
 --expected-voxels (from `python -m uwslam.voxel_map`) every step's voxel count and filed observations and the final voxel
 map's hash must equal the PC's; with --expected-dirs (from `python -m uwslam.obstacle_dir`, masks required) every
 frame's obstacle directions (the choice and the blocked set) and the final state's hash; with --expected-plan (from
-`python -m uwslam.path_plan`) every step's plan and the final plan's hash.
+`python -m uwslam.path_plan`) every step's plan and the final plan's hash. With --gyro (the readings file
+`python -m uwslam.aqualoc board` writes beside an expectation with a gyro entry) the board gets the gyro's mounting
+once and each step's readings before its frame, and how every step used the gyro and the final bias estimate must
+equal the PC's.
 
 The frames file contains raw 320x240 grey frames back to back, from `python -m uwslam.mvo compare --board-frames` or
 `python -m uwslam.mono_cloud --board-files`. Its VO expectation gives the camera, the seed, the sources' SHA-256
@@ -70,6 +73,8 @@ DIR_SOURCES = ("dir_sha256", "dir_header_sha256")
 PLAN_SOURCES = ("plan_sha256", "plan_header_sha256")
 VOXEL_CAPACITY, VOXEL_SLOTS = 4096, 8192  # VM_CAPACITY, VM_SLOTS
 DIRECTIONS = 15  # OD_DIRECTIONS
+GYRO_READINGS, GYRO_READING_BYTES = 256, 16  # the firmware's: the most readings a step takes, and one's size
+GYRO_USES = ("none", "translation", "rotation", "lost")  # MVO_GYRO_*
 
 
 def fnv(data: bytes) -> int:
@@ -99,6 +104,44 @@ def fields(line: str) -> dict:
             key, value = word.split("=", 1)
             out[key] = int(value) if value.lstrip("-").isdigit() else value
     return out
+
+
+def read_gyro_file(path: Path, steps: int) -> list[bytes]:
+    """The readings file's steps as the payloads of the firmware's gyro command: per step a little-endian uint32 count,
+    then that many 16-byte readings (dt, rate x, y, z as little-endian floats)."""
+    data = path.read_bytes()
+    payloads, at = [], 0
+    while at < len(data):
+        if at + 4 > len(data):
+            raise ValueError(f"{path.name} ends inside a step's count")
+        (count,) = struct.unpack_from("<I", data, at)
+        if count > GYRO_READINGS:
+            raise ValueError(
+                f"{path.name}: step {len(payloads)} has {count} readings; the firmware takes {GYRO_READINGS}"
+            )
+        end = at + 4 + count * GYRO_READING_BYTES
+        if end > len(data):
+            raise ValueError(f"{path.name} ends inside step {len(payloads)}'s readings")
+        payloads.append(data[at + 4 : end])
+        at = end
+    if len(payloads) != steps:
+        raise ValueError(f"{path.name} holds readings for {len(payloads)} steps; the expected run has {steps}")
+    return payloads
+
+
+def validate_expected_gyro(gyro: dict, expected: dict) -> None:
+    """Refuse a gyro expectation that does not fit the run before opening the board."""
+    bits = gyro.get("mount_bits")
+    if not isinstance(bits, list) or len(bits) != 9 or not all(type(b) is int and 0 <= b <= 0xFFFFFFFF for b in bits):
+        raise ValueError("The gyro expectation needs nine mount_bits")
+    if not is_sha256(gyro.get("readings_sha256")):
+        raise ValueError("The gyro expectation needs the readings file's SHA-256")
+    used = gyro.get("used")
+    if not isinstance(used, list) or len(used) != expected["frames"] - 1 or any(u not in (0, 1, 2, 3) for u in used):
+        raise ValueError("The gyro expectation needs how each step used the gyro")
+    final = gyro.get("final_bias_bits")
+    if not isinstance(final, list) or len(final) != 3 or not all(type(b) is int for b in final):
+        raise ValueError("The gyro expectation needs the final bias estimate's bits")
 
 
 def validate_expected_map(expected_map: dict, expected: dict) -> None:
@@ -434,12 +477,22 @@ def stream(
     expected_dirs_path: Path | None = None,
     expected_plan_path: Path | None = None,
     baud: int = LINK_BAUD,
+    gyro_path: Path | None = None,
 ) -> tuple[dict, list[str]]:
     """Runs the frames (the first `limit` of them, when given) through the board on `cores` cores, tracking with the
-    vector kernels or (simd False) the portable ones and, with masks, building the map; the record and the board's
-    lines."""
+    vector kernels or (simd False) the portable ones and, with masks, building the map, and with a gyro expectation
+    sending each step's gyro readings before its frame; the record and the board's lines."""
     expected = json.loads(expected_path.read_text(encoding="utf-8"))
     expectation_config(expected)  # refuse expectations of another build before opening the board
+    expected_gyro = expected.get("gyro")
+    if (expected_gyro is None) != (gyro_path is None):
+        raise ValueError("A gyro expectation and a gyro readings file go together")
+    gyro_payloads = []
+    if expected_gyro is not None:
+        validate_expected_gyro(expected_gyro, expected)
+        if sha256_file(gyro_path) != expected_gyro["readings_sha256"]:
+            raise ValueError("The gyro readings file's SHA-256 differs from the PC run's")
+        gyro_payloads = read_gyro_file(gyro_path, expected["frames"] - 1)
     if masks_path is not None and expected_map_path is None:
         raise ValueError("A map expectation is required when streaming masks")
     expected_map = json.loads(expected_map_path.read_text(encoding="utf-8")) if masks_path is not None else None
@@ -544,12 +597,15 @@ def stream(
             ).encode()
         )
         started = fields(board.reply(("started",), REPLY_TIMEOUT_S))
+        if expected_gyro is not None:
+            board.send(("mount " + " ".join(str(bits) for bits in expected_gyro["mount_bits"]) + "\n").encode())
+            board.reply(("mounted",), REPLY_TIMEOUT_S)
         board.send(f"selftest {SELFTEST_CASES} {SELFTEST_SEED}\n".encode())
         selftest = fields(board.reply(("selftest",), SELFTEST_TIMEOUT_S))
         if selftest["template_mismatches"] or selftest["sums_mismatches"] or selftest["block_mismatches"]:
             raise RuntimeError(f"The board's vector kernels differ from the portable ones: {selftest}")
         steps, first, continuous_from_kind = [], None, 1
-        voxel_mismatches, dir_mismatches, plan_mismatches = [], [], []
+        voxel_mismatches, dir_mismatches, plan_mismatches, gyro_mismatches, gyro_us = [], [], [], [], []
         checked = (
             expected_map is not None
             or expected_cloud is not None
@@ -576,6 +632,10 @@ def stream(
                     f"Mask {index} is {'present' if record and record[0] else 'absent'}, unlike in the "
                     "direction expectation"
                 )
+            if expected_gyro is not None and index > 0:  # the readings of the step this frame ends
+                payload = gyro_payloads[index - 1]
+                board.send(f"gyro {len(payload) // GYRO_READING_BYTES} {fnv(payload)}\n".encode() + payload)
+                gyro_us.append(fields(board.reply(("gyro readings",), REPLY_TIMEOUT_S))["us"])
             if record and record[0]:
                 board.send(f"frame {index} {fnv(data)} {fnv(record[1:])}\n".encode() + data + record[1:])
             else:
@@ -632,6 +692,8 @@ def stream(
                     check_dirs(step, expected_dirs, index, dir_mismatches)
                     if type(step.get("dir_us")) is not int or step["dir_us"] < 0:
                         raise RuntimeError(f"Board step {index} has invalid direction timing")
+                if expected_gyro is not None and step.get("gyro") != expected_gyro["used"][index - 1]:
+                    gyro_mismatches.append(index)
                 if expected_plan is not None:
                     if (
                         step.get("plan") != expected_plan["actions"][index - 1]
@@ -650,6 +712,7 @@ def stream(
         board_voxels = fields(board.reply(("voxels",), REPLY_TIMEOUT_S)) if expected_voxels is not None else None
         board_dirs = fields(board.reply(("dirs",), REPLY_TIMEOUT_S)) if expected_dirs is not None else None
         board_plan = fields(board.reply(("plan ",), REPLY_TIMEOUT_S)) if expected_plan is not None else None
+        board_gyro = fields(board.reply(("gyro bias",), REPLY_TIMEOUT_S)) if expected_gyro is not None else None
         memory = fields(board.reply(("end",), REPLY_TIMEOUT_S))
         if expected_map is not None:
             check_continuity(board_map, wanted_final, "map")
@@ -778,6 +841,20 @@ def stream(
             "mismatched_steps": plan_mismatches,
             **{key: expected_plan[key] for key in PLAN_SOURCES},
         }
+    if expected_gyro is not None:
+        bias_bits = [board_gyro.get(f"bias_{axis}_bits") for axis in "xyz"]
+        bias_match = bias_bits == expected_gyro["final_bias_bits"] if full_run else None
+        record["gyro"] = {
+            "readings_file": gyro_path.name,
+            "readings_sha256": expected_gyro["readings_sha256"],
+            "used": {name: sum(step.get("gyro") == code for step in steps) for code, name in enumerate(GYRO_USES)},
+            "mismatched_steps": gyro_mismatches,
+            "final_bias_bits": bias_bits,
+            "bias_steps": board_gyro.get("bias_steps"),
+            "bias_match": bias_match,
+            "match": not gyro_mismatches and bias_match is not False,
+            "integration_us": summarise([float(us) for us in gyro_us]) if gyro_us else None,
+        }
     record["per_step"] = steps
     return record, board.lines
 
@@ -819,6 +896,12 @@ def write_board_section(results: Path) -> None:
                 f"plans {verdict[record['plan']['match']]}"
                 + (f" ({t['plan_ms']['mean']:.2f} ms)" if "plan_ms" in t else "")
             )
+        if record.get("gyro"):
+            integration = record["gyro"].get("integration_us")
+            extra.append(
+                f"gyro's use and final bias {verdict[record['gyro']['match']]}"
+                + (f" ({integration['mean']:.0f} µs to integrate a step's readings)" if integration else "")
+            )
         extra_cell = "; ".join(extra) if extra else "—"
         step_time = (
             f"{t['total_ms']['mean']:.0f} / {t['total_ms']['median']:.0f} / {t['total_ms']['max']:.0f} ms"
@@ -850,7 +933,7 @@ def write_board_section(results: Path) -> None:
         "and raw serial lines are in `board/`.",
         "",
         "| Record | Clock | Config | Rate | Cores | Kernels | Frames | Steps equal to the PC | Map | Per step, "
-        "mean / median / max | Tracking | Motion | Detection | Map update | Voxel map / directions / plan "
+        "mean / median / max | Tracking | Motion | Detection | Map update | Voxel map / directions / plan / gyro "
         "(update) |",
         "|---|---:|---|---:|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---|",
         *rows,
@@ -862,8 +945,13 @@ def write_board_section(results: Path) -> None:
             "bridge: the firmware was built as in the second line below, which changes only the console.",
             "",
         ]
+    with_gyro = any(
+        json.loads(path.read_text(encoding="utf-8")).get("gyro") for path in sorted((results / "board").glob("*.json"))
+    )
     section += [
-        "Re-run (after `uwslam.mvo compare --board-frames` and `uwslam.mono_map --board-masks`):",
+        "Re-run (after `uwslam.mvo compare --board-frames` and `uwslam.mono_map --board-masks`"
+        + (", or for a gyro sequence `uwslam.aqualoc board`" if with_gyro else "")
+        + "):",
         "",
         "```bash",
         "idf.py -C firmware/mono_vo_stream -B firmware/mono_vo_stream/build -D SDKCONFIG=build/sdkconfig "
@@ -871,6 +959,14 @@ def write_board_section(results: Path) -> None:
         "idf.py -C firmware/mono_vo_stream -B firmware/mono_vo_stream/build_usj -D SDKCONFIG=build_usj/sdkconfig "
         '-D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.usb_serial_jtag" -p <port> flash   # on USB-Serial-JTAG',
         "python -m uwslam.mvo_stream --port <port> --frames <frames file> --masks <masks file> --label <name>",
+        *(
+            [
+                "python -m uwslam.mvo_stream --port <port> --frames <frames file> --gyro <gyro readings> "
+                "--expected <board_expected_gyro.json> --label <name>   # with the gyro"
+            ]
+            if with_gyro
+            else []
+        ),
         "```",
         "",
     ]
@@ -919,6 +1015,7 @@ def main() -> None:
         help="Plan expectation from uwslam.path_plan "
         "(board_expected_plan_<rate>hz.json); give the masks and directions it was made with",
     )
+    parser.add_argument("--gyro", type=Path, help="Each step's gyro readings, for an expectation with a gyro entry")
     parser.add_argument("--label", required=True, help="Name of the saved record, e.g. p4_360mhz_usj_5hz")
     parser.add_argument("--frames-limit", type=int, help="Stream only the first this many frames")
     parser.add_argument("--cores", type=int, choices=(1, 2), default=2, help="Run on one core or on both")
@@ -972,6 +1069,7 @@ def main() -> None:
         args.expected_dirs,
         args.expected_plan,
         args.baud,
+        args.gyro,
     )
     if args.cloud_output is not None:
         write_cloud_ply(args.cloud_output, record["cloud"])
@@ -1016,6 +1114,11 @@ def main() -> None:
         print(
             f"directions: hash match = {record['dirs']['match']}, {len(record['dirs']['mismatched_frames'])} frames "
             f"differ, {record['timing']['dir_ms']['mean']:.2f} ms per update"
+        )
+    if "gyro" in record:
+        print(
+            f"gyro: steps by use {record['gyro']['used']}, {len(record['gyro']['mismatched_steps'])} differ, final "
+            f"bias match = {record['gyro']['bias_match']}"
         )
     if "plan" in record:
         print(

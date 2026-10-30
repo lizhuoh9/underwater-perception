@@ -289,6 +289,62 @@ class MonoCloudBoardHostTests(unittest.TestCase):
             self.assertEqual(struct.pack("<f", board["spread"]), struct.pack("<f", pc.spread))
         return result, record, lines
 
+    def test_gyro_readings_through_the_firmware_match_the_pc(self):
+        """A gyro mounted and read through the firmware's mount and gyro commands: every step, how each used the gyro
+        and the final bias estimate equal the PC's, the pure turn among the steps taking the gyro's rotation."""
+        from tests.test_mvo_gyro import readings
+
+        poses = list(self.poses[:4])
+        turned = euler_rotation(np.radians(1.5 * 3 + 4.0), 0.0, 0.0)
+        poses.append((turned, poses[-1][1]))  # a pure turn of 4 degrees
+        poses += [(turned, poses[-1][1] + np.array([0.30, 0.0, 0.15]) * k) for k in (1, 2)]
+        frames = [render(r, c, self.camera, texture(1), texture(2)) for r, c in poses]
+        mount = euler_rotation(0.4, -0.9, 1.2)  # the gyro's axes, turned into the camera's
+        bias = (0.01, -0.02, 0.005)
+        steps = [readings(poses[k][0].T @ poses[k + 1][0], bias, mount) for k in range(len(poses) - 1)]
+        run = mvo.run_odometry(self.vo, frames, self.camera, mvo.SEED, mvo.GyroReadings(mount, steps))
+        self.assertIn(2, run.gyro_used)  # MVO_GYRO_ROTATION: the turn
+        self.assertNotEqual(run.gyro_bias[-1], (0.0, 0.0, 0.0))  # the calm steps taught it
+
+        def bits(value: float) -> int:
+            return struct.unpack("<I", struct.pack("<f", value))[0]
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp:
+            folder = Path(temp)
+            frames_path, gyro_path, expected_path = folder / "frames.bin", folder / "gyro.bin", folder / "vo.json"
+            frames_path.write_bytes(b"".join(np.ascontiguousarray(frame).tobytes() for frame in frames))
+            gyro_path.write_bytes(
+                b"".join(struct.pack("<I", len(rows)) + rows.astype("<f4").tobytes() for rows in steps)
+            )
+            expected = {
+                "frames": len(frames),
+                "every": 1,
+                "rate_hz": None,
+                "step_hashes": run.hashes,
+                "camera_bits": [bits(getattr(self.camera, name)) for name in ("fx", "fy", "cx", "cy")],
+                "seed": mvo.SEED,
+                **{key: self.fingerprints[key] for key in ("core_sha256", "header_sha256")},
+                **mvo.build_config(),
+                "gyro": {
+                    "mount_bits": [bits(v) for v in mount.astype(np.float32).reshape(9)],
+                    "readings_sha256": hashlib.sha256(gyro_path.read_bytes()).hexdigest(),
+                    "used": run.gyro_used,
+                    "final_bias_bits": [bits(v) for v in run.gyro_bias[-1]],
+                },
+            }
+            expected_path.write_text(json.dumps(expected), encoding="utf-8")
+            with (
+                patch.object(mvo_stream, "Board", side_effect=lambda port, baud: ProcessBoard(self.program)),
+                patch("builtins.print"),
+            ):
+                record, _ = mvo_stream.stream("host-only", frames_path, expected_path, cores=1, gyro_path=gyro_path)
+                with self.assertRaisesRegex(ValueError, "go together"):
+                    mvo_stream.stream("host-only", frames_path, expected_path, cores=1)
+        self.assertTrue(record["all_match"])
+        self.assertTrue(record["gyro"]["match"])
+        self.assertTrue(record["gyro"]["bias_match"])
+        self.assertEqual(record["gyro"]["used"]["rotation"], run.gyro_used.count(2))
+
     def test_normal_video_real_vo_and_firmware_produce_identical_cloud(self):
         result, record, lines = self.replay(self.frames)
         self.assertTrue(all(item["kind"] == "essential" for item in result["trajectory"][1:]))

@@ -1,6 +1,7 @@
 /* The motion of a step with parallax, from the essential matrix: eight-point MSAC with least-squares refits on
  * Sampson distances, the decomposition and triangulation, robust Levenberg-Marquardt, the search over travel
- * directions, the cheirality cost and a fast turn's pull (see mono_vo_internal.h). */
+ * directions, the cheirality cost and a fast turn's pull; and the translation alone for a known rotation (a gyro's)
+ * (see mono_vo_internal.h). */
 #include "mono_vo_internal.h"
 
 #include <string.h>
@@ -11,6 +12,9 @@
 #define MVO_DIRECTIONS 81 /* travel directions tried by the direction search */
 #define MVO_SEARCH_POINTS 48 /* pairs the direction search fits */
 #define MVO_SEARCH_STEPS 3 /* Gauss-Newton steps on the rotation per searched direction */
+#define MVO_TRANSLATION_MIN 50 /* two-pair MSAC samples for a known rotation, drawn even when fewer would do */
+#define MVO_TRANSLATION_MAX 200 /* and at most: enough for an inlier share of 0.185 at 99.9% confidence */
+#define MVO_TRANSLATION_ROUNDS 5 /* reweighted least-squares rounds on the translation for a known rotation */
 
 #define MVO_REFINE_TOLERANCE 1e-4f /* an iteration gaining less than this share of the cost ends the refinement */
 
@@ -25,6 +29,8 @@ static mvo_refiner_t s_refiner[2];
 static mvo_searcher_t s_searcher[2];
 static uint8_t s_marks[2][MVO_MAX_FEATURES]; /* inlier marks of the samples a batch half scores */
 static float s_lsq[MVO_MAX_FEATURES][9]; /* constraint rows of a least-squares essential fit */
+static float s_normal[MVO_MAX_FEATURES][3]; /* for a known rotation R: (R a) x b of each pair, normal to the travel */
+static uint8_t s_every[MVO_MAX_FEATURES];   /* every pair marked */
 /* A fast turn's pull (see mono_vo.h), set for the step by mvo_essential_pose: the pure turn's rotation (x_B = R x_A),
  * its unit axis and the pull's weight, 0 for none; only read while the two refinements run at once. */
 static float s_turn[9], s_turn_axis[3], s_turn_weight;
@@ -1063,6 +1069,213 @@ int mvo_essential_pose(mvo_t *s, int n, float r[9], float t[3], const float turn
         essential_of(r, t, e);
         essential_inliers(s, e, n, MVO_RANSAC_PIXELS, mvo_best, 0);
     }
+    count = 0;
+    for (k = 0; k < n; ++k) {
+        mvo_epipolar[k] = mvo_best[k];
+        mvo_best[k] = (uint8_t)(mvo_best[k] && in_front(r, t, k));
+        count += mvo_best[k];
+    }
+    return count;
+}
+
+/* Reweighted least squares on t alone for the rotation r: each round holds the Sampson denominators (pixels) and the
+ * Geman-McClure weights at the current t and takes the unit t that minimises sum w (t . normal)^2, the smallest
+ * eigenvector; the Sampson numerator is t . normal, so this is the weighted Sampson cost. Plain least squares first,
+ * then robust with a shrinking scale, as direction_fit. Marked pairs only. */
+static void refine_translation(const mvo_t *s, int n, const uint8_t *mark, const float r[9], float t[3])
+{
+    static const float kInvSigma2[MVO_TRANSLATION_ROUNDS] = {0.0f, 0.25f, 1.0f, 1.0f, 1.0f}; /* per pixel squared */
+    int round, k, i, j;
+    for (round = 0; round < MVO_TRANSLATION_ROUNDS; ++round) {
+        float e[9], f[9], m[9], v[3];
+        int used = 0;
+        essential_of(r, t, e);
+        fundamental(&s->camera, e, f);
+        memset(m, 0, sizeof m);
+        for (k = 0; k < n; ++k) {
+            float num, den, w;
+            if (!mark[k]) {
+                continue;
+            }
+            sampson_parts(f, mvo_pa[k], mvo_pb[k], &num, &den);
+            if (!(den > 1e-20f)) {
+                continue;
+            }
+            w = 1.0f / den;
+            if (kInvSigma2[round] > 0.0f) {
+                const float robust = 1.0f + num * num * w * kInvSigma2[round];
+                w /= robust * robust;
+            }
+            for (i = 0; i < 3; ++i) {
+                for (j = i; j < 3; ++j) {
+                    m[3 * i + j] += w * s_normal[k][i] * s_normal[k][j];
+                }
+            }
+            ++used;
+        }
+        if (used < 2) {
+            return;
+        }
+        m[3] = m[1];
+        m[6] = m[2];
+        m[7] = m[5];
+        mvo_smallest_vector(m, 3, v);
+        if (dot3(v, t) < 0.0f) {
+            v[0] = -v[0];
+            v[1] = -v[1];
+            v[2] = -v[2];
+        }
+        memcpy(t, v, sizeof v);
+    }
+}
+
+/* t or -t, whichever pose_cost (cheirality included) prefers over every pair; returns that cost. */
+static float signed_translation(const mvo_t *s, int n, const float r[9], float t[3])
+{
+    const float minus[3] = {-t[0], -t[1], -t[2]};
+    const float ahead = pose_cost(s, r, t, n, s_every), behind = pose_cost(s, r, minus, n, s_every);
+    if (behind < ahead) {
+        memcpy(t, minus, sizeof minus);
+        return behind;
+    }
+    return ahead;
+}
+
+typedef struct { /* a batch of two-pair samples for a known rotation: half of them scored on each core */
+    const mvo_t *s;
+    int n;
+    const float *r;
+    int idx[MVO_RANSAC_BATCH][2];
+    float t[MVO_RANSAC_BATCH][3];  /* each sample's unit translation */
+    int valid[MVO_RANSAC_BATCH];   /* 0 where its two normals are parallel */
+    float score[MVO_RANSAC_BATCH]; /* its MSAC score */
+    int count[MVO_RANSAC_BATCH];   /* and inliers */
+} mvo_translation_batch_t;
+
+static void translation_half(void *context, int part)
+{
+    mvo_translation_batch_t *job = context;
+    int b;
+    for (b = part * MVO_RANSAC_BATCH / 2; b < (part + 1) * MVO_RANSAC_BATCH / 2; ++b) {
+        float e[9], norm2, inv, *c = job->t[b];
+        cross3(s_normal[job->idx[b][0]], s_normal[job->idx[b][1]], c);
+        norm2 = dot3(c, c);
+        job->valid[b] = norm2 >= 1e-24f;
+        if (!job->valid[b]) {
+            continue;
+        }
+        inv = mvo_rsqrt(norm2);
+        c[0] *= inv;
+        c[1] *= inv;
+        c[2] *= inv;
+        essential_of(job->r, c, e);
+        job->count[b] = essential_inliers(job->s, e, job->n, MVO_RANSAC_PIXELS, s_marks[part], &job->score[b]);
+    }
+}
+
+typedef struct { /* the direction search for a known rotation: half of kDirections on each core */
+    const mvo_t *s;
+    int n;
+    const float *r;
+    float cost[2]; /* each half's lowest cost */
+    float t[2][3]; /* and its direction, with the sign signed_translation chose */
+} mvo_translation_search_t;
+
+/* The first direction of half `part` with the lowest pose_cost; the halves are kDirections' first and second half,
+ * so that comparing the two (the second only when strictly lower) finds what a single pass in order finds. */
+static void translation_search_half(void *context, int part)
+{
+    mvo_translation_search_t *job = context;
+    const int half = (MVO_DIRECTIONS + 1) / 2;
+    int d;
+    job->cost[part] = 1e30f;
+    for (d = part * half; d < MVO_DIRECTIONS && d < (part + 1) * half; ++d) {
+        float trial[3], trial_cost;
+        memcpy(trial, kDirections[d], sizeof trial);
+        trial_cost = signed_translation(job->s, job->n, job->r, trial);
+        if (trial_cost < job->cost[part]) {
+            job->cost[part] = trial_cost;
+            memcpy(job->t[part], trial, sizeof trial);
+        }
+    }
+}
+
+/* The unit translation (x_B = R x_A + t) for the known rotation r that the pairs fit best: two-pair MSAC on the
+ * Sampson distance (a sample's t is normal_i x normal_j; at least MVO_TRANSLATION_MIN samples and at most
+ * MVO_TRANSLATION_MAX, drawn in batches of MVO_RANSAC_BATCH and scored at the same time when the caller gave
+ * s->parallel, then taken in order), its inliers refined by refine_translation; against it the best of the searched
+ * directions (kDirections, either sign, by pose_cost, half of them on each core), refined on its inliers within three
+ * pixels; the lower pose_cost over every pair wins, with its sign. No fast turn's pull: the rotation is not free. Marks
+ * the inliers of that pose (mvo_epipolar) and those of them in front of both cameras within MVO_MAX_DEPTH baselines
+ * (mvo_best), as mvo_essential_pose does, and returns the latter's count, or 0. */
+int mvo_translation_pose(mvo_t *s, int n, const float r[9], float t[3])
+{
+    float e[9], best_score = 0.0f, best_t[3], searched[3], cost, searched_cost;
+    int best = -1, iteration, needed = MVO_TRANSLATION_MAX, count, k, b;
+    mvo_translation_batch_t batch;
+    mvo_translation_search_t search;
+    if (n < 8) {
+        return 0;
+    }
+    s_turn_weight = 0.0f;
+    for (k = 0; k < n; ++k) {
+        const float a[3] = {mvo_ra[k][0], mvo_ra[k][1], 1.0f}, bk[3] = {mvo_rb[k][0], mvo_rb[k][1], 1.0f};
+        float y[3];
+        mat3_vec(r, a, y);
+        cross3(y, bk, s_normal[k]);
+        s_every[k] = 1;
+    }
+    batch.s = s;
+    batch.n = n;
+    batch.r = r;
+    for (iteration = 0; iteration < needed || iteration < MVO_TRANSLATION_MIN; iteration += MVO_RANSAC_BATCH) {
+        for (b = 0; b < MVO_RANSAC_BATCH; ++b) {
+            mvo_pick(&s->rng, n, 2, batch.idx[b]);
+        }
+        if (s->parallel) {
+            s->parallel(translation_half, &batch);
+        } else {
+            translation_half(&batch, 0);
+            translation_half(&batch, 1);
+        }
+        for (b = 0; b < MVO_RANSAC_BATCH; ++b) {
+            if (!batch.valid[b] || !(best < 0 || batch.score[b] < best_score)) {
+                continue;
+            }
+            best = batch.count[b];
+            best_score = batch.score[b];
+            memcpy(best_t, batch.t[b], sizeof best_t);
+            needed = mvo_ransac_needed(best > 2 ? best : 2, n, 2, 0.999f, MVO_TRANSLATION_MAX);
+        }
+    }
+    if (best < 8) {
+        return 0;
+    }
+    essential_of(r, best_t, e);
+    essential_inliers(s, e, n, MVO_RANSAC_PIXELS, mvo_inlier, 0);
+    refine_translation(s, n, mvo_inlier, r, best_t);
+    cost = signed_translation(s, n, r, best_t);
+    search.s = s; /* the global look: either sign of each direction */
+    search.n = n;
+    search.r = r;
+    if (s->parallel) {
+        s->parallel(translation_search_half, &search);
+    } else {
+        translation_search_half(&search, 0);
+        translation_search_half(&search, 1);
+    }
+    memcpy(searched, search.t[search.cost[1] < search.cost[0]], sizeof searched);
+    essential_of(r, searched, e);
+    if (essential_inliers(s, e, n, 3.0f * MVO_RANSAC_PIXELS, mvo_inlier, 0) >= 8) {
+        refine_translation(s, n, mvo_inlier, r, searched);
+        searched_cost = signed_translation(s, n, r, searched);
+        if (searched_cost < cost) {
+            memcpy(best_t, searched, sizeof searched);
+        }
+    }
+    memcpy(t, best_t, sizeof best_t);
+    essential_of(r, t, e);
+    essential_inliers(s, e, n, MVO_RANSAC_PIXELS, mvo_best, 0);
     count = 0;
     for (k = 0; k < n; ++k) {
         mvo_epipolar[k] = mvo_best[k];

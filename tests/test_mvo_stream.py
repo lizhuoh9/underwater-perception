@@ -671,3 +671,43 @@ class CloudProtocolTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GyroFileTests(unittest.TestCase):
+    """The gyro readings file and expectation the host checks before it opens a board."""
+
+    def write(self, folder: Path, counts: list[int]) -> Path:
+        path = folder / "gyro.bin"
+        path.write_bytes(b"".join(struct.pack("<I", n) + bytes(16 * n) for n in counts))
+        return path
+
+    def test_readings_file_splits_into_each_steps_payload(self):
+        with tempfile.TemporaryDirectory() as temp:
+            payloads = mvo_stream.read_gyro_file(self.write(Path(temp), [2, 0, 41]), 3)
+        self.assertEqual([len(p) for p in payloads], [32, 0, 41 * 16])
+
+    def test_readings_file_must_fit_the_run_and_the_firmware(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            with self.assertRaisesRegex(ValueError, "for 2 steps"):
+                mvo_stream.read_gyro_file(self.write(folder, [1, 1]), 3)
+            with self.assertRaisesRegex(ValueError, "the firmware takes 256"):
+                mvo_stream.read_gyro_file(self.write(folder, [257]), 1)
+            truncated = self.write(folder, [3])
+            truncated.write_bytes(truncated.read_bytes()[:-1])
+            with self.assertRaisesRegex(ValueError, "inside step 0"):
+                mvo_stream.read_gyro_file(truncated, 1)
+
+    def test_gyro_expectation_is_checked(self):
+        expected = {"frames": 3}
+        good = {"mount_bits": [0] * 9, "readings_sha256": "0" * 64, "used": [0, 1], "final_bias_bits": [0, 0, 0]}
+        mvo_stream.validate_expected_gyro(good, expected)
+        for key, value, message in (
+            ("mount_bits", [0] * 8, "nine mount_bits"),
+            ("readings_sha256", "x", "SHA-256"),
+            ("used", [0, 4], "each step used"),
+            ("used", [0], "each step used"),
+            ("final_bias_bits", [0.5, 0, 0], "final bias"),
+        ):
+            with self.assertRaisesRegex(ValueError, message):
+                mvo_stream.validate_expected_gyro({**good, key: value}, expected)

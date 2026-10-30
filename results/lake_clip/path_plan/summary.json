@@ -1,10 +1,10 @@
 {
   "task": "Local avoidance and 3D path choice from the voxel map and the water masks on the lake clip, scored open-loop against the reference reconstruction",
   "sources_sha256": {
-    "core_sha256": "18cc224519d93d64bf39725adee3c1900b7faade9abc8118ee4e418b330935ed",
-    "header_sha256": "1f8fcbaae57dc342d549496edd0d6aaa6c9254fea404ef4ec5f1165919b4fe49",
+    "core_sha256": "bdcacc6386b6e819a97ed993fe5bff054b9e7c71ad058538834acb263c51fcc2",
+    "header_sha256": "5531c01e53ccdbb72719b1b73e02122bdc3e9067d6c1ad482586a1f45c6318dd",
     "voxel_sha256": "b803ea6bf97c0334f71e65c3df31b06c2430e628b34f67a1c02d99f82a8eb0c5",
-    "voxel_header_sha256": "d45f150ef6cf43d2e43f45eff58dd09693159173415b27541256244c3b78eb1b",
+    "voxel_header_sha256": "6e9a931ac4d330e8c25cda1e2fedc2fad212fe73e5060b9694fdc5fcd928b5de",
     "dir_sha256": "ed8b510cdc05db181f41d5b8426ee2c7ee8d03d5ae04caa295ab71b7b3d12aa6",
     "dir_header_sha256": "f7a9953e140288518d505dfbef2716ec683810ac886cfdd86337a5651758dcc6",
     "plan_sha256": "fca11789672ae5c8202744e5e183ae470094094c95b164ace5cd6040e6157b73",
