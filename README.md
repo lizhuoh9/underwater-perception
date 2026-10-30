@@ -23,10 +23,12 @@ Two older maps stay beside them: [core/mono_map](core/mono_map.h), a top-view ob
 ## Findings
 
 All numbers come from the lake clip: the first 33.8 s of an underwater video filmed along a wall in a lake, at 30 FPS.
-The reference is a WaterSplat reconstruction of it: 88 camera poses (their stamps times 3, see
+The reference is a WaterSplat reconstruction of it: 88 camera poses (their stamps times 3, one video frame later, see
 [mask_motion](results/lake_clip/mask_motion/RESULTS.md)) and its point cloud, taken as metres. The water masks are the
 segmentation model's output on the robot camera's 160×120 frames. Medians are over 16 RANSAC seeds, because on this
-clip the seed alone can change an error twofold.
+clip the seed alone can change an error twofold. Comparisons with earlier settings below were scored before the
+reference was moved by that frame, which changed the scores by under a millimetre in position, under a degree in median
+heading and about a point in the plan's shares.
 
 1. **The odometry tracks the clip at the board's rate.** The C port's camera path, after one similarity alignment, is
    0.33 m RMSE at 10 Hz, 0.19 m at 5 Hz and 0.38 m at 3 Hz over the 8.9 m the camera swims. The OpenCV prototype it
@@ -35,20 +37,20 @@ clip the seed alone can change an error twofold.
    The C tools' runs take the camera's lens, whose distortion is not centred in the frame: without it every step
    pitched up a little.
 2. **The 3D map goes on for the whole clip.** The voxel map holds what the robot needs around it: every 5 s, the
-   obstacles it holds lie a median 5.5 cm (10 Hz) and 6.8 cm (5 Hz) from the reconstruction's surfaces, and 85% and
+   obstacles it holds lie a median 5.5 cm (10 Hz) and 6.7 cm (5 Hz) from the reconstruction's surfaces, and 85% and
    76% of them lie within 0.2 m. That is with the last 5 s of the path aligned to the reference. With one alignment
    for the whole drifting path, the obstacles held at the end lie a median 0.05 m and 0.07 m from them. It goes on
    through every tracking loss. The older maps, frozen at the first loss, stop after 4.2–4.4 s of the 33.8 s.
 3. **The water mask tells the blocked directions reliably.** When the reconstruction has a surface within 0.5, 1 or
    2 m filling half of one of the 15 directions, the mask blocks that direction too, in at least 99% of the cases in
    every band. At 5 Hz the direction it picks as free really is free 100%, 100% and 99% of the time at those ranges.
-   Straight ahead is free only 87%, 61% and 19% of the time, and a random direction 65%, 41% and 36%. The mask also
+   Straight ahead is free only 87%, 61% and 20% of the time, and a random direction 64%, 40% and 36%. The mask also
    blocks the water surface above, which the reconstruction lacks.
 4. **The planner heads into free water and knows how far it is.** Going, at 5 Hz, it heads into a corridor free beyond
-   0.5 m in 97% of its steps and beyond 1 m in 92%, never into one blocked within 0.25 m, where straight ahead is free
+   0.5 m in 97% of its steps and beyond 1 m in 93%, never into one blocked within 0.25 m, where straight ahead is free
    beyond 1 m in only 51%. Where the mask sees no free direction (3–4% of the steps, facing the wall) it creeps into the
    free water the map knows instead of having no answer. Its ranges, counted in steps of the robot's own speed, agree
-   with the reference's within a factor of 2 for 87% (5 Hz) and 82% (10 Hz) of the directions the map knows. Where the
+   with the reference's within a factor of 2 for 86% (5 Hz) and 82% (10 Hz) of the directions the map knows. Where the
    mask sees water the map holds no points, so the plan bounds those directions by the surfaces in view instead: free
    for a median 9.5 steps at 5 Hz (15.3 at 10 Hz), and the reference was nearer than that bound in at most 1% of the
    water directions.
@@ -127,9 +129,9 @@ the two is [results/lake_clip/mono_vo_c/RESULTS.md](results/lake_clip/mono_vo_c/
 
 | Rate | Position RMSE after alignment | Heading RMSE | Scale spread over 5 s windows | Lost steps |
 |---:|---:|---:|---:|---:|
-| 10 Hz | 0.33 m [0.26–0.37] | 39.5° [30–46] | 5.3× [2.4–9.2] | 2 [1–4] |
+| 10 Hz | 0.33 m [0.26–0.37] | 39.5° [30–46] | 5.3× [2.3–9.2] | 2 [1–4] |
 | 5 Hz | 0.19 m [0.16–0.26] | 19.4° [5–26] | 1.8× [1.4–2.6] | 13 [11–15] |
-| 3 Hz | 0.38 m [0.34–0.56] | 39.1° [26–66] | 4.1× [1.6–8.2] | 17 [16–19] |
+| 3 Hz | 0.38 m [0.34–0.56] | 39.1° [26–66] | 4.1× [1.6–8.1] | 17 [16–19] |
 
 Median [smallest–largest] over 16 seeds. A monocular run has no metric scale: the alignment supplies it.
 
@@ -232,7 +234,7 @@ the lake clip that keeps the last 5.7 s of obstacles (median; 90% within 12.8 s)
 | Rate | Local: median distance | Local: within 0.1 / 0.2 m | Global: median distance | Obstacles held | LOST steps gone through |
 |---:|---:|---:|---:|---:|---:|
 | 10 Hz | 0.055 m [0.046–0.063] | 68% / 85% | 0.05 m [0.04–0.08] | 2078 | 2 |
-| 5 Hz | 0.068 m [0.061–0.087] | 60% / 76% | 0.07 m [0.05–0.11] | 1068 | 13 |
+| 5 Hz | 0.067 m [0.061–0.085] | 60% / 76% | 0.07 m [0.05–0.11] | 1068 | 13 |
 
 Local: every 5 s, the obstacles the robot holds, with the last 5 s of its path aligned to the reference (what avoidance
 uses). Global: the obstacles held at the end, with one alignment of the whole path. Details and figures:
@@ -286,12 +288,12 @@ reconstruction: the 10th percentile range over the central half of the direction
 
 | 5 Hz, 16 seeds | Free beyond 0.25 m | Free beyond 0.5 m | Free beyond 1 m |
 |---|---:|---:|---:|
-| The plan, going (96% of the steps) | 100% | 97% | 92% |
+| The plan, going (96% of the steps) | 100% | 97% | 93% |
 | The plan, creeping (4% of the steps, where the mask sees no free direction) | 100% | 83% | 75% |
-| Straight ahead | 92% | 85% | 51% |
+| Straight ahead | 92% | 86% | 51% |
 | The best direction, in hindsight | 100% | 100% | 100% |
 
-While it goes, its corridors are as free as those of the mask's own choice (100%, 97% and 91%). On the default seed
+While it goes, its corridors are as free as those of the mask's own choice (100%, 97% and 93%). On the default seed
 the map vetoed a direction the mask saw as water in 5 steps at 5 Hz and in 3 at 10 Hz (once, at 10 Hz, the mask's own
 choice), and the reference had a surface within 8 steps for none of those vetoes. That is no failure of the map: the
 reference had no surface within 8 steps in any direction the mask saw as water, so there was nothing to veto. The map
@@ -378,9 +380,10 @@ the 5 Hz clip's 170 frames took 38 s), and the segmentation model is not in them
 ## Limitations
 
 - One clip, filmed by a diver rather than the robot, with the reference's own errors. The camera's 110° field of view
-  was fitted on the same clip, and its lens was never calibrated: the C tools' lake runs take only the decentring term
-  the clip itself shows (p1 = −0.02). Settings such as the 60 baselines of the step length's points were chosen on
-  this clip alone.
+  was fitted on the same clip, which pins it only to about ten degrees (re-timed, the fit prefers a narrower view; in
+  the C odometry narrower views won heading at 5 and 10 Hz on most measures but lost position at 5 Hz), and its lens
+  was never calibrated: the C tools' lake runs take only the decentring term the clip itself shows (p1 = −0.02).
+  Settings such as the 60 baselines of the step length's points were chosen on this clip alone.
 - A single camera: no metric scale, and the odometry drifts, in scale above all. The map closes no loops and does not
   relocalise after a loss.
 - The mask's directions are the camera's, not gravity-aligned; the mask cannot tell range.

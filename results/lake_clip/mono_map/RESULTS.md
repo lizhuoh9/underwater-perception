@@ -4,8 +4,8 @@ Camera only: `core/mono_vo*.c` gives the motion (up to scale), `core/mono_map.c`
 
 | Rate | Observations (frames) | Distance to cloud, median | Within 0.1 / 0.2 / 0.3 m | Path RMSE after alignment | Continuous frames / total | Alignment spread ratio | Grid cell (odometry units) | Occupied / unknown cells | Slice height / resets |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 10 Hz | 4656 (41) | 0.23 m | 9% / 36% / 75% | 0.09 m | 42 / 339 | 0.019 | 1.49 | 121 / 16263 | -2.88 / 2 |
-| 5 Hz | 2100 (21) | 0.23 m | 9% / 36% / 74% | 0.10 m | 22 / 170 | 0.017 | 1.03 | 202 / 16182 | -0.96 / 1 |
+| 10 Hz | 4656 (41) | 0.23 m | 10% / 36% / 74% | 0.09 m | 42 / 339 | 0.019 | 1.49 | 121 / 16263 | -2.88 / 2 |
+| 5 Hz | 2100 (21) | 0.23 m | 9% / 38% / 74% | 0.10 m | 22 / 170 | 0.018 | 1.03 | 202 / 16182 | -0.96 / 1 |
 
 Over 16 RANSAC seeds, median [smallest–largest]:
 

@@ -10,13 +10,13 @@ No free direction in 3% of the frames.
 
 | Range | Band | Reference blocked | Mask blocked | Reference-blocked directions the mask blocks | Mask-blocked directions the reference blocks |
 |---:|---|---:|---:|---:|---:|
-| 0.5 m | up | 24% | 89% | 100% | 28% |
+| 0.5 m | up | 25% | 89% | 100% | 28% |
 | 0.5 m | level | 26% | 60% | 100% | 43% |
 | 0.5 m | down | 61% | 100% | 100% | 61% |
 | 0.5 m | all | 37% | 83% | 100% | 45% |
-| 1 m | up | 36% | 89% | 100% | 40% |
-| 1 m | level | 45% | 60% | 100% | 74% |
-| 1 m | down | 84% | 100% | 100% | 84% |
+| 1 m | up | 35% | 89% | 100% | 40% |
+| 1 m | level | 45% | 60% | 100% | 75% |
+| 1 m | down | 83% | 100% | 100% | 83% |
 | 1 m | all | 55% | 83% | 100% | 66% |
 | 2 m | up | 36% | 89% | 100% | 40% |
 | 2 m | level | 54% | 60% | 99% | 89% |
@@ -25,9 +25,9 @@ No free direction in 3% of the frames.
 
 | Range | The choice is free | Straight ahead is free | A random direction is free | Share correlation |
 |---:|---:|---:|---:|---:|
-| 0.5 m | 100% | 87% | 66% | 0.54 |
+| 0.5 m | 100% | 88% | 66% | 0.54 |
 | 1 m | 100% | 61% | 45% | 0.68 |
-| 2 m | 99% | 19% | 41% | 0.71 |
+| 2 m | 99% | 20% | 40% | 0.71 |
 
 ## 5 Hz (170 frames)
 
@@ -41,18 +41,18 @@ No free direction in 4% of the frames.
 | 0.5 m | all | 37% | 84% | 100% | 44% |
 | 1 m | up | 36% | 90% | 100% | 40% |
 | 1 m | level | 45% | 61% | 100% | 74% |
-| 1 m | down | 83% | 100% | 100% | 83% |
+| 1 m | down | 84% | 100% | 100% | 84% |
 | 1 m | all | 55% | 84% | 100% | 65% |
 | 2 m | up | 36% | 90% | 100% | 40% |
-| 2 m | level | 54% | 61% | 100% | 89% |
-| 2 m | down | 85% | 100% | 100% | 85% |
+| 2 m | level | 54% | 61% | 100% | 88% |
+| 2 m | down | 86% | 100% | 100% | 86% |
 | 2 m | all | 59% | 84% | 100% | 70% |
 
 | Range | The choice is free | Straight ahead is free | A random direction is free | Share correlation |
 |---:|---:|---:|---:|---:|
-| 0.5 m | 100% | 87% | 65% | 0.54 |
-| 1 m | 100% | 61% | 41% | 0.68 |
-| 2 m | 99% | 19% | 36% | 0.71 |
+| 0.5 m | 100% | 87% | 64% | 0.54 |
+| 1 m | 100% | 61% | 40% | 0.68 |
+| 2 m | 99% | 20% | 36% | 0.71 |
 
 Figures: `directions_<rate>hz.png` (example frames with their directions, mask and reference depth) and `level_band_<rate>hz.png` (the level band over the clip).
 

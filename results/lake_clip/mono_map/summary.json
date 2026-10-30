@@ -22,9 +22,9 @@
   "runs": [
     {
       "rate_hz": 10.0,
-      "alignment_scale_m_per_unit": 0.06724559488757981,
-      "alignment_spread_ratio": 0.018786894050176334,
-      "ate_rmse_m": 0.093309244527409,
+      "alignment_scale_m_per_unit": 0.06732384301953932,
+      "alignment_spread_ratio": 0.018957449135399828,
+      "ate_rmse_m": 0.09309639507632746,
       "first_lost_frame": 42,
       "map_continuous": false,
       "continuous_frames": 42,
@@ -34,10 +34,10 @@
       "observations": 4656,
       "frames_with_observations": 41,
       "distance_to_cloud_m": {
-        "median": 0.23282963037490845,
-        "within_0.1": 0.09493127147766323,
-        "within_0.2": 0.3634020618556701,
-        "within_0.3": 0.7463487972508591
+        "median": 0.23332826048135757,
+        "within_0.1": 0.09514604810996563,
+        "within_0.2": 0.35652920962199314,
+        "within_0.3": 0.7448453608247423
       },
       "grid": {
         "cell_units": 1.4889302253723145,
@@ -73,24 +73,24 @@
           15
         ],
         "distance_median_m": {
-          "median": 0.22647731006145477,
-          "min": 0.19920144975185394,
-          "max": 0.2573608160018921
+          "median": 0.22610833495855331,
+          "min": 0.19980130344629288,
+          "max": 0.2572699189186096
         },
         "distance_valid_seeds": 16,
         "ate_rmse_m": {
-          "median": 0.08759324893675755,
-          "min": 0.06422496061524732,
-          "max": 0.11043165173762746
+          "median": 0.08760451458206756,
+          "min": 0.06491800937420304,
+          "max": 0.1102127487198866
         },
         "ate_valid_seeds": 16
       }
     },
     {
       "rate_hz": 5.0,
-      "alignment_scale_m_per_unit": 0.14344837550084066,
-      "alignment_spread_ratio": 0.01739840250746802,
-      "ate_rmse_m": 0.10213714700520501,
+      "alignment_scale_m_per_unit": 0.14339116801352278,
+      "alignment_spread_ratio": 0.017529835824581896,
+      "ate_rmse_m": 0.10176299871763098,
       "first_lost_frame": 22,
       "map_continuous": false,
       "continuous_frames": 22,
@@ -100,10 +100,10 @@
       "observations": 2100,
       "frames_with_observations": 21,
       "distance_to_cloud_m": {
-        "median": 0.2294928953051567,
-        "within_0.1": 0.08904761904761904,
-        "within_0.2": 0.36333333333333334,
-        "within_0.3": 0.7423809523809524
+        "median": 0.22956567257642746,
+        "within_0.1": 0.09238095238095238,
+        "within_0.2": 0.37523809523809526,
+        "within_0.3": 0.7433333333333333
       },
       "grid": {
         "cell_units": 1.0252094268798828,
@@ -139,15 +139,15 @@
           15
         ],
         "distance_median_m": {
-          "median": 0.2298467718064785,
-          "min": 0.17455530166625977,
-          "max": 0.24985669553279877
+          "median": 0.22972381860017776,
+          "min": 0.1749192327260971,
+          "max": 0.2489801123738289
         },
         "distance_valid_seeds": 16,
         "ate_rmse_m": {
-          "median": 0.102297720693267,
-          "min": 0.08149888505240135,
-          "max": 0.11983022095037528
+          "median": 0.10193089153802821,
+          "min": 0.08222641593393971,
+          "max": 0.11957790278885397
         },
         "ate_valid_seeds": 16
       }
