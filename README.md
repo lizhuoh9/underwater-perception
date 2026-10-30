@@ -5,7 +5,8 @@ rangers. A C core that gives the same results bit for bit on a PC and on an ESP3
 frames into the camera's motion and a continuing 3D map, turns the segmentation model's water mask into the
 directions of the view that are blocked, and from both plans where to head next. Everything is checked on a lake clip
 against a 3D reconstruction of it, the IMU on two sequences of the AQUALOC dataset, whose camera and IMU share one
-clock, and both on an ESP32-P4 by streaming them to the board over USB.
+clock, and both on an ESP32-P4 by streaming them to the board over USB. The board can also take a camera's JPEG
+frames and prepare them itself, in real time.
 
 [中文说明](README.zh-CN.md)
 
@@ -73,6 +74,11 @@ heading and about a point in the plan's shares.
    only about the vertical. The position after a full alignment stays about where it was (2.05 m against 2.03 m):
    almost all of what is left is horizontal, which gravity does not show. The ESP32-P4 gives every step and the
    world's up as the PC does ([Accelerometer](#accelerometer-optional)).
+8. **The ESP32-P4 prepares a camera's frames itself, in real time.** Sent the clip as a camera would send it, a JPEG
+   of the 960×544 colour frame every 200 ms, the board decodes each in its JPEG engine (6.1 ms), averages the
+   luminance onto the 320×240 frame on both cores (about 22 ms) and steps on it: 167 of the 169 frames after the
+   first, two dropped, a frame's whole work taking 198 ms in the median. The PC core on the board's frames gives
+   every step bit for bit, and they score like the PC tools' own frames ([Live input](#live-input)).
 
 ## Repository layout
 
@@ -84,8 +90,10 @@ heading and about a point in the plan's shares.
 │   ├── obstacle_dir.c/.h       blocked directions from the water mask
 │   ├── path_plan.c/.h          where to head next: local avoidance and 3D path choice
 │   ├── mono_map.c/.h           top-view obstacle slice (frozen at the first loss)
-│   └── mono_cloud.c/.h         sparse points of the tracked features (frozen at the first loss)
-├── firmware/mono_vo_stream/    ESP-IDF app for the ESP32-P4: runs the core on streamed frames and masks, reports hashes and times
+│   ├── mono_cloud.c/.h         sparse points of the tracked features (frozen at the first loss)
+│   └── frame_prep.c/.h         a camera's image averaged onto the 320×240 frame (the live build)
+├── firmware/mono_vo_stream/    ESP-IDF app for the ESP32-P4: runs the core on streamed frames and masks, reports hashes and times;
+│                               the live build decodes a camera's JPEG frames itself
 ├── src/uwslam/                 Python package
 │   ├── mvo.py                  ctypes binding of the core; the odometry on the lake clip against the OpenCV prototype
 │   ├── voxel_map.py            the voxel map on the lake clip, scored against the reconstruction
@@ -95,6 +103,7 @@ heading and about a point in the plan's shares.
 │   ├── aqualoc.py              AQUALOC's harbour sequences as the core's input: frames, IMU readings, reference
 │   ├── aqualoc_score.py        the odometry on them with and without the gyro and the accelerometer
 │   ├── mvo_stream.py           streams frames, masks and IMU readings to the board and checks every step against the PC
+│   ├── live_feed.py            plays a camera to the live build: JPEG frames in real time; checks the board's frames
 │   └── experiments/            the OpenCV prototype (mono_vo), the reference poses and masks (mask_motion), the
 │                               segmentation model runner (segmenter)
 ├── tests/                      unittest suite; tests/c/ holds the C contract checks and firmware host harnesses
@@ -453,7 +462,7 @@ has 10 Hz too.
 ## ESP32-P4
 
 [firmware/mono_vo_stream](firmware/mono_vo_stream) runs the odometry, the voxel map, the obstacle directions, the
-planner and the two older maps on an ESP32-P4 (two RISC-V cores at 360 MHz, PSRAM not used), on frames and masks
+planner and the two older maps on an ESP32-P4 (two RISC-V cores at 360 MHz; PSRAM only in the live build), on frames and masks
 streamed from the PC, and answers every frame with its step's hash, map counts and stage times.
 [mvo_stream.py](src/uwslam/mvo_stream.py) checks all of it against the PC's expectations. The board names its build,
 `p4`, and the sources it was built from in its `ready` line; the host refuses a board built from other sources, and
@@ -527,6 +536,51 @@ frames. Everything lives in internal RAM: the two image pyramids (about 100 KB e
 voxel map (56 KB). These are the board's compute times: the replay is paced by the link (over the USB-Serial-JTAG port
 the 5 Hz clip's 170 frames took 38 s), and the segmentation model is not in them.
 
+### Live input
+
+The live build ([sdkconfig.live](firmware/mono_vo_stream/sdkconfig.live): PSRAM on, at 200 MHz) takes frames the way a
+camera delivers them, compressed and at the camera's own size, and prepares them on the board. Each frame's
+structure is checked as it arrives; the P4's JPEG engine decodes it to YUV444, whose Y bytes are the JPEG's own luminance (in ESP-IDF 5.3.2 its RGB output scales the
+luminance as limited-range video, and its grey output fails on colour JPEGs); [core/frame_prep](core/frame_prep.h)
+averages that luminance onto the 320×240 frame, each pixel the mean of the source rectangle it covers, in integers,
+half the rows on each core; a worker task runs the odometry, the voxel map, the older maps and the plan on it while the
+next frame comes in. A frame still waiting when a newer one arrives is dropped, as a camera's would be. No masks reach
+the live build yet, so it gives no obstacle directions.
+
+Until the robot's camera is wired to the P4, [live_feed.py](src/uwslam/live_feed.py) plays that camera from the lake
+clip: every frame of the 5 Hz board stream as it is in the video (960×544, colour), JPEG at quality 80 (89,485 bytes
+on average), sent over the USB-Serial-JTAG port every 200 ms. With `--check` it waits for each step instead and reads back
+the frame the odometry saw.
+
+```bash
+idf.py -C firmware/mono_vo_stream -B firmware/mono_vo_stream/build_live -D SDKCONFIG=build_live/sdkconfig \
+    -D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.usb_serial_jtag;sdkconfig.live" -p <PORT> flash
+python -m uwslam.live_feed prepare <video> --reconstruction <folder> --output <prepared folder>
+python -m uwslam.live_feed stream <prepared folder> --port <PORT> --label <name> [--check]
+python -m uwslam.live_feed check <prepared folder> --label <check run> --reconstruction <folder> --output <fresh folder>
+```
+
+On the lake clip ([results/lake_clip/live](results/lake_clip/live/RESULTS.md)):
+
+| | Each frame waits for the last step | A frame every 200 ms |
+|---|---:|---:|
+| Frames stepped / dropped (after the first) | 169 / 0 | 167 / 2 |
+| JPEG decode, median | 6.1 ms | 6.1 ms |
+| Averaging onto 320×240, median / max | 21.6 / 22.7 ms | 21.7 / 36.2 ms |
+| Odometry step, median / max | 134 / 164 ms | 162 / 194 ms |
+| A frame's work, mean / median / max | 158 / 164 / 193 ms | 192 / 198 / 226 ms |
+| From a frame sent to its answer, mean | | 251 ms |
+| Internal RAM free at the end | 66,452 B | 66,452 B |
+
+The PC core on the board's own frames gives all 169 steps bit for bit. Those frames differ from libjpeg's decoding,
+averaged by the same code, by at most one grey level, in 2.9% of the pixels, and over the 16 seeds they score like the
+PC tools' own frames from the video: 0.19 m [0.13–0.28] after alignment, against 0.19 m [0.16–0.26]. As 4:2:2 or
+4:4:4 JPEGs the frames come out the same, decoded in 7.8 and 11.2 ms; sizes from 330×240 to 2048×1536 decode as
+closely. Damaged, oversized, out-of-order, grey, progressive and cut frames are refused with an error naming them,
+and the frames after them step. At 5 Hz the step slows by the next frame coming in during it (the USB driver wakes
+the command loop for every 64-byte packet); a camera on the P4's MIPI-CSI port would hand its frames over by DMA
+instead (not measured here).
+
 ## Limitations
 
 - One clip, filmed by a diver rather than the robot, with the reference's own errors. The camera's 110° field of view
@@ -546,3 +600,5 @@ the 5 Hz clip's 170 frames took 38 s), and the segmentation model is not in them
 - The planner is local and scored open-loop on a clip the robot did not steer: it has not driven a robot yet.
 - The board check streams recorded frames and masks over a serial link; it does not include capture, the segmentation
   model or the robot's other tasks.
+- The live build gets its JPEG frames from the PC over USB, whose receiving slows each 5 Hz step by about 28 ms in
+  the median (two frames of 170 dropped). The robot's camera and the segmentation model are not on the board yet.

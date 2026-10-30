@@ -43,6 +43,8 @@ CLOUD_HEADER = CORE_DIR / "mono_cloud.h"
 VOXEL_SOURCE = CORE_DIR / "voxel_map.c"
 DIRECTION_SOURCE = CORE_DIR / "obstacle_dir.c"
 PLAN_SOURCE = CORE_DIR / "path_plan.c"
+PREP_SOURCE = CORE_DIR / "frame_prep.c"  # a camera's grey image onto the 320x240 frame, as the live board does it
+PREP_HEADER = CORE_DIR / "frame_prep.h"
 WIDTH, HEIGHT = 320, 240
 # The core's build (core/mono_vo.h) as the board names it: expectations carry it, so the host can refuse a board built
 # from another core.
@@ -104,14 +106,22 @@ def sources_sha256() -> dict:
     }
 
 
+def prep_sha256() -> dict:
+    """The frame preparation's fingerprints as the live firmware reports them: its source's and its header's."""
+    return {
+        "prep_sha256": hashlib.sha256(PREP_SOURCE.read_bytes()).hexdigest(),
+        "prep_header_sha256": hashlib.sha256(PREP_HEADER.read_bytes()).hexdigest(),
+    }
+
+
 def build_config() -> dict:
     """The build, as the board reports it: expectations carry it, so the host can refuse a board built another way."""
     return {"config": CONFIG, "max_features": MAX_FEATURES}
 
 
 def build(output: Path) -> ctypes.CDLL:
-    """Compile the VO, obstacle grid, sparse cloud, voxel map, obstacle directions and planner with the board's
-    floating-point flags and bind them."""
+    """Compile the VO, obstacle grid, sparse cloud, voxel map, obstacle directions, planner and frame preparation with
+    the board's floating-point flags and bind them."""
     output.mkdir(parents=True, exist_ok=True)
     library = output / f"mono_vo{LIBRARY_SUFFIX}"
     subprocess.run(
@@ -127,6 +137,7 @@ def build(output: Path) -> ctypes.CDLL:
             str(VOXEL_SOURCE),
             str(DIRECTION_SOURCE),
             str(PLAN_SOURCE),
+            str(PREP_SOURCE),
             "-o",
             str(library),
         ],
@@ -140,6 +151,17 @@ def build(output: Path) -> ctypes.CDLL:
             f"The core built as {vo.mvo_config_name().decode()} with {vo.mvo_max_features()} features, "
             f"not as {CONFIG} with {MAX_FEATURES}"
         )
+    vo.fp_area_resize.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_void_p,
+        ctypes.c_int,
+        ctypes.c_int,
+    ]
+    vo.fp_area_resize.restype = ctypes.c_int
     vo.vm_map_size.restype = ctypes.c_uint32
     vo.vm_init.argtypes = [ctypes.c_void_p]
     vo.vm_update.argtypes = [
@@ -384,6 +406,19 @@ def run_odometry(
         vo.mvo_imu_up(state, values.ctypes.data)
         up = tuple(float(v) for v in values)
     return Run(steps, hashes, (time.perf_counter() - started) * 1000 / max(1, len(steps)), used, biases, up, dropped)
+
+
+def area_resize(vo: ctypes.CDLL, grey: np.ndarray) -> np.ndarray:
+    """A camera's grey image (such as a JPEG's luminance) averaged onto the 320x240 frame by core/frame_prep.c, as
+    the live board does it."""
+    if grey.dtype != np.uint8 or grey.ndim != 2:
+        raise ValueError("Expected a grey uint8 image")
+    source = np.ascontiguousarray(grey)
+    height, width = source.shape
+    out = np.zeros((HEIGHT, WIDTH), dtype=np.uint8)
+    if not vo.fp_area_resize(source.ctypes.data, width, height, source.strides[0], 1, out.ctypes.data, 0, HEIGHT):
+        raise ValueError(f"fp_area_resize refused a {width}x{height} image")
+    return out
 
 
 def run_frames(

@@ -37,6 +37,15 @@ the ESP32-P4.
    with `--gyro <out>/aqualoc_<seq>/gyro.bin --expected <out>/aqualoc_<seq>/board_expected_gyro.json`, and once with
    `board_expected_camera.json` alone, for the camera alone's time. Sequence 07 takes about 2 min over
    USB-Serial-JTAG, sequence 01 about 4.
+6. The live build, for any change to `core/frame_prep.*`, the firmware's live path or the odometry. Build and flash it
+   in a build folder of its own, after the chip check:
+   `idf.py -C firmware/mono_vo_stream -B firmware/mono_vo_stream/build_live -D SDKCONFIG=build_live/sdkconfig -D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.usb_serial_jtag;sdkconfig.live" -p <port> flash`
+   (a changed `sdkconfig.live` only reaches a build whose `build_live/sdkconfig` is deleted first). With the project
+   Python, `python -m uwslam.live_feed prepare <video> --reconstruction <folder> --output <out>/live`; with the ESP-IDF
+   Python, `python -m uwslam.live_feed stream <out>/live --port <port> --label check --check` (about 1 min), then the
+   same with `--label live` and no `--check` (real time, 35 s); with the project Python,
+   `python -m uwslam.live_feed check <out>/live --label check --reconstruction <folder> --output <out>/live_check`
+   (about 5 min) → `<out>/live/board/{check,live}.json` and `<out>/live_check/summary.json`.
 
 ## Done when
 
@@ -44,6 +53,8 @@ the ESP32-P4.
   fails), with the gyro every step's use of it and the final bias estimate too, and with the IMU also the world's up.
 - At 5 Hz the slowest step is under 200 ms, with the gyro and the IMU as well; internal RAM free at the end is in the
   record.
+- The live build: `steps_equal` equals `steps` in the check's summary.json, `decode_difference.max_abs` is at most 1,
+  and the real-time record's frames stepped, dropped and work per frame are in its `results` and `timing`.
 
 ## Report
 

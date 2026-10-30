@@ -1,14 +1,14 @@
-set(SOURCES "main.c" "../../../core/mono_vo.c" "../../../core/mono_vo_numerics.c" "../../../core/mono_vo_tracking.c"
+set(SOURCES "main.c" "live.c" "jpeg_check.c" "../../../core/mono_vo.c" "../../../core/mono_vo_numerics.c" "../../../core/mono_vo_tracking.c"
     "../../../core/mono_vo_homography.c" "../../../core/mono_vo_essential.c" "../../../core/mono_map.c"
     "../../../core/mono_cloud.c" "../../../core/voxel_map.c" "../../../core/obstacle_dir.c" "../../../core/path_plan.c"
-    "mvo_vector.S") # the tracker's window kernels in the ESP32-P4's vector instructions
+    "../../../core/frame_prep.c" "mvo_vector.S") # the tracker's window kernels in the ESP32-P4's vector instructions
 if(NOT CMAKE_BUILD_EARLY_EXPANSION AND NOT CONFIG_IDF_TARGET_ESP32P4) # sdkconfig is read after the early pass
     message(FATAL_ERROR "mono_vo_stream runs on the ESP32-P4 only: its window kernels use the P4's vector instructions")
 endif()
 idf_component_register(
     SRCS ${SOURCES}
     INCLUDE_DIRS "." "../../../core"
-    REQUIRES esp_timer esp_driver_usb_serial_jtag esp_driver_uart vfs
+    REQUIRES esp_timer esp_driver_usb_serial_jtag esp_driver_uart esp_driver_jpeg vfs
 )
 
 # Same floating-point contract as the PC build (uwslam.core.CFLAGS): no fused multiply-add, so results match bit for bit.
@@ -28,7 +28,8 @@ endforeach()
 string(SHA256 MVO_CORE_SHA256 "${MVO_CORE_TEXT}")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CORE}/mono_vo.h" "${CORE}/mono_map.c" "${CORE}/mono_map.h"
              "${CORE}/mono_cloud.c" "${CORE}/mono_cloud.h" "${CORE}/voxel_map.c" "${CORE}/voxel_map.h"
-             "${CORE}/obstacle_dir.c" "${CORE}/obstacle_dir.h" "${CORE}/path_plan.c" "${CORE}/path_plan.h")
+             "${CORE}/obstacle_dir.c" "${CORE}/obstacle_dir.h" "${CORE}/path_plan.c" "${CORE}/path_plan.h"
+             "${CORE}/frame_prep.c" "${CORE}/frame_prep.h")
 file(SHA256 "${CORE}/mono_vo.h" MVO_HEADER_SHA256)
 file(SHA256 "${CORE}/mono_map.c" MM_CORE_SHA256)
 file(SHA256 "${CORE}/mono_map.h" MM_HEADER_SHA256)
@@ -40,9 +41,12 @@ file(SHA256 "${CORE}/obstacle_dir.c" OD_CORE_SHA256)
 file(SHA256 "${CORE}/obstacle_dir.h" OD_HEADER_SHA256)
 file(SHA256 "${CORE}/path_plan.c" PP_CORE_SHA256)
 file(SHA256 "${CORE}/path_plan.h" PP_HEADER_SHA256)
+file(SHA256 "${CORE}/frame_prep.c" FP_CORE_SHA256)
+file(SHA256 "${CORE}/frame_prep.h" FP_HEADER_SHA256)
 target_compile_definitions(${COMPONENT_LIB} PRIVATE MVO_CORE_SHA256="${MVO_CORE_SHA256}" MVO_HEADER_SHA256="${MVO_HEADER_SHA256}"
                            MM_CORE_SHA256="${MM_CORE_SHA256}" MM_HEADER_SHA256="${MM_HEADER_SHA256}"
                            MC_CORE_SHA256="${MC_CORE_SHA256}" MC_HEADER_SHA256="${MC_HEADER_SHA256}"
                            VM_CORE_SHA256="${VM_CORE_SHA256}" VM_HEADER_SHA256="${VM_HEADER_SHA256}"
                            OD_CORE_SHA256="${OD_CORE_SHA256}" OD_HEADER_SHA256="${OD_HEADER_SHA256}"
-                           PP_CORE_SHA256="${PP_CORE_SHA256}" PP_HEADER_SHA256="${PP_HEADER_SHA256}")
+                           PP_CORE_SHA256="${PP_CORE_SHA256}" PP_HEADER_SHA256="${PP_HEADER_SHA256}"
+                           FP_CORE_SHA256="${FP_CORE_SHA256}" FP_HEADER_SHA256="${FP_HEADER_SHA256}")
