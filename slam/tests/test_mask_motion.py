@@ -136,12 +136,26 @@ class ReferenceTests(unittest.TestCase):
         poses = np.array(
             [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], [1.0, 2.0, 0.0, -4.0, 0.0, half, 0.0, half]]
         )  # 90 degrees about y, 1 s of images.txt time
-        rotations, centres = mm.reference_poses(poses, np.array([0.0, 0.75, 3.0 + 5e-7]), time_scale=3.0)
+        rotations, centres = mm.reference_poses(poses, np.array([0.0, 0.75, 3.0 + 5e-7]), time_scale=3.0, offset=0.0)
         self.assertAlmostEqual(mm.angle_deg(rotations[1]), 22.5, places=9)
         np.testing.assert_allclose(centres[1], [0.5, 0.0, -1.0])
         self.assertAlmostEqual(mm.angle_deg(rotations[2]), 90.0, places=6)
         with self.assertRaises(ValueError):
-            mm.reference_poses(poses, np.array([1.1]), time_scale=1.0)
+            mm.reference_poses(poses, np.array([1.1]), time_scale=1.0, offset=0.0)
+
+    def test_keyframe_stamps_land_one_video_frame_later(self):
+        half = np.sin(np.radians(45.0))
+        poses = np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], [1.0, 3.0, 0.0, 0.0, 0.0, half, 0.0, half]])
+        frame = mm.REFERENCE_OFFSET_S
+        self.assertAlmostEqual(frame, 1.0 / 30.0)
+        rotations, centres = mm.reference_poses(poses, np.array([0.0, frame, 1.5 + frame, 3.0 + frame]), 3.0)
+        np.testing.assert_allclose(centres[:, 0], [0.0, 0.0, 1.5, 3.0], atol=1e-12)  # the first frame holds keyframe 0
+        self.assertAlmostEqual(mm.angle_deg(rotations[2]), 45.0, places=9)
+        self.assertAlmostEqual(mm.angle_deg(rotations[3]), 90.0, places=6)
+        with self.assertRaises(ValueError):  # past the last keyframe, which now sits a frame later
+            mm.reference_poses(poses, np.array([3.0 + 2 * frame]), 3.0)
+        with self.assertRaises(ValueError):  # before the video's first frame
+            mm.reference_poses(poses, np.array([-frame]), 3.0)
 
     def test_essential_rotation_recovers_a_moving_camera(self):
         rng = np.random.default_rng(11)

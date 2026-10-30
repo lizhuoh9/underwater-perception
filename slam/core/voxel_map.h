@@ -21,11 +21,11 @@
  * every voxel farther than VM_RADIUS voxels from the camera (along any axis) is dropped and, when they are fewer than
  * VM_EVICT, others until VM_EVICT are gone: those seen in fewer than VM_CONFIRM frames before obstacles, each the longest
  * unseen first (ages count to 127 frames; beyond that, and within one age, the first seen goes first); voxels seen in
- * the current frame stay. Dropping single sightings first keeps about half as many obstacles again, and twice the
- * history, for the same memory (on the lake clip at 5 Hz, half of the obstacles held were last seen within 4 s, nine in
- * ten within 8 s; half again as many voxels added little there and did not fit the board's last free block). So the map
- * holds the robot's surroundings and its recent past, in the odometry's frame, which drifts: it is not a global
- * reconstruction and closes no loops.
+ * the current frame stay. Dropping single sightings first kept about half as many obstacles again, and twice the
+ * history, for the same memory (measured on the lake clip with coarser voxels); with the voxels below, half of the
+ * obstacles held at the end of a 5 Hz run were last seen within 5.7 s, nine in ten within 12.8 s (medians of 16 seeds).
+ * So the map holds the robot's surroundings and its recent past, in the odometry's frame, which drifts: it is not a
+ * global reconstruction and closes no loops.
  *
  * The voxels are fine, 16 to a scene depth, and 4096 of them are held (the ESP32-P4 has the memory): against voxels
  * twice as large and four times fewer, on the lake clip at 5 Hz with 15x15 windows, the median distance of the

@@ -1,0 +1,61 @@
+{
+  "images": 4586,
+  "frames_5hz": 1146,
+  "step_ms": {
+    "min": 195.49764099999578,
+    "max": 204.89643000000513
+  },
+  "imu_rate_hz": 196.8280761867359,
+  "readings_per_step": {
+    "min": 40,
+    "max": 42
+  },
+  "timeshift_cam_imu_s": -0.0403806549886,
+  "reference_turn_median_deg": 1.0993895936650062,
+  "gyro_error_deg": {
+    "median": 0.27384848430516134,
+    "p90": 0.36932368191462894
+  },
+  "fitted_bias_dps": [
+    0.09349267971759695,
+    1.2955385487368736,
+    0.054425826800546105
+  ],
+  "gyro_error_without_fitted_bias_deg": {
+    "median": 0.09638173689255576,
+    "p90": 0.1809811666433328
+  },
+  "vertical_world": [
+    0.00047713675728571506,
+    -0.004961690034492614,
+    0.9999875769090917
+  ],
+  "depth_slope_norm": 1.0152252975674647,
+  "depth_residual_rms_m": 0.037481435844701545,
+  "depth_samples_dropped": 1,
+  "camera": {
+    "core_ray_error_deg": {
+      "median": 2.091309789151873e-06,
+      "max": 1.4886052178675807e-05
+    },
+    "core_undistort_failures": 0,
+    "pixels_inside_source": 1.0,
+    "hfov_deg": 85.8029236848114,
+    "vfov_deg": 66.8378249417148
+  },
+  "accel_force_median": 9.669149517460756,
+  "accel_up_error_deg": {
+    "median": 4.128292442832412,
+    "p90": 5.123305189078561
+  },
+  "accel_bias_fit": [
+    0.17278895696041943,
+    -0.6913615362411782,
+    0.5793937668803463
+  ],
+  "accel_scale_fit": 9.054584987670337,
+  "accel_up_error_without_fitted_bias_deg": {
+    "median": 0.7454234462417375,
+    "p90": 1.2060174174155236
+  }
+}

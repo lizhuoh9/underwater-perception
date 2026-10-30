@@ -1,0 +1,40 @@
+ready mono_vo cpu_mhz=360 config=p4 max_features=300 state_bytes=9944 core_sha256=c90e4c217ae3c52bdf94b13e99503c095fa4f3228fc0fd9bc6ba4cad1792422a header_sha256=eff98693b23bc6bb696fdc764aee03a015a3d8e0b5c74ce6e1259eaaa472ad61 map_sha256=af787363388c606fa0c2a17521cbe5ccd35e90584eca4c89b5ed6c7eb9d7ac75 map_header_sha256=d857c23130ce7cde6e9a8ed38b1d6d40641babbd040612bf6e25e0be59d09c64 map_policy=1 cloud_sha256=670390b4a66f7edc7f4c399d74e4416d9d02b9449b65a172659d4a0ffcfc8dc4 cloud_header_sha256=78747eaa7cfd687bc0e779ca4c0a7f62cf72665cc62add928c1c7730fc474a9e cloud_policy=1 cloud_bytes=12300 cloud_capacity=512 voxel_sha256=b803ea6bf97c0334f71e65c3df31b06c2430e628b34f67a1c02d99f82a8eb0c5 voxel_header_sha256=6e9a931ac4d330e8c25cda1e2fedc2fad212fe73e5060b9694fdc5fcd928b5de voxel_bytes=57376 dir_sha256=ed8b510cdc05db181f41d5b8426ee2c7ee8d03d5ae04caa295ab71b7b3d12aa6 dir_header_sha256=f7a9953e140288518d505dfbef2716ec683810ac886cfdd86337a5651758dcc6 plan_sha256=fca11789672ae5c8202744e5e183ae470094094c95b164ace5cd6040e6157b73 plan_header_sha256=0b3ba95b625fdaa3af4311413ddadf5be0f37a808d6e339663ba38cb18a581f4 live=1 prep_sha256=b482910e8d892bc2618d50a84c06c5b2f19ef257b2cff1771bae62c60867a90a prep_header_sha256=a30de675f8a991093d78a2b8d8270ece81cbaeb8e89d10448e6a40c507c0f1bd
+started state_bytes=9944 cores=2 simd=1
+selftest cases=2000 template_mismatches=0 sums_mismatches=0 block_mismatches=0 template_us_c=117.73 template_us_simd=19.34 sums_us_c=35.91 sums_us_simd=6.45 block_us_c=8.13 block_us_simd=8.02 vector=1
+# PASS: a good first frame (expected 'first index=0'; 0 'unknown command' lines)
+first index=0 tracks=293 detect_us=18537 dir_choice=-1 dir_blocked=0 dir_us=0 source=960x544 jpeg_bytes=92868 wait_us=48 decode_us=6099 prep_us=22191 grey_hash=792825543 dropped=0
+# PASS: 600,000 bytes, more than a frame may have (expected 'error jpeg 1 refused'; 0 'unknown command' lines)
+error jpeg 1 refused: index below 0 or not 1 to 524288 bytes
+# PASS: a damaged frame (expected 'error jpeg 2 hash mismatch'; 0 'unknown command' lines)
+error jpeg 2 hash mismatch
+# PASS: a good frame after the gap (expected 'step index=3'; 0 'unknown command' lines)
+step index=3 kind=2 tracks=150 inliers=116 scale_points=0 hash=3012623781 detect_us=18822 track_us=93895 motion_us=32815 total_us=145635 observed=0 mapped=0 map_us=22 map_continuous=1 cloud_count=112 cloud_accepted=112 cloud_dropped=0 cloud_continuous=1 cloud_us=286 voxels=109 voxel_filed=112 voxel_us=362 dir_choice=-1 dir_blocked=0 dir_us=0 plan=1 plan_dir=7 plan_turn=0 plan_hash=4119165602 plan_us=326 gyro=0 source=960x544 jpeg_bytes=89180 wait_us=44 decode_us=6078 prep_us=21358 grey_hash=4021122468 dropped=0
+# PASS: an index going back (expected 'error jpeg 2 out of sequence'; 0 'unknown command' lines)
+error jpeg 2 out of sequence, expected 4 or later
+# PASS: a grey JPEG (expected 'error jpeg 4 is not a baseline colour JPEG'; 0 'unknown command' lines)
+error jpeg 4 is not a baseline colour JPEG of 320x240 to 2048x2048
+# PASS: a progressive JPEG (expected 'error jpeg 5 is not a baseline'; 0 'unknown command' lines)
+error jpeg 5 is not a baseline colour JPEG of 320x240 to 2048x2048
+# PASS: a 4:1:1 JPEG (expected 'error jpeg 6 is not a baseline'; 0 'unknown command' lines)
+error jpeg 6 is not a baseline colour JPEG of 320x240 to 2048x2048
+# PASS: a negative index (expected 'error jpeg -1 refused'; 0 'unknown command' lines)
+error jpeg -1 refused: index below 0 or not 1 to 524288 bytes
+# PASS: the scan cut in half, EOI kept (expected None; 0 'unknown command' lines)
+[0;31mE (316735) jpeg.decoder: the number of data units obtained after decoding a frame of image is different from the number of data units calculated based on the image resolution configured by the software[0m
+dma2d_force_end(968): transaction not in-flight[0m
+error jpeg 7 did not decode
+# PASS: a good frame after the cut scan (expected 'step index=8'; 0 'unknown command' lines)
+step index=8 kind=2 tracks=133 inliers=114 scale_points=92 hash=3985545786 detect_us=18739 track_us=92461 motion_us=25614 total_us=136913 observed=0 mapped=0 map_us=23 map_continuous=1 cloud_count=134 cloud_accepted=101 cloud_dropped=0 cloud_continuous=1 cloud_us=358 voxels=195 voxel_filed=101 voxel_us=339 dir_choice=-1 dir_blocked=0 dir_us=0 plan=1 plan_dir=7 plan_turn=0 plan_hash=182631162 plan_us=381 gyro=0 source=960x544 jpeg_bytes=86033 wait_us=28 decode_us=5750 prep_us=22183 grey_hash=978334540 dropped=0
+# PASS: frame 9 missing 500 bytes, then frame 10 (expected 'error jpeg 9'; 154 'unknown command' lines)
+error jpeg 9 hash mismatch
+# PASS: a good frame after the lost bytes (expected 'step index=11'; 1 'unknown command' lines)
+step index=11 kind=2 tracks=173 inliers=147 scale_points=112 hash=3831274991 detect_us=18445 track_us=104124 motion_us=36939 total_us=159612 observed=0 mapped=0 map_us=22 map_continuous=1 cloud_count=165 cloud_accepted=129 cloud_dropped=0 cloud_continuous=1 cloud_us=469 voxels=242 voxel_filed=129 voxel_us=409 dir_choice=-1 dir_blocked=0 dir_us=0 plan=1 plan_dir=7 plan_turn=0 plan_hash=2613631525 plan_us=424 gyro=0 source=960x544 jpeg_bytes=89180 wait_us=40 decode_us=6099 prep_us=21311 grey_hash=4021122468 dropped=0
+map cell_bits=0 origin_x=0 origin_z=0 observations=0 frames=0 slice_y_bits=0 height_resets=0 hash=617150965 map_continuous=1
+voxels side_bits=1057276985 count=242 frames=3 observations=342 evicted=0 merged=0 rescales=0 lost=0 hash=1702371142
+dirs frames=0 choice=-1 blocked=0 hash=3760807809
+plan frames=3 action=1 direction=7 turn=0 hash=2613631525
+gyro bias_x_bits=0 bias_y_bits=0 bias_z_bits=0 bias_steps=0
+imu up_x_bits=0 up_y_bits=0 up_z_bits=0 up_steps=0
+live received=5 dropped=0 psram_free=19387740 worker_stack_free_bytes=11384
+end heap_internal_free=66364 largest_block=31744 stack_free_words=14248 map_continuous=1 cloud_count=165 cloud_dropped=0 cloud_continuous=1 cloud_hash=647651819
+# 13 of 13 passed

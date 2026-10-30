@@ -9,7 +9,7 @@
  *   mono_vo_tracking.c    image pyramid, Shi-Tomasi corners, fixed-point pyramidal Lucas-Kanade
  *   mono_vo_homography.c  the rotation of a pure turn and the parallax test
  *   mono_vo_essential.c   the motion from the essential matrix: eight-point MSAC, decomposition and triangulation,
- *                         robust Levenberg-Marquardt, the direction search
+ *                         robust Levenberg-Marquardt, the direction search; the translation for a known rotation
  */
 #ifndef MONO_VO_INTERNAL_H
 #define MONO_VO_INTERNAL_H
@@ -149,6 +149,8 @@ int mvo_rotation_inlier(const mvo_t *s, const float rotation[9], int k);
 
 /* mono_vo_essential.c */
 int mvo_essential_pose(mvo_t *s, int n, float r[9], float t[3], const float turn[9]);
+/* The unit translation for the known rotation r (x_B = R x_A + t); marks and returns as mvo_essential_pose does. */
+int mvo_translation_pose(mvo_t *s, int n, const float r[9], float t[3]);
 int mvo_translation_evidence(const mvo_t *s, int n, const float rotation_ab[9], const float r[9], const float t[3]);
 int mvo_triangulate(const float r[9], const float t[3], const float ra[2], const float rb[2], float out[3]);
 float mvo_ray_spread(const float r[9], int k);

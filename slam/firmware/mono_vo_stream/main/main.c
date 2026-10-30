@@ -20,6 +20,18 @@
  *                                                       core; simd 1 (default) uses the vector kernels; the lens
  *                                                       distortion (mvo_camera_t) all five or none (a pinhole)
  *   board: started state_bytes=<n> cores=<1 or 2> simd=<0 or 1>
+ *   host:  mount <m0> ... <m8>                    a gyro's mounting (mvo_gyro_mount), row-major, as float bits
+ *   board: mounted
+ *   host:  gyro <count> <fnv>                     then count readings of 16 bytes: dt, rate x, y, z as little-endian
+ *                                                 floats (seconds, rad/s in the gyro's axes) for the step to the next
+ *                                                 frame, at most GYRO_READINGS; the core integrates them
+ *   board: gyro readings=<n> us=<t>
+ *   host:  accel_bias <b0> <b1> <b2>              an accelerometer's calibrated bias (mvo_imu_set_accel_bias), as
+ *                                                 float bits, m/s^2 in the IMU's axes
+ *   board: accel_bias set
+ *   host:  imu <count> <fnv>                      as gyro, readings of 28 bytes: dt, rate x, y, z, then the specific
+ *                                                 force x, y, z (m/s^2, the IMU's axes)
+ *   board: imu readings=<n> dropped=<forces the core left out> us=<t>
  *   host:  frame <index> <fnv> [<mask fnv>]       then the frame's 76800 bytes, and with a mask fnv its 600 bytes:
  *                                                 bit i of the mask (byte i / 8, least significant bit first) is cell
  *                                                 i in row-major order, set where it is not water
@@ -30,7 +42,7 @@
  *               map_continuous=<0 or 1> cloud_count=<n> cloud_accepted=<n> cloud_dropped=<n>
  *               cloud_continuous=<0 or 1> cloud_us=<t> voxels=<n> voxel_filed=<n> voxel_us=<t>
  *               dir_choice=<d> dir_blocked=<bits> dir_us=<t> plan=<action> plan_dir=<d> plan_turn=<-1, 0 or 1>
- *               plan_hash=<fnv of the pp_plan_t> plan_us=<t>
+ *               plan_hash=<fnv of the pp_plan_t> plan_us=<t> gyro=<how the step used the gyro, MVO_GYRO_*>
  *                                                 dir_*: the obstacle directions after this frame's mask (unchanged
  *                                                 without one): the choice (-1: none free) and bit d set where
  *                                                 direction d is blocked; plan*: the plan after this step
@@ -41,13 +53,40 @@
  *              lost=<n> hash=<fnv of the vm_map_t>
  *          dirs frames=<n> choice=<d> blocked=<bits> hash=<fnv of the od_state_t>
  *          plan frames=<n> action=<a> direction=<d> turn=<t> hash=<fnv of the pp_plan_t>
+ *          gyro bias_x_bits=<float bits> bias_y_bits=<float bits> bias_z_bits=<float bits> bias_steps=<n>
+ *                                                 the gyro's bias estimate (rad/s, its axes; zero without a gyro)
+ *          imu up_x_bits=<float bits> up_y_bits=<float bits> up_z_bits=<float bits> up_steps=<n>
+ *                                                 the world's up the accelerometer measured (mvo_imu_up; zero
+ *                                                 until it has settled); up_steps: the agreeing ups behind it
+ *          live received=<n> dropped=<n> psram_free=<bytes> worker_stack_free_bytes=<n>     (live build)
  *          end heap_internal_free=<bytes> largest_block=<bytes> stack_free_words=<n> map_continuous=<0 or 1>
  *              cloud_count=<n> cloud_dropped=<n> cloud_continuous=<0 or 1> cloud_hash=<fnv of the mc_map_t>
+ *   host:  jpeg <index> <bytes> <fnv>             (live build, live.c) then a camera's JPEG frame of that many
+ *                                                 bytes, at most JPEG_MAX_BYTES: baseline, in colour, from
+ *                                                 320x240 to 2048x2048 (jpeg_check.c). The P4's JPEG engine
+ *                                                 decodes it to YUV444, core/frame_prep.c averages the
+ *                                                 luminance onto 320x240 on both cores, and a worker task
+ *                                                 runs the step on that frame. Frames come in while the worker
+ *                                                 works on an earlier one; a frame still waiting when a newer
+ *                                                 one arrives is dropped, as a camera's would be. Indices rise:
+ *                                                 a frame refused or not sent leaves a gap. Empty lines are
+ *                                                 skipped, so the host starts each header on a fresh line and
+ *                                                 a frame whose bytes went missing cannot hide the next one
+ *   board: first ... or step ... as for frame, each followed by source=<w>x<h> jpeg_bytes=<n> wait_us=<t>
+ *               decode_us=<t> prep_us=<t> grey_hash=<fnv of the 320x240 frame> dropped=<so far>
+ *          dropped index=<i>                     for a frame replaced while it waited
+ *   host:  grey                                   (live build) the last frame the odometry saw. In the live
+ *                                                 build every command but jpeg first waits for the worker,
+ *                                                 its bytes held meanwhile in the link's 8 KB receive buffer:
+ *                                                 send such commands between frames, not after a jpeg
+ *   board: grey bytes=76800 hash=<fnv>           then its 76800 bytes, row-major
  *   host:  cloud                                  read the current 3D cloud without changing it
  *   board: cloud count=<n> dropped=<n> continuous=<0 or 1> hash=<fnv of the mc_map_t>
  *          point index=<i> id=<id> x_bits=<bits> y_bits=<bits> z_bits=<bits> spread_bits=<bits> observations=<n>
  *          cloud_end count=<n>                    floats are sent as IEEE-754 uint32 bits
- *   board: ready ... config=p4 max_features=<n>   the core's build (core/mono_vo.h), which the host checks
+ *   board: ready ... config=p4 max_features=<n>   the core's build (core/mono_vo.h), which the host checks;
+ *                    the live build adds live=1 prep_sha256=<SHA-256 of core/frame_prep.c>
+ *                    prep_header_sha256=<SHA-256 of core/frame_prep.h>
  *   board: ready ... map_policy=1 cloud_policy=1 freeze the obstacle map and the cloud after the first LOST until
  *                    the next start; the voxel map goes on through LOST steps
  *
@@ -79,16 +118,24 @@
 #include "mono_vo.h"
 #include "obstacle_dir.h"
 #include "path_plan.h"
+#include "stream.h"
 #include "voxel_map.h"
 
-#define FRAME_BYTES (MVO_WIDTH * MVO_HEIGHT)
 #define MASK_WIDTH 80
 #define MASK_HEIGHT 60
 #define MASK_BYTES (MASK_WIDTH * MASK_HEIGHT / 8)
 #define LINE_BYTES 160
 #define IDLE_MS 1000       /* a `ready` line this often while no command comes */
-#define CHUNK_WAIT_MS 5000 /* longest pause allowed inside a frame's bytes */
 #define LINK_BAUD 921600   /* a UART link's rate once the firmware runs (uwslam.mvo_stream.LINK_BAUD) */
+#define GYRO_READINGS 256  /* the most gyro or IMU readings one step takes (uwslam.mvo_stream.GYRO_READINGS) */
+#define GYRO_READING_BYTES 16
+#define IMU_READING_BYTES 28
+#if CONFIG_SPIRAM
+#define HELPER_STACK 6144 /* the second core's task: half of a frame's preparation too (two rows of sums) */
+#else
+#define HELPER_STACK 4096
+#endif
+#define HELPER_PRIORITY 5
 
 /* cloud_hash covers the entire struct, whose representation the host reconstructs from the exported point fields. */
 typedef char cloud_point_wire_layout[(sizeof(float) == 4 && sizeof(mc_point_t) == 24 &&
@@ -112,6 +159,7 @@ static od_layout_t s_layout;
 static od_state_t s_dirs;
 static pp_plan_t s_plan;
 static uint8_t s_packed[MASK_BYTES], s_mask[MASK_WIDTH * MASK_HEIGHT];
+static uint8_t s_readings[GYRO_READINGS * IMU_READING_BYTES];
 static float s_points[MVO_MAX_FEATURES][3];
 static int s_session_ready, s_streaming, s_started, s_map_continuous;
 static int64_t s_next_frame;
@@ -161,8 +209,7 @@ static void helper_task(void *unused)
     }
 }
 
-/* mvo_t.parallel: part 1 on the second core, part 0 on this one. */
-static void run_both(void (*work)(void *context, int part), void *context)
+void run_both(void (*work)(void *context, int part), void *context)
 {
     s_work = work;
     s_context = context;
@@ -171,7 +218,7 @@ static void run_both(void (*work)(void *context, int part), void *context)
     xSemaphoreTake(s_done, portMAX_DELAY);
 }
 
-static uint32_t fnv(uint32_t hash, const void *data, size_t size)
+uint32_t fnv(uint32_t hash, const void *data, size_t size)
 {
     const uint8_t *bytes = data;
     size_t i;
@@ -202,7 +249,7 @@ static int read_line(char *line, int size, int wait_ms)
     }
 }
 
-static int read_exact(uint8_t *out, int size)
+int read_exact(uint8_t *out, int size)
 {
     int got = 0;
     while (got < size) {
@@ -330,17 +377,143 @@ static void start(const char *line)
     pp_init(&s_plan);
     s_started = 0;
     s_next_frame = 0;
+#if CONFIG_SPIRAM
+    live_start();
+#endif
     s_session_ready = 1;
     s_streaming = 1;
     s_map_continuous = 1;
     printf("started state_bytes=%" PRIu32 " cores=%d simd=%d\n", mvo_state_size(), cores, simd);
 }
 
+static void mount(const char *line)
+{
+    uint32_t bits[9];
+    float matrix[9];
+    if (!s_streaming) {
+        printf("error start required\n");
+        return;
+    }
+    if (sscanf(line, "mount %" SCNu32 " %" SCNu32 " %" SCNu32 " %" SCNu32 " %" SCNu32 " %" SCNu32 " %" SCNu32
+               " %" SCNu32 " %" SCNu32, &bits[0], &bits[1], &bits[2], &bits[3], &bits[4], &bits[5], &bits[6],
+               &bits[7], &bits[8]) != 9) {
+        printf("error bad mount line\n");
+        return;
+    }
+    memcpy(matrix, bits, sizeof matrix);
+    if (!mvo_gyro_mount(s_state, matrix)) {
+        printf("error mount not finite\n");
+        return;
+    }
+    printf("mounted\n");
+}
+
+static void accel_bias(const char *line)
+{
+    uint32_t bits[3];
+    float bias[3];
+    if (!s_streaming) {
+        printf("error start required\n");
+        return;
+    }
+    if (sscanf(line, "accel_bias %" SCNu32 " %" SCNu32 " %" SCNu32, &bits[0], &bits[1], &bits[2]) != 3) {
+        printf("error bad accel_bias line\n");
+        return;
+    }
+    memcpy(bias, bits, sizeof bias);
+    if (!mvo_imu_set_accel_bias(s_state, bias)) {
+        printf("error accel_bias not finite\n");
+        return;
+    }
+    printf("accel_bias set\n");
+}
+
+/* A step's gyro readings (`gyro`, with_force 0) or IMU readings (`imu`, with_force 1), integrated by the core into
+ * the rotation, and the forces into the up, that the next frame's step may use. */
+static void readings(const char *line, int with_force)
+{
+    const char *name = with_force ? "imu" : "gyro";
+    const int size = with_force ? IMU_READING_BYTES : GYRO_READING_BYTES;
+    uint32_t expected;
+    int count, i, dropped = 0;
+    int64_t begin;
+    if (sscanf(line + strlen(name), " %d %" SCNu32, &count, &expected) != 2 || count < 0) {
+        printf("error bad %s line\n", name);
+        return;
+    }
+    if (count > GYRO_READINGS) { /* consume what was sent, a buffer at a time, to keep the command framing */
+        int left = (count < 65536 ? count : 65536) * size;
+        while (left > 0) {
+            const int part = left < (int)sizeof s_readings ? left : (int)sizeof s_readings;
+            if (!read_exact(s_readings, part)) {
+                break;
+            }
+            left -= part;
+        }
+        printf("error %s readings over %d\n", name, GYRO_READINGS);
+        return;
+    }
+    /* As with a frame: consume the payload even when it cannot be used, to keep the command framing. */
+    if (!read_exact(s_readings, count * size)) {
+        printf("error %s readings arrived incomplete\n", name);
+        return;
+    }
+    if (!s_streaming || !s_started) {
+        printf("error %s readings need a started run\n", name);
+        return;
+    }
+    if (fnv(2166136261u, s_readings, (size_t)count * size) != expected) {
+        printf("error %s hash mismatch\n", name);
+        return;
+    }
+    begin = esp_timer_get_time();
+    for (i = 0; i < count; ++i) {
+        float reading[7]; /* dt, the rate, then the force */
+        memcpy(reading, s_readings + i * size, (size_t)size);
+        if (with_force) {
+            dropped += !mvo_imu_reading(s_state, reading + 1, reading + 4, reading[0]);
+        } else {
+            mvo_gyro_rate(s_state, reading + 1, reading[0]);
+        }
+    }
+    if (with_force) {
+        printf("imu readings=%d dropped=%d us=%" PRId64 "\n", count, dropped, esp_timer_get_time() - begin);
+    } else {
+        printf("gyro readings=%d us=%" PRId64 "\n", count, esp_timer_get_time() - begin);
+    }
+}
+
+static void process(int index, int with_mask, const char *extra);
+
+void process_frame(int index, const char *extra)
+{
+    process(index, 0, extra);
+}
+
+mvo_t *stream_state(void)
+{
+    return s_state;
+}
+
+const uint8_t *stream_last_frame(void)
+{
+    return s_pyramid[s_state->current];
+}
+
+int stream_open(void)
+{
+    return s_streaming;
+}
+
+int stream_started(void)
+{
+    return s_started;
+}
+
 static void frame(const char *line)
 {
-    uint32_t expected, mask_expected = 0, blocked = 0;
-    int index, fields, with_mask, i;
-    int64_t dir_us = 0;
+    uint32_t expected, mask_expected = 0;
+    int index, fields, with_mask;
     uint8_t *pixels;
     fields = sscanf(line, "frame %d %" SCNu32 " %" SCNu32, &index, &expected, &mask_expected);
     if (fields < 2) {
@@ -367,6 +540,16 @@ static void frame(const char *line)
         return;
     }
     ++s_next_frame;
+    process(index, with_mask, "");
+}
+
+/* The frame now in mvo_frame(), with the mask in s_packed when with_mask: the obstacle directions, then the run's
+ * first frame or a step with the maps and the plan, reported in one line that ends with extra. */
+static void process(int index, int with_mask, const char *extra)
+{
+    uint32_t blocked = 0;
+    int i;
+    int64_t dir_us = 0;
     for (i = 0; with_mask && i < MASK_WIDTH * MASK_HEIGHT; ++i) {
         s_mask[i] = (uint8_t)((s_packed[i >> 3] >> (i & 7)) & 1u);
     }
@@ -382,7 +565,8 @@ static void frame(const char *line)
         mvo_start(s_state);
         s_started = 1;
         printf("first index=%d tracks=%" PRId32 " detect_us=%" PRId64 " dir_choice=%" PRId32 " dir_blocked=%" PRIu32
-               " dir_us=%" PRId64 "\n", index, s_state->count, s_state->timing.detect_us, s_dirs.choice, blocked, dir_us);
+               " dir_us=%" PRId64 "%s\n", index, s_state->count, s_state->timing.detect_us, s_dirs.choice, blocked, dir_us,
+               extra);
     } else {
         mvo_step_t step;
         int observed = 0, mapped = 0, cloud_accepted, voxel_filed;
@@ -415,12 +599,13 @@ static void frame(const char *line)
                " cloud_count=%" PRIu32 " cloud_accepted=%d cloud_dropped=%" PRIu32
                " cloud_continuous=%" PRId32 " cloud_us=%" PRId64 " voxels=%" PRIu32 " voxel_filed=%d voxel_us=%" PRId64
                " dir_choice=%" PRId32 " dir_blocked=%" PRIu32 " dir_us=%" PRId64 " plan=%" PRId32 " plan_dir=%" PRId32
-               " plan_turn=%" PRId32 " plan_hash=%" PRIu32 " plan_us=%" PRId64 "\n",
+               " plan_turn=%" PRId32 " plan_hash=%" PRIu32 " plan_us=%" PRId64 " gyro=%d%s\n",
                index, step.kind, step.tracks, step.inliers, step.scale_points, fnv(2166136261u, &step, sizeof step),
                s_state->timing.detect_us, s_state->timing.track_us, s_state->timing.motion_us, total, observed, mapped,
                map_us, s_map_continuous, s_cloud->count, cloud_accepted, s_cloud->dropped,
                s_cloud->continuous, cloud_us, s_voxels->count, voxel_filed, voxel_us, s_dirs.choice, blocked, dir_us,
-               s_plan.action, s_plan.direction, s_plan.turn, fnv(2166136261u, &s_plan, sizeof s_plan), plan_us);
+               s_plan.action, s_plan.direction, s_plan.turn, fnv(2166136261u, &s_plan, sizeof s_plan), plan_us,
+               mvo_gyro_used(s_state), extra);
     }
 }
 
@@ -450,6 +635,25 @@ static void end(void)
            s_dirs.choice, blocked, fnv(2166136261u, &s_dirs, sizeof s_dirs));
     printf("plan frames=%" PRIu32 " action=%" PRId32 " direction=%" PRId32 " turn=%" PRId32 " hash=%" PRIu32 "\n",
            s_plan.frames, s_plan.action, s_plan.direction, s_plan.turn, fnv(2166136261u, &s_plan, sizeof s_plan));
+    {
+        float bias[3];
+        uint32_t bias_bits[3];
+        mvo_gyro_bias(s_state, bias);
+        memcpy(bias_bits, bias, sizeof bias_bits);
+        printf("gyro bias_x_bits=%" PRIu32 " bias_y_bits=%" PRIu32 " bias_z_bits=%" PRIu32 " bias_steps=%" PRId32 "\n",
+               bias_bits[0], bias_bits[1], bias_bits[2], s_state->gyro.bias_steps);
+    }
+    {
+        float up[3];
+        uint32_t up_bits[3];
+        mvo_imu_up(s_state, up);
+        memcpy(up_bits, up, sizeof up_bits);
+        printf("imu up_x_bits=%" PRIu32 " up_y_bits=%" PRIu32 " up_z_bits=%" PRIu32 " up_steps=%" PRId32 "\n",
+               up_bits[0], up_bits[1], up_bits[2], s_state->gyro.up_steps);
+    }
+#if CONFIG_SPIRAM
+    live_report();
+#endif
     printf("end heap_internal_free=%u largest_block=%u stack_free_words=%u map_continuous=%d"
            " cloud_count=%" PRIu32 " cloud_dropped=%" PRIu32 " cloud_continuous=%" PRId32 " cloud_hash=%" PRIu32 "\n",
            (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
@@ -490,11 +694,17 @@ static void print_ready(void)
            " core_sha256=%s header_sha256=%s map_sha256=%s "
            "map_header_sha256=%s map_policy=1 cloud_sha256=%s cloud_header_sha256=%s cloud_policy=1"
            " cloud_bytes=%" PRIu32 " cloud_capacity=%d voxel_sha256=%s voxel_header_sha256=%s"
-           " voxel_bytes=%" PRIu32 " dir_sha256=%s dir_header_sha256=%s plan_sha256=%s plan_header_sha256=%s\n",
+           " voxel_bytes=%" PRIu32 " dir_sha256=%s dir_header_sha256=%s plan_sha256=%s plan_header_sha256=%s%s\n",
            CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ, mvo_config_name(), mvo_max_features(), mvo_state_size(), MVO_CORE_SHA256,
            MVO_HEADER_SHA256, MM_CORE_SHA256,
            MM_HEADER_SHA256, MC_CORE_SHA256, MC_HEADER_SHA256, mc_map_size(), MC_MAX_POINTS, VM_CORE_SHA256,
-           VM_HEADER_SHA256, vm_map_size(), OD_CORE_SHA256, OD_HEADER_SHA256, PP_CORE_SHA256, PP_HEADER_SHA256);
+           VM_HEADER_SHA256, vm_map_size(), OD_CORE_SHA256, OD_HEADER_SHA256, PP_CORE_SHA256, PP_HEADER_SHA256,
+#if CONFIG_SPIRAM
+           " live=1 prep_sha256=" FP_CORE_SHA256 " prep_header_sha256=" FP_HEADER_SHA256
+#else
+           ""
+#endif
+    );
 }
 
 void app_main(void)
@@ -512,11 +722,22 @@ void app_main(void)
     s_go = xSemaphoreCreateBinary();
     s_done = xSemaphoreCreateBinary();
     if (s_go && s_done) {
-        helper_ready = xTaskCreatePinnedToCore(helper_task, "mvo_helper", 4096, NULL, 5, NULL, 1) == pdPASS;
+        helper_ready = xTaskCreatePinnedToCore(helper_task, "mvo_helper", HELPER_STACK, NULL, HELPER_PRIORITY, NULL, 1)
+                       == pdPASS;
     }
     /* Last, after the driver and the second core's task, so that they get their memory first (on a smaller board,
      * allocated before them, the map left so little internal RAM that two cores ran no faster than one). */
     s_voxels = heap_caps_malloc(sizeof *s_voxels, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+#if CONFIG_SPIRAM
+    if (!live_init()) { /* not retried: a first attempt keeps the JPEG engine and the buffers it got */
+        for (;;) {
+            printf("error startup live: JPEG engine, buffers or worker missing (PSRAM free %u)\n",
+                   (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+            fflush(stdout);
+            vTaskDelay(pdMS_TO_TICKS(IDLE_MS));
+        }
+    }
+#endif
     while (!s_state || !s_pyramid[0] || !s_pyramid[1] || !s_map || !s_cloud || !s_voxels || !s_go || !s_done
            || !helper_ready) {
         printf("error startup memory=%u + 2 x %u + %u + %u + %u bytes (free %u, largest block %u) got state=%d "
@@ -532,12 +753,38 @@ void app_main(void)
     for (;;) {
         if (!read_line(line, sizeof line, IDLE_MS)) {
             print_ready();
-        } else if (strncmp(line, "selftest ", 9) == 0) {
+            fflush(stdout);
+            continue;
+        }
+#if CONFIG_SPIRAM
+        if (line[0] == '\0') { /* the host starts every jpeg header on a fresh line */
+            continue;
+        }
+        if (strncmp(line, "jpeg ", 5) == 0) {
+            live_jpeg(line);
+            fflush(stdout);
+            continue;
+        }
+        live_wait_idle(); /* every other command finds the worker done */
+        if (strcmp(line, "grey") == 0) {
+            live_grey();
+            continue;
+        }
+#endif
+        if (strncmp(line, "selftest ", 9) == 0) {
             selftest(line);
         } else if (strncmp(line, "start ", 6) == 0) {
             start(line);
         } else if (strncmp(line, "frame ", 6) == 0) {
             frame(line);
+        } else if (strncmp(line, "gyro ", 5) == 0) {
+            readings(line, 0);
+        } else if (strncmp(line, "imu ", 4) == 0) {
+            readings(line, 1);
+        } else if (strncmp(line, "accel_bias ", 11) == 0) {
+            accel_bias(line);
+        } else if (strncmp(line, "mount ", 6) == 0) {
+            mount(line);
         } else if (strcmp(line, "end") == 0) {
             end();
         } else if (strcmp(line, "cloud") == 0) {

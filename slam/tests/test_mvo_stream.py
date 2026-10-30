@@ -671,3 +671,74 @@ class CloudProtocolTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GyroFileTests(unittest.TestCase):
+    """The gyro readings file and expectation the host checks before it opens a board."""
+
+    def write(self, folder: Path, counts: list[int]) -> Path:
+        path = folder / "gyro.bin"
+        path.write_bytes(b"".join(struct.pack("<I", n) + bytes(16 * n) for n in counts))
+        return path
+
+    def test_readings_file_splits_into_each_steps_payload(self):
+        with tempfile.TemporaryDirectory() as temp:
+            payloads = mvo_stream.read_gyro_file(self.write(Path(temp), [2, 0, 41]), 3)
+        self.assertEqual([len(p) for p in payloads], [32, 0, 41 * 16])
+
+    def test_readings_file_must_fit_the_run_and_the_firmware(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            with self.assertRaisesRegex(ValueError, "for 2 steps"):
+                mvo_stream.read_gyro_file(self.write(folder, [1, 1]), 3)
+            with self.assertRaisesRegex(ValueError, "the firmware takes 256"):
+                mvo_stream.read_gyro_file(self.write(folder, [257]), 1)
+            truncated = self.write(folder, [3])
+            truncated.write_bytes(truncated.read_bytes()[:-1])
+            with self.assertRaisesRegex(ValueError, "inside step 0"):
+                mvo_stream.read_gyro_file(truncated, 1)
+
+    def test_imu_readings_are_28_bytes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "imu.bin"
+            path.write_bytes(b"".join(struct.pack("<I", n) + bytes(28 * n) for n in (2, 5)))
+            payloads = mvo_stream.read_gyro_file(path, 2, mvo_stream.IMU_READING_BYTES)
+            self.assertEqual([len(p) for p in payloads], [56, 140])
+            with self.assertRaises(ValueError):  # read as gyro readings of 16 bytes, the steps fall apart
+                mvo_stream.read_gyro_file(path, 2)
+
+    def test_imu_expectation_is_checked(self):
+        expected = {"frames": 3}
+        good = {
+            "mount_bits": [0] * 9,
+            "readings_sha256": "0" * 64,
+            "used": [0, 1],
+            "final_bias_bits": [0, 0, 0],
+            "accel_bias_bits": [0, 0, 0],
+            "final_up_bits": [0, 0, 0],
+            "forces_dropped": 0,
+        }
+        mvo_stream.validate_expected_gyro(good, expected, imu=True)
+        for key, value, message in (
+            ("accel_bias_bits", [0, 0], "accelerometer's bias"),
+            ("final_up_bits", None, "final world up"),
+            ("final_up_bits", [0, -1, 0], "final world up"),
+            ("forces_dropped", -1, "left out"),
+            ("forces_dropped", None, "left out"),
+        ):
+            with self.assertRaisesRegex(ValueError, message):
+                mvo_stream.validate_expected_gyro({**good, key: value}, expected, imu=True)
+
+    def test_gyro_expectation_is_checked(self):
+        expected = {"frames": 3}
+        good = {"mount_bits": [0] * 9, "readings_sha256": "0" * 64, "used": [0, 1], "final_bias_bits": [0, 0, 0]}
+        mvo_stream.validate_expected_gyro(good, expected)
+        for key, value, message in (
+            ("mount_bits", [0] * 8, "nine mount_bits"),
+            ("readings_sha256", "x", "SHA-256"),
+            ("used", [0, 4], "each step used"),
+            ("used", [0], "each step used"),
+            ("final_bias_bits", [0.5, 0, 0], "final bias"),
+        ):
+            with self.assertRaisesRegex(ValueError, message):
+                mvo_stream.validate_expected_gyro({**good, key: value}, expected)

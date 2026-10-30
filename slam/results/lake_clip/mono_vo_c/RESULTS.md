@@ -6,20 +6,20 @@ Each row of the first table is one run with one RANSAC seed. On this clip the se
 
 | Rate | Version | Steps (lost / rotation only) | Position RMSE after alignment | Heading RMSE / max | Direction of travel, median | Scale ratio over 5 s windows | ms per step (PC) |
 |---:|---|---:|---:|---:|---:|---:|---:|
-| 10 Hz | C | 338 (4 / 10) | 0.36 m | 33.0° / 59° | 14.0° | 0.16–1.43 | 9.5 |
-| 10 Hz | OpenCV prototype | 338 (0 / 1) | 0.41 m | 27.4° / 46° | 14.4° | 0.73–1.69 | 5.8 |
-| 5 Hz | C | 169 (15 / 5) | 0.17 m | 11.9° / 22° | 12.2° | 0.77–1.30 | 14.7 |
-| 5 Hz | OpenCV prototype | 169 (3 / 0) | 0.44 m | 25.7° / 49° | 12.7° | 0.48–1.61 | 7.9 |
-| 3 Hz | C | 101 (18 / 1) | 0.36 m | 26.2° / 51° | 9.9° | 0.32–1.46 | 14.7 |
-| 3 Hz | OpenCV prototype | 101 (7 / 0) | 0.33 m | 18.5° / 47° | 11.2° | 0.35–2.12 | 9.1 |
+| 10 Hz | C | 338 (4 / 10) | 0.36 m | 33.0° / 57° | 13.8° | 0.16–1.43 | 18.6 |
+| 10 Hz | OpenCV prototype | 338 (0 / 1) | 0.41 m | 27.4° / 46° | 13.7° | 0.74–1.70 | 8.4 |
+| 5 Hz | C | 169 (15 / 5) | 0.17 m | 11.8° / 23° | 11.9° | 0.78–1.30 | 21.9 |
+| 5 Hz | OpenCV prototype | 169 (3 / 0) | 0.44 m | 25.7° / 49° | 11.5° | 0.48–1.65 | 9.7 |
+| 3 Hz | C | 101 (18 / 1) | 0.36 m | 26.3° / 54° | 10.9° | 0.32–1.45 | 25.2 |
+| 3 Hz | OpenCV prototype | 101 (7 / 0) | 0.33 m | 18.4° / 49° | 12.1° | 0.35–2.12 | 10.7 |
 
 C port over 16 RANSAC seeds, median [smallest–largest]:
 
 | Rate | Position RMSE after alignment | Heading RMSE | Scale ratio spread over 5 s windows (largest / smallest) | Lost steps |
 |---:|---:|---:|---:|---:|
-| 10 Hz | 0.33 m [0.26–0.37] | 39.5° [30–46] | 5.3× [2.4–9.2] | 2 [1–4] |
+| 10 Hz | 0.33 m [0.26–0.37] | 39.5° [30–46] | 5.3× [2.3–9.2] | 2 [1–4] |
 | 5 Hz | 0.19 m [0.16–0.26] | 19.4° [5–26] | 1.8× [1.4–2.6] | 13 [11–15] |
-| 3 Hz | 0.38 m [0.34–0.56] | 39.1° [26–66] | 4.1× [1.6–8.2] | 17 [16–19] |
+| 3 Hz | 0.38 m [0.34–0.56] | 39.1° [26–66] | 4.1× [1.6–8.1] | 17 [16–19] |
 
 `board_expected_10hz.json` holds the FNV-1a hash of every 10 Hz step (338 steps) for the board stream test (uwslam.mvo_stream).
 
@@ -33,10 +33,10 @@ python -m uwslam.mvo compare <video> --reconstruction <folder with images.txt> -
 
 The host streams grayscale frames and optional masks over the board's serial link (`python -m uwslam.mvo_stream`) of an ESP32-P4: its USB-UART bridge, or the chip's own USB-Serial-JTAG port. The board reports each step's hash and stage times. These timings exclude capture and transfer. Each record provides its own clock, build (core/mono_vo.h), rate, core count and kernel choice (the vector kernels are mvo_vector.S). Before streaming, the board checks its vector dispatch against C on random windows. Records and raw serial lines are in `board/`.
 
-| Record | Clock | Config | Rate | Cores | Kernels | Frames | Steps equal to the PC | Map | Per step, mean / median / max | Tracking | Motion | Detection | Map update | Voxel map / directions / plan (update) |
+| Record | Clock | Config | Rate | Cores | Kernels | Frames | Steps equal to the PC | Map | Per step, mean / median / max | Tracking | Motion | Detection | Map update | Voxel map / directions / plan / gyro (update) |
 |---|---:|---|---:|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---|
 | `p4_360mhz_usj` | 360 MHz | p4 | 10 Hz | 2 | vector | 339 | 338 of 338 | 2555 observations, hash equal to the PC's | 102 / 99 / 163 ms | 66 ms | 28 ms | 8 ms | 0.0 ms | 3660 voxels, hash equal to the PC's (0.5 ms); directions equal to the PC's (0.18 ms); plans equal to the PC's (1.83 ms) |
-| `p4_360mhz_usj_5hz` | 360 MHz | p4 | 5 Hz | 2 | vector | 170 | 169 of 169 | 1628 observations, hash equal to the PC's | 127 / 132 / 155 ms | 86 ms | 26 ms | 16 ms | 0.0 ms | 3530 voxels, hash equal to the PC's (0.5 ms); directions equal to the PC's (0.18 ms); plans equal to the PC's (1.78 ms) |
+| `p4_360mhz_usj_5hz` | 360 MHz | p4 | 5 Hz | 2 | vector | 170 | 169 of 169 | 1628 observations, hash equal to the PC's | 127 / 131 / 154 ms | 86 ms | 25 ms | 16 ms | 0.0 ms | 3530 voxels, hash equal to the PC's (0.5 ms); directions equal to the PC's (0.18 ms); plans equal to the PC's (1.78 ms) |
 
 Records named `*_usj*` were streamed over the ESP32-P4's own USB-Serial-JTAG port, not its USB-UART bridge: the firmware was built as in the second line below, which changes only the console.
 

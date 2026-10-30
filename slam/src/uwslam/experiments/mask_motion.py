@@ -4,9 +4,14 @@ Every frame of the video up to the last reference keyframe takes the robot's inp
 an int8 water-segmentation model (segmenter.EspdlSegmenter, passed with --model) gives the 60x80 non-water mask. The
 reconstruction's camera-to-world poses (images.txt, TUM, world = first camera with x right, y down, z forward) are
 interpolated to every frame: rotations by slerp, centres linearly. Its time column is image index / 30, but the images
-were sampled from the 30 FPS video at 10 FPS, so video time = REFERENCE_TIME_SCALE (3) x that column: the 88 keyframes
-span 33.8 s of video. With that scale, rotations between full-resolution frames 0.1 s apart from SIFT and the
-essential matrix follow the reference closely; read 1:1 they do not correlate at all (both are in the report).
+were sampled from the 30 FPS video at 10 FPS, so video time = REFERENCE_TIME_SCALE (3) x that column, plus
+REFERENCE_OFFSET_S: image i is video frame 3 i + 1, one frame later than the column says. The 88 keyframes span 33.8 s
+of video. With that scale, rotations between full-resolution frames 0.1 s apart from SIFT and the essential matrix
+follow the reference closely; read 1:1 they do not correlate at all. The one-frame offset was found by tracking:
+rotations tracked on the robot's 320x240 frames over the keyframe pairs 0.1 s apart (in the clip's swings) agree with
+the reference by a median 1.09 degrees one frame later against 1.92 at the column's frame, and chained full-resolution rotations need the smallest
+corrections to meet the keyframes there too. Over all the 10 Hz pairs, most of which turn slowly, the frame
+hardly matters; the report gives that check read all three ways.
 
 Mask gyro: a pure camera rotation R moves every image point by the homography K R K^-1, whatever its depth, so the
 rotation between two frames can be searched by turning one mask's boundary cells into the other frame and scoring how
@@ -24,9 +29,13 @@ Mask change: per pair, the share of cells that differ, raw and after turning the
 rotation (cells that turn out of view are left out). What the reference rotation leaves is translation, the
 visibility edge moving with the camera, and segmentation flicker.
 
-Intrinsics: the horizontal field of view is not calibrated, so it is chosen among HFOV_CANDIDATES as the one whose
-SIFT rotations at 10 Hz differ least from the reference (median angle) on pairs turning by more than 3 degrees, and
-every source uses it. On smaller turns the feature noise dominates and favours any narrow view. The 80x60 grid's
+Intrinsics: the horizontal field of view is not calibrated. Every source uses the tools' own,
+uwslam.experiments.mono_vo.HFOV_DEG (110 degrees), which this probe's fit chose before the reference was re-timed: among
+HFOV_CANDIDATES, the one whose SIFT rotations at 10 Hz differ least from the reference (median angle) on pairs turning
+by more than 3 degrees. The report keeps the fit's table and its pick; re-timed, the pick moves to 105 degrees, whose
+median lies 0.3 degrees below 110's, but in the C odometry narrower views won heading at 5 and 10 Hz on most measures
+and lost position at 5 Hz, so the tools keep 110 degrees. On smaller turns the feature noise dominates and favours any
+narrow view. The 80x60 grid's
 vertical field of view follows from the source frame's aspect, because the device path stretches the frame to 4:3.
 Rotations are reported as rotation-vector components in the earlier camera's frame: pitch about x, yaw about y
 (down), roll about z.
@@ -51,6 +60,7 @@ MAX_POINTS = 400  # boundary cells kept per frame (evenly thinned beyond this)
 MIN_DEPTH = 0.05  # a turned ray must keep this much forward component to project
 REFERENCE_TIME_SCALE = 3.0  # video seconds per images.txt second (10 FPS images stamped at 30 FPS)
 TIME_SLACK = 1e-6  # s: images.txt stores float32 times, so the last frame can sit a hair past the last keyframe
+REFERENCE_OFFSET_S = 1.0 / 30.0  # image i of the reconstruction is video frame 3 i + 1: its stamps run a frame early
 # (half-widths yaw, pitch, roll in degrees, step in degrees): a coarse grid, then two refinements around the best cell.
 GRIDS = (((60.0, 15.0, 12.0), 3.0), ((2.0, 2.0, 2.0), 1.0), ((0.5, 0.5, 0.5), 0.25))
 CANNY_LOW, CANNY_HIGH = 40, 100
@@ -271,11 +281,14 @@ def slerp(q0: np.ndarray, q1: np.ndarray, weight: float) -> np.ndarray:
     return q / np.linalg.norm(q)
 
 
-def reference_poses(poses: np.ndarray, times: np.ndarray, time_scale: float) -> tuple[np.ndarray, np.ndarray]:
+def reference_poses(
+    poses: np.ndarray, times: np.ndarray, time_scale: float, offset: float = REFERENCE_OFFSET_S
+) -> tuple[np.ndarray, np.ndarray]:
     """Camera-to-world rotations (n, 3, 3) and centres (n, 3) at video `times` from TUM rows (t tx ty tz qx qy qz qw)
-    whose t is video time / time_scale."""
-    keys = poses[:, 0] * time_scale
-    if times.min() < keys[0] - TIME_SLACK or times.max() > keys[-1] + TIME_SLACK:
+    whose t is (video time - offset) / time_scale. Times up to `offset` before the first keyframe (the video's first
+    frame) take its pose."""
+    keys = poses[:, 0] * time_scale + offset
+    if times.min() < keys[0] - offset - TIME_SLACK or times.max() > keys[-1] + TIME_SLACK:
         raise ValueError("Requested times fall outside the reference keyframes")
     times = np.clip(times, keys[0], keys[-1])
     rotations = []
@@ -506,14 +519,20 @@ def read_inputs(video: Path, reconstruction: Path, segmenter, time_scale: float)
 
 def alignment_check(matches: dict, data: dict, poses: np.ndarray, hfov: float) -> dict:
     """Yaw correlation and median angle between the 10 Hz feature rotations and the reference read with the chosen time
-    scale, and read 1:1 (video time = images.txt time) over the frames both readings cover."""
+    scale and offset, with the scale but no offset, and 1:1 (video time = images.txt time), over the frames each
+    reading covers."""
     width, height = data["source_size"]
     matrix = Camera.from_fov(hfov, height / width, width, height).matrix()
     found = {
         pair: essential_rotation(*matches[pair], matrix) for pair in frame_pairs(len(data["times"]))[CALIBRATION_RATE]
     }
     result = {}
-    for name, scale in (("chosen_scale", None), ("one_to_one", 1.0)):
+    readings = (
+        ("chosen_scale", None, REFERENCE_OFFSET_S),
+        ("no_offset", REFERENCE_TIME_SCALE, 0.0),
+        ("one_to_one", 1.0, 0.0),
+    )
+    for name, scale, offset in readings:
         rows = []
         for (a, b), rotation in found.items():
             if rotation is None:
@@ -521,9 +540,9 @@ def alignment_check(matches: dict, data: dict, poses: np.ndarray, hfov: float) -
             if scale is None:
                 reference = data["rotations"][a].T @ data["rotations"][b]
             else:
-                if data["times"][b] > poses[-1, 0] * scale:
+                if data["times"][b] > poses[-1, 0] * scale + offset:
                     continue
-                pair_rotations, _ = reference_poses(poses, data["times"][[a, b]], scale)
+                pair_rotations, _ = reference_poses(poses, data["times"][[a, b]], scale, offset)
                 reference = pair_rotations[0].T @ pair_rotations[1]
             rows.append(
                 (
@@ -556,6 +575,8 @@ def ratio(value: float | None) -> str:
 def write_report(output: Path, summary: dict) -> None:
     """RESULTS.md in the style of the sibling experiments."""
     source, camera, check = summary["source"], summary["camera"], summary["alignment_check"]
+    medians = {hfov: median for hfov, median, _ in summary["hfov_table"]}
+    fit_median, tools_median = medians[camera["fit_hfov_deg"]], medians[camera["hfov_deg"]]
     lines = [
         "# Camera rotation from water masks alone (lake clip, reference poses)",
         "",
@@ -563,11 +584,18 @@ def write_report(output: Path, summary: dict) -> None:
         f"reference: the reconstruction's {source['keyframes']} keyframes, interpolated to every frame.",
         "",
         f"- **Reference timing.** The reconstruction's time column is image index / 30 but its images were taken at 10 FPS, "
-        f"so video time = {summary['time_scale']:g} × that column. With this scale, SIFT rotations between full-resolution "
-        f"frames 0.1 s apart follow the reference: yaw correlation {check['chosen_scale']['yaw_correlation']:.2f}, "
-        f"median difference {degrees(check['chosen_scale']['median_angle_deg'])} ({check['chosen_scale']['pairs']} pairs). "
-        f"Read 1:1 they do not: {check['one_to_one']['yaw_correlation']:.2f} and "
-        f"{degrees(check['one_to_one']['median_angle_deg'])} ({check['one_to_one']['pairs']} pairs).",
+        f"so video time = {summary['time_scale']:g} × that column, plus one frame ({summary['time_offset_s'] * 1000:.1f} ms): "
+        "image i is video frame 3 i + 1, which tracking over the keyframes 0.1 s apart showed (see the module's docstring). "
+        f"Read so, SIFT rotations between full-resolution frames 0.1 s apart follow the reference: yaw correlation "
+        f"{check['chosen_scale']['yaw_correlation']:.2f}, median difference "
+        f"{degrees(check['chosen_scale']['median_angle_deg'])} ({check['chosen_scale']['pairs']} pairs); without the frame "
+        f"{check['no_offset']['yaw_correlation']:.2f} and {degrees(check['no_offset']['median_angle_deg'])} "
+        f"({check['no_offset']['pairs']} pairs): over all these pairs the frame hardly matters, since most turn slowly, "
+        "while over the keyframes 0.1 s apart, which sit in the swings, rotations tracked on the robot's 320×240 frames "
+        "differ from it by a median 1.09° one frame later against 1.92° without. "
+        "Read 1:1 they do not follow it: "
+        f"{check['one_to_one']['yaw_correlation']:.2f} and {degrees(check['one_to_one']['median_angle_deg'])} "
+        f"({check['one_to_one']['pairs']} pairs).",
         "- **Masks.** Each frame takes the robot's input path to 160×120 and the int8 water-segmentation model at its "
         "deployment threshold gives the 60×80 non-water mask. Boundary cells are non-water cells with a water neighbour.",
         "- **Mask gyro.** A pure rotation moves image points by K R K⁻¹ whatever their depth. One frame's boundary cells "
@@ -576,10 +604,14 @@ def write_report(output: Path, summary: dict) -> None:
         f"Frames with fewer than {MIN_BOUNDARY} boundary cells get no estimate; those pairs count as zero rotation.",
         "- **References.** *Edges*: the same search on Canny edges of the 160×120 grey frame, pooled onto the same "
         "60×80 grid. *Features*: SIFT and the essential matrix on the full-resolution frames. *Zero*: no rotation.",
-        f"- **Intrinsics.** Not calibrated. A {camera['hfov_deg']:g}° horizontal field of view was chosen because, among "
-        f"{HFOV_CANDIDATES[0]}–{HFOV_CANDIDATES[-1]}°, it gives the smallest median difference between the 10 Hz feature "
-        f"rotations and the reference on pairs turning by more than {CALIBRATION_MIN_ANGLE_DEG:g}° (table below; on "
-        "smaller turns feature noise dominates and favours any narrow view). All sources use it.",
+        f"- **Intrinsics.** Not calibrated. All sources use the tools' {camera['hfov_deg']:g}° horizontal field of view, "
+        "which this fit chose before the reference was re-timed: among "
+        f"{HFOV_CANDIDATES[0]}–{HFOV_CANDIDATES[-1]}°, the smallest median difference between the 10 Hz feature rotations "
+        f"and the reference on pairs turning by more than {CALIBRATION_MIN_ANGLE_DEG:g}° (table below; on smaller turns "
+        f"feature noise dominates and favours any narrow view). Re-timed, the fit picks {camera['fit_hfov_deg']:g}° "
+        f"(median {fit_median:.2f}° against {tools_median:.2f}° at {camera['hfov_deg']:g}°), but in the C odometry narrower "
+        "views won heading at 5 and 10 Hz on most measures and lost position at 5 Hz, so the tools keep "
+        f"{camera['hfov_deg']:g}°.",
         "",
         "## Rotation error (angle between estimated and reference rotation)",
         "",
@@ -630,7 +662,8 @@ def write_report(output: Path, summary: dict) -> None:
         "",
         "- One 34 s lake clip filmed by a diver, not the robot in a pool; the reference is a reconstruction whose "
         "keyframes are interpolated, with units of its own.",
-        "- The field of view is fitted to the same reference it is scored against.",
+        "- The field of view was fitted to the same reference it is scored against, which pins it no better than "
+        "about ten degrees.",
         "- The search estimates rotation only, so translation parallax leaks into it.",
         "",
         "Re-run (the output folder must not exist or be empty):",
@@ -656,13 +689,16 @@ def run(video: Path, reconstruction: Path, output: Path, segmenter, time_scale: 
         for rate_pairs in pairs.values()
         for pair in rate_pairs
     }
-    hfov, hfov_table = calibrate_hfov(matches, data, data["source_size"])
+    from uwslam.experiments.mono_vo import HFOV_DEG
+
+    fit_hfov, hfov_table = calibrate_hfov(matches, data, data["source_size"])
+    hfov = HFOV_DEG  # the tools' field of view (see the module's docstring); the fit is reported beside it
     width, height = data["source_size"]
     camera = Camera.from_fov(hfov, height / width)
     full = Camera.from_fov(hfov, height / width, width, height).matrix()
     data["feature_rotations"] = {pair: essential_rotation(*matches[pair], full) for pair in matches}
     check = alignment_check(matches, data, np.loadtxt(reconstruction / "images.txt"), hfov)
-    print(f"Field of view {hfov:g} deg; reference check {check}", flush=True)
+    print(f"Field of view {hfov:g} deg (the fit picks {fit_hfov:g}); reference check {check}", flush=True)
     rows, rates = [], {}
     for rate, rate_pairs in pairs.items():
         chunk = [pair_row(rate, a, b, data, camera) for a, b in rate_pairs]
@@ -702,8 +738,16 @@ def run(video: Path, reconstruction: Path, output: Path, segmenter, time_scale: 
             "poses_sha256": data["poses_sha256"],
         },
         "time_scale": time_scale,
+        "time_offset_s": REFERENCE_OFFSET_S,
         "alignment_check": check,
-        "camera": {"hfov_deg": hfov, "fx": camera.fx, "fy": camera.fy, "cx": camera.cx, "cy": camera.cy},
+        "camera": {
+            "hfov_deg": hfov,
+            "fit_hfov_deg": fit_hfov,
+            "fx": camera.fx,
+            "fy": camera.fy,
+            "cx": camera.cx,
+            "cy": camera.cy,
+        },
         "hfov_table": hfov_table,
         "settings": {
             "truncate": TRUNCATE,

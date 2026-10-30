@@ -18,8 +18,9 @@ or after a lost pair, the step repeats the previous length. All pixel thresholds
 
 The estimated camera centres are compared with the reference after one similarity alignment for the whole run
 (Umeyama: scale, rotation, offset), which is all a monocular map can promise; rotation per pair, the direction of
-travel and the chained heading need no alignment because both start from the same first camera. Reference poses,
-their 3x time scale and the 110 degree horizontal field of view follow uwslam.experiments.mask_motion.
+travel and the chained heading need no alignment because both start from the same first camera. Reference poses and
+their timing (3x the stamps, one frame later) follow uwslam.experiments.mask_motion, as does the 110 degree horizontal
+field of view.
 """
 
 import argparse
@@ -43,7 +44,7 @@ from uwslam.paths import CLIP_RESULTS
 from uwslam.utils import dump_json
 
 ASPECT = 544 / 960  # the lake clip's source frame
-HFOV_DEG = 110.0  # fitted in mask_motion on SIFT rotations of turns above 3 degrees
+HFOV_DEG = 110.0  # mask_motion's fit on SIFT rotations of turns above 3 degrees, before the reference was re-timed
 # The lens distortion the C tools give the lake camera (k1, k2, p1, p2, k3 in OpenCV's model): p1 alone, a distortion
 # centred off the frame's middle in height, as a frame cropped off the lens's axis has. Found without the reference: with
 # it the chain of 30 FPS steps agrees in pitch with direct rotations across 1.6 s of the same tracks, and the floating
@@ -634,10 +635,11 @@ def write_report(output: Path, summary: dict) -> None:
         "",
         f"Source: `{summary['source']['name']}`, {summary['source']['frames']} frames ({summary['source']['duration_s']:.1f} s "
         f"at {summary['source']['fps']:g} FPS); reference: the reconstruction's keyframes at the {summary['time_scale']:g}× pose "
-        f"timing, interpolated to every frame. No IMU, depth or ranger data are used.",
+        f"timing, one frame later, interpolated to every frame. No IMU, depth or ranger data are used.",
         "",
         "- Frames take the robot camera's path (320×240, RGB565) and turn grey; 160×120 is the 2×2 average the "
-        "segmentation model sees. Intrinsics: a 110° horizontal field of view (fitted in the mask_motion probe).",
+        "segmentation model sees. Intrinsics: a 110° horizontal field of view (the mask_motion probe's fit, kept after "
+        "the reference was re-timed).",
         "- Both methods track Shi-Tomasi corners with pyramidal Lucas-Kanade and a forward-backward check. *pairwise*: "
         "the essential matrix by RANSAC between consecutive processed frames (a homography when the tracks barely "
         "move), with scale carried from step to step by the points both steps triangulate. *keyframe*: the essential "

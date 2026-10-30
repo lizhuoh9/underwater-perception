@@ -1,10 +1,10 @@
 {
   "task": "Local avoidance and 3D path choice from the voxel map and the water masks on the lake clip, scored open-loop against the reference reconstruction",
   "sources_sha256": {
-    "core_sha256": "18cc224519d93d64bf39725adee3c1900b7faade9abc8118ee4e418b330935ed",
-    "header_sha256": "1f8fcbaae57dc342d549496edd0d6aaa6c9254fea404ef4ec5f1165919b4fe49",
+    "core_sha256": "c90e4c217ae3c52bdf94b13e99503c095fa4f3228fc0fd9bc6ba4cad1792422a",
+    "header_sha256": "eff98693b23bc6bb696fdc764aee03a015a3d8e0b5c74ce6e1259eaaa472ad61",
     "voxel_sha256": "b803ea6bf97c0334f71e65c3df31b06c2430e628b34f67a1c02d99f82a8eb0c5",
-    "voxel_header_sha256": "d45f150ef6cf43d2e43f45eff58dd09693159173415b27541256244c3b78eb1b",
+    "voxel_header_sha256": "6e9a931ac4d330e8c25cda1e2fedc2fad212fe73e5060b9694fdc5fcd928b5de",
     "dir_sha256": "ed8b510cdc05db181f41d5b8426ee2c7ee8d03d5ae04caa295ab71b7b3d12aa6",
     "dir_header_sha256": "f7a9953e140288518d505dfbef2716ec683810ac886cfdd86337a5651758dcc6",
     "plan_sha256": "fca11789672ae5c8202744e5e183ae470094094c95b164ace5cd6040e6157b73",
@@ -73,7 +73,7 @@
         "plan": {
           "within_0.25_m_free": 1.0,
           "within_0.5_m_free": 0.9694189602446484,
-          "within_1_m_free": 0.9113149847094801,
+          "within_1_m_free": 0.9174311926605505,
           "danger_go_below_0.25_m": 0.0
         },
         "plan_creeping": {
@@ -84,13 +84,13 @@
         },
         "straight_ahead": {
           "within_0.25_m_free": 0.9230769230769231,
-          "within_0.5_m_free": 0.8431952662721893,
+          "within_0.5_m_free": 0.8520710059171598,
           "within_1_m_free": 0.5118343195266272
         },
         "mask_choice": {
           "within_0.25_m_free": 1.0,
           "within_0.5_m_free": 0.9694189602446484,
-          "within_1_m_free": 0.9113149847094801,
+          "within_1_m_free": 0.9174311926605505,
           "steps_with_a_choice": 327
         },
         "best_direction": {
@@ -100,14 +100,14 @@
         },
         "steps_in_steps": {
           "all_known": {
-            "directions": 3017,
-            "median_log2_ratio": -0.35482784644652177,
-            "within_2x": 0.8203513423931057
+            "directions": 3022,
+            "median_log2_ratio": -0.358555110193818,
+            "within_2x": 0.8226340172071476
           },
           "chosen": {
             "directions": 22,
-            "median_log2_ratio": -1.610564819494358,
-            "within_2x": 0.4090909090909091
+            "median_log2_ratio": -1.6430571845145507,
+            "within_2x": 0.45454545454545453
           }
         },
         "ahead_known": 0.5177514792899408
@@ -139,9 +139,9 @@
           "max": 0.0
         },
         "known_within_2x": {
-          "median": 0.8191030747282729,
-          "min": 0.8066316480630334,
-          "max": 0.8326166060205095
+          "median": 0.8161894367822508,
+          "min": 0.8049180327868852,
+          "max": 0.8301324503311258
         },
         "ahead_known": {
           "median": 0.5207100591715976,
@@ -149,7 +149,7 @@
           "max": 0.5828402366863905
         },
         "chosen_within_2x": {
-          "median": 0.5166852057842046,
+          "median": 0.5339265850945495,
           "min": 0.3181818181818182,
           "max": 0.6774193548387096
         },
@@ -184,9 +184,9 @@
           "max": 0.9694189602446484
         },
         "plan_within_1_m_free": {
-          "median": 0.9113149847094801,
-          "min": 0.9113149847094801,
-          "max": 0.9113149847094801
+          "median": 0.9174311926605505,
+          "min": 0.9174311926605505,
+          "max": 0.9174311926605505
         },
         "plan_creeping_within_0.25_m_free": {
           "median": 1.0,
@@ -214,9 +214,9 @@
           "max": 0.9694189602446484
         },
         "mask_choice_within_1_m_free": {
-          "median": 0.9113149847094801,
-          "min": 0.9113149847094801,
-          "max": 0.9113149847094801
+          "median": 0.9174311926605505,
+          "min": 0.9174311926605505,
+          "max": 0.9174311926605505
         },
         "straight_ahead_within_0.25_m_free": {
           "median": 0.9230769230769231,
@@ -224,9 +224,9 @@
           "max": 0.9230769230769231
         },
         "straight_ahead_within_0.5_m_free": {
-          "median": 0.8431952662721893,
-          "min": 0.8431952662721893,
-          "max": 0.8431952662721893
+          "median": 0.8520710059171598,
+          "min": 0.8520710059171598,
+          "max": 0.8520710059171598
         },
         "straight_ahead_within_1_m_free": {
           "median": 0.5118343195266272,
@@ -278,7 +278,7 @@
         "plan": {
           "within_0.25_m_free": 1.0,
           "within_0.5_m_free": 0.9693251533742331,
-          "within_1_m_free": 0.9141104294478528,
+          "within_1_m_free": 0.9263803680981595,
           "danger_go_below_0.25_m": 0.0
         },
         "plan_creeping": {
@@ -289,13 +289,13 @@
         },
         "straight_ahead": {
           "within_0.25_m_free": 0.9230769230769231,
-          "within_0.5_m_free": 0.8461538461538461,
-          "within_1_m_free": 0.514792899408284
+          "within_0.5_m_free": 0.8579881656804734,
+          "within_1_m_free": 0.5088757396449705
         },
         "mask_choice": {
           "within_0.25_m_free": 1.0,
           "within_0.5_m_free": 0.9693251533742331,
-          "within_1_m_free": 0.9141104294478528,
+          "within_1_m_free": 0.9263803680981595,
           "steps_with_a_choice": 163
         },
         "best_direction": {
@@ -305,13 +305,13 @@
         },
         "steps_in_steps": {
           "all_known": {
-            "directions": 1606,
-            "median_log2_ratio": -0.22941827526461722,
-            "within_2x": 0.8754669987546699
+            "directions": 1611,
+            "median_log2_ratio": -0.23236455529627692,
+            "within_2x": 0.8715083798882681
           },
           "chosen": {
             "directions": 12,
-            "median_log2_ratio": -1.0577559986815888,
+            "median_log2_ratio": -1.058642170657118,
             "within_2x": 0.5
           }
         },
@@ -339,14 +339,14 @@
           "max": 0.7567567567567568
         },
         "nearer_than_clear": {
-          "median": 0.004253762627715627,
+          "median": 0.001440922190201729,
           "min": 0.0,
-          "max": 0.0084985835694051
+          "max": 0.005934718100890208
         },
         "known_within_2x": {
-          "median": 0.8661332855343686,
-          "min": 0.8302122347066168,
-          "max": 0.8973384030418251
+          "median": 0.8625824526742035,
+          "min": 0.8251400124455507,
+          "max": 0.8951358180669615
         },
         "ahead_known": {
           "median": 0.8313609467455622,
@@ -389,9 +389,9 @@
           "max": 0.9693251533742331
         },
         "plan_within_1_m_free": {
-          "median": 0.9171779141104295,
-          "min": 0.9141104294478528,
-          "max": 0.9202453987730062
+          "median": 0.9294478527607362,
+          "min": 0.9263803680981595,
+          "max": 0.9325153374233128
         },
         "plan_creeping_within_0.25_m_free": {
           "median": 1.0,
@@ -419,9 +419,9 @@
           "max": 0.9693251533742331
         },
         "mask_choice_within_1_m_free": {
-          "median": 0.9141104294478528,
-          "min": 0.9141104294478528,
-          "max": 0.9141104294478528
+          "median": 0.9263803680981595,
+          "min": 0.9263803680981595,
+          "max": 0.9263803680981595
         },
         "straight_ahead_within_0.25_m_free": {
           "median": 0.9230769230769231,
@@ -429,14 +429,14 @@
           "max": 0.9230769230769231
         },
         "straight_ahead_within_0.5_m_free": {
-          "median": 0.8461538461538461,
-          "min": 0.8461538461538461,
-          "max": 0.8461538461538461
+          "median": 0.8579881656804734,
+          "min": 0.8579881656804734,
+          "max": 0.8579881656804734
         },
         "straight_ahead_within_1_m_free": {
-          "median": 0.514792899408284,
-          "min": 0.514792899408284,
-          "max": 0.514792899408284
+          "median": 0.5088757396449705,
+          "min": 0.5088757396449705,
+          "max": 0.5088757396449705
         },
         "best_direction_within_0.25_m_free": {
           "median": 1.0,

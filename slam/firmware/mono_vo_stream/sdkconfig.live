@@ -1,0 +1,11 @@
+# The live build: frames come in as a camera's JPEG and are decoded and averaged on the board (live.c, `jpeg`).
+# PSRAM holds the compressed frames, the decoded YUV444 image and the buffer refused frames are read through;
+# everything else stays in internal RAM, as in the replay build (caps allocation: only what asks for PSRAM gets it).
+# The PSRAM runs at 200 MHz, as in ESP-IDF 5.3's own ESP32-P4 JPEG and camera examples (an experimental option
+# there): decoding and averaging move every frame through it. On top of the console's defaults:
+# idf.py -D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.usb_serial_jtag;sdkconfig.live" ...
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_HEX=y
+CONFIG_SPIRAM_USE_CAPS_ALLOC=y
+CONFIG_IDF_EXPERIMENTAL_FEATURES=y
+CONFIG_SPIRAM_SPEED_200M=y
