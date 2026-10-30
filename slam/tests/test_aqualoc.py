@@ -193,6 +193,17 @@ class AqualocTests(unittest.TestCase):
         up = [struct.unpack("<f", struct.pack("<I", bits))[0] for bits in imu["imu"]["final_up_bits"]]
         self.assertAlmostEqual(float(np.linalg.norm(up)), 1.0, places=5)
         mvo_stream.validate_expected_gyro(imu["imu"], imu, imu=True)
+        # The depth run: the IMU's steps, each frame's depth in sense.bin, and every step's metric centre and scale.
+        depth = json.loads((output / "board_expected_depth.json").read_text(encoding="utf-8"))
+        self.assertEqual(depth["step_hashes"], imu["step_hashes"])
+        self.assertEqual(depth["imu"], imu["imu"])
+        mvo_stream.validate_expected_metric(depth["metric"], depth)
+        self.assertIsNone(depth["metric"]["beam_bits"])
+        self.assertEqual(depth["metric"]["sense_file"], "sense.bin")
+        sense = mvo_stream.read_sense_file(output / "sense.bin", depth["frames"])
+        self.assertEqual([r[1] for r in sense], [None] * depth["frames"])  # no ranger
+        depths = [struct.unpack("<f", struct.pack("<I", r[0]))[0] for r in sense]
+        np.testing.assert_allclose(depths, sequence.depths, rtol=1e-6)
         with self.assertRaises(FileExistsError):
             aqualoc.board_files(self.prepared, output)
 
@@ -223,7 +234,20 @@ class AqualocTests(unittest.TestCase):
         self.assertNotIn("lower_share", tables["seq01"]["windows"]["off"]["ate_rmse"])
         self.assertEqual(tables["seq01"]["windows"]["imu"]["base"], "gyro")
         for metric in aqualoc_score.METRICS:
-            self.assertTrue(np.isfinite(scores["windows"]["imu"][0][metric]), metric)
+            value = scores["windows"]["imu"][0][metric]
+            if metric == "metric_ate_rmse":
+                self.assertIsNone(value)  # only the depth mode's path is in metres
+                self.assertIsNone(tables["seq01"]["windows"]["imu"][metric])
+            else:
+                self.assertTrue(np.isfinite(value), metric)
+        # The depth mode is the IMU's run with the depth sensor: the odometry's own scores equal in every pair.
+        self.assertEqual(len(scores["full"]["depth"]), 2)
+        depth = tables["seq01"]["full"]["depth"]
+        self.assertEqual(depth["base"], "imu")
+        for metric in ("ate_rmse", "levelled_ate_rmse", "tilt_rmse_deg", "lost"):
+            self.assertEqual(depth[metric]["equal_share"], 1.0, metric)
+        for run in scores["full"]["depth"]:
+            self.assertTrue(run["metric_ate_rmse"] is None or np.isfinite(run["metric_ate_rmse"]))
 
     def test_a_levelled_alignment_turns_only_about_the_vertical(self):
         rng = np.random.default_rng(5)
@@ -235,6 +259,38 @@ class AqualocTests(unittest.TestCase):
         leaning = moved @ aqualoc.exp_so3(np.array([0.05, 0.0, 0.0])).T  # a lean it may not take back
         error = aqualoc_score.levelled(leaning, reference, up) - reference
         self.assertGreater(np.abs(error @ up).max(), 0.05)
+
+    def test_the_metric_ate_turns_about_the_vertical_and_shifts_only(self):
+        rng = np.random.default_rng(6)
+        reference = rng.normal(size=(40, 3))
+        up = np.array([0.0, 0.0, 1.0])
+        turned = reference @ aqualoc.exp_so3(up * 0.9).T + np.array([3.0, -1.0, 2.0])
+        self.assertAlmostEqual(aqualoc_score.metric_ate(turned, reference, up), 0.0, places=9)
+        self.assertGreater(aqualoc_score.metric_ate(1.1 * turned, reference, up), 0.05)  # no scale fitted
+        tilted = reference @ aqualoc.exp_so3(np.array([0.3, 0.0, 0.0])).T
+        self.assertGreater(aqualoc_score.metric_ate(tilted, reference, up), 0.05)  # nor a tilt
+
+    def test_all_together_pools_a_mode_over_the_sequences_that_have_it(self):
+        def runs(value: float, metric: float | None = None) -> list[dict]:
+            return [
+                {"seed": seed, "first": 0, **{m: value for m in aqualoc_score.METRICS}, "metric_ate_rmse": metric}
+                for seed in (1, 2)
+            ]
+
+        with_depth = {"full": {"off": runs(3.0), "gyro": runs(2.0), "imu": runs(1.0), "depth": runs(1.0, 0.5)}}
+        without = {"full": {"off": runs(3.0), "gyro": runs(2.0), "imu": runs(1.5)}}
+        for order in (("seq01", "seq07"), ("seq07", "seq01")):
+            scores = {name: with_depth if name == "seq01" else without for name in order}
+            depth = aqualoc_score.tables(scores)["all"]["full"]["depth"]
+            self.assertEqual(depth["runs"], 2)  # seq01's alone, paired with seq01's imu runs
+            self.assertEqual(depth["ate_rmse"]["equal_share"], 1.0)
+            self.assertEqual(depth["metric_ate_rmse"]["median"], 0.5)
+            self.assertNotIn("lower_share", depth["metric_ate_rmse"])  # imu has no metric path to pair with
+        tables = aqualoc_score.tables({"seq01": with_depth, "seq07": without})
+        self.assertEqual(tables["all"]["full"]["imu"]["runs"], 4)
+        self.assertNotIn("depth", tables["seq07"]["full"])
+        nan = runs(1.0, float("nan"))
+        self.assertTrue(np.isnan(aqualoc_score.paired(nan, None, "metric_ate_rmse")["median"]))  # a failure shows
 
     def test_seeds_spread_over_processes_score_the_same(self):
         with patch.object(mvo, "SEEDS", (mvo.SEED, 2)), patch("builtins.print"):

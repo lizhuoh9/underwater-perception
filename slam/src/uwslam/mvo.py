@@ -33,6 +33,7 @@ CORE_FILES = (
     "mono_vo_tracking.c",
     "mono_vo_homography.c",
     "mono_vo_essential.c",
+    "mono_vo_scale.c",
     "mono_vo_internal.h",
 )
 SOURCES = [CORE_DIR / name for name in CORE_FILES if name.endswith(".c")]
@@ -240,6 +241,19 @@ def build(output: Path) -> ctypes.CDLL:
     vo.mvo_imu_set_accel_bias.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
     vo.mvo_imu_set_accel_bias.restype = ctypes.c_int
     vo.mvo_imu_up.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    vo.mvo_depth_reading.argtypes = [ctypes.c_void_p, ctypes.c_float]
+    vo.mvo_depth_reading.restype = ctypes.c_int
+    vo.mvo_range_setup.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_float]
+    vo.mvo_range_setup.restype = ctypes.c_int
+    vo.mvo_range_reading.argtypes = [ctypes.c_void_p, ctypes.c_float]
+    vo.mvo_range_reading.restype = ctypes.c_int
+    vo.mvo_metric.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+    ]
+    vo.mvo_metric.restype = ctypes.c_int
     vo.mvo_sqrt.argtypes = [ctypes.c_float]
     vo.mvo_sqrt.restype = ctypes.c_float
     vo.mvo_lk_template_c.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p]
@@ -337,7 +351,9 @@ class GyroReadings:
 class Run:
     """One run of run_odometry: the steps, each step's FNV-1a hash, the PC's ms per step and, with a gyro, how each
     step used it (MVO_GYRO_*) and the bias estimate after it (rad/s, the gyro's axes); with an accelerometer, the
-    world's up it measured (mvo_imu_up) at the end and how many forces the core left out (mvo_imu_reading)."""
+    world's up it measured (mvo_imu_up) at the end and how many forces the core left out (mvo_imu_reading); with depths
+    or ranges, after each step the world centre in metres (mvo_metric; None until the scale is known), the scale and
+    its variance."""
 
     steps: list
     hashes: list[int]
@@ -346,17 +362,57 @@ class Run:
     gyro_bias: list[tuple[float, float, float]]
     imu_up: tuple[float, float, float] | None = None
     forces_dropped: int = 0
+    metric: list | None = None
+    scales: list[float] | None = None
+    variances: list[float] | None = None
+
+
+@dataclass(frozen=True)
+class Beam:
+    """A forward ranger's beam for run_odometry: its axis in the camera's axes and its half angle (degrees)."""
+
+    axis: tuple[float, float, float]
+    half_angle_deg: float
 
 
 def run_odometry(
-    vo: ctypes.CDLL, frames: list[np.ndarray], camera: Camera, seed: int = SEED, gyro: GyroReadings | None = None
+    vo: ctypes.CDLL,
+    frames: list[np.ndarray],
+    camera: Camera,
+    seed: int = SEED,
+    gyro: GyroReadings | None = None,
+    depths: np.ndarray | None = None,
+    ranges: np.ndarray | None = None,
+    beam: Beam | None = None,
 ) -> Run:
-    """One run over the frames (the first starts it), with a gyro's readings before each step when given."""
+    """One run over the frames (the first starts it), with a gyro's readings before each step when given; depths
+    (metres below the surface) and ranges (metres along the beam), one per frame and NaN where there is none, go to
+    mvo_depth_reading and mvo_range_reading before the frame's start or step."""
     if gyro is not None and len(gyro.steps) != len(frames) - 1:
         raise ValueError(f"Expected gyro readings for {len(frames) - 1} steps, got {len(gyro.steps)}")
+    for name, values in (("depths", depths), ("ranges", ranges)):
+        if values is not None and len(values) != len(frames):
+            raise ValueError(f"Expected {name} for {len(frames)} frames, got {len(values)}")
+    if (ranges is None) != (beam is None):
+        raise ValueError("Ranges need a beam, and a beam ranges")
     state = ctypes.create_string_buffer(vo.mvo_state_size())
     pyramids = [ctypes.create_string_buffer(vo.mvo_pyramid_bytes()) for _ in range(2)]  # alive as long as state
     vo.mvo_init(state, ctypes.byref(camera), seed, pyramids[0], pyramids[1])
+    if beam is not None:
+        axis = np.ascontiguousarray(beam.axis, dtype=np.float32)
+        if not vo.mvo_range_setup(state, axis.ctypes.data, float(np.cos(np.radians(beam.half_angle_deg)))):
+            raise ValueError("The core refused the ranger's beam")
+    metric_wanted = depths is not None or ranges is not None
+
+    depth_values = None if depths is None else as_readings(depths, len(frames), "depths")
+    range_values = None if ranges is None else as_readings(ranges, len(frames), "ranges")
+
+    def readings_for_frame(k: int) -> None:
+        if depth_values is not None and np.isfinite(depth_values[k]):
+            vo.mvo_depth_reading(state, float(depth_values[k]))
+        if range_values is not None and np.isfinite(range_values[k]):
+            vo.mvo_range_reading(state, float(range_values[k]))
+
     if gyro is not None:
         mount = np.ascontiguousarray(gyro.mount, dtype=np.float32).reshape(9)
         if not vo.mvo_gyro_mount(state, mount.ctypes.data):
@@ -377,13 +433,16 @@ def run_odometry(
         ctypes.memmove(vo.mvo_frame(state), pixels.ctypes.data, WIDTH * HEIGHT)
 
     load(frames[0])
+    readings_for_frame(0)
     vo.mvo_start(state)
-    steps, hashes, used, biases = [], [], [], []
+    steps, hashes, used, biases, metric, scales, variances = [], [], [], [], [], [], []
     dropped = 0
     bias = np.zeros(3, dtype=np.float32)
+    centre, scale, variance = np.zeros(3, dtype=np.float32), ctypes.c_float(), ctypes.c_float()
     started = time.perf_counter()
     for k, frame in enumerate(frames[1:]):
         load(frame)
+        readings_for_frame(k + 1)
         if gyro is not None:
             for row in gyro.steps[k]:
                 rate = np.ascontiguousarray(row[1:4])
@@ -400,12 +459,20 @@ def run_odometry(
             used.append(int(vo.mvo_gyro_used(state)))
             vo.mvo_gyro_bias(state, bias.ctypes.data)
             biases.append(tuple(float(v) for v in bias))
+        if metric_wanted:
+            known = vo.mvo_metric(state, centre.ctypes.data, ctypes.byref(scale), ctypes.byref(variance))
+            metric.append(tuple(float(v) for v in centre) if known else None)
+            scales.append(float(scale.value))
+            variances.append(float(variance.value))
     up = None
     if gyro is not None and gyro.has_accel:
         values = np.zeros(3, dtype=np.float32)
         vo.mvo_imu_up(state, values.ctypes.data)
         up = tuple(float(v) for v in values)
-    return Run(steps, hashes, (time.perf_counter() - started) * 1000 / max(1, len(steps)), used, biases, up, dropped)
+    ms = (time.perf_counter() - started) * 1000 / max(1, len(steps))
+    if not metric_wanted:
+        return Run(steps, hashes, ms, used, biases, up, dropped)
+    return Run(steps, hashes, ms, used, biases, up, dropped, metric, scales, variances)
 
 
 def area_resize(vo: ctypes.CDLL, grey: np.ndarray) -> np.ndarray:
@@ -427,6 +494,65 @@ def run_frames(
     """One run over the frames without a gyro: the steps, each step's FNV-1a hash and the PC's ms per step."""
     run = run_odometry(vo, frames, camera, seed)
     return run.steps, run.hashes, run.ms_per_step
+
+
+def metric_path(run: Run) -> np.ndarray | None:
+    """The run's world centres in metres (mvo_metric), the first frame at zero; before the first scale, the odometry's
+    centres times it, as the core scales the path so far when it first knows the scale (with a depth sensor the core's
+    vertical is the depth's from then on, so the path can step there). None without readings or when the scale was
+    never known."""
+    if run.metric is None:
+        return None
+    known = [k for k, m in enumerate(run.metric) if m is not None]
+    if not known:
+        return None
+    first = run.scales[known[0]]
+    path = [np.zeros(3)]
+    for step, metric in zip(run.steps, run.metric):
+        path.append(first * np.array(step.world_centre, dtype=float) if metric is None else np.array(metric))
+    return np.array(path)
+
+
+def float_bits(value: float) -> int:
+    """A number's IEEE-754 single-precision bits, as the C float it becomes."""
+    return struct.unpack("<I", struct.pack("<f", value))[0]
+
+
+def as_readings(values: np.ndarray | None, frames: int, name: str) -> np.ndarray:
+    """A sensor's readings (`name`: depths or ranges, one per frame) as the float32 values the core takes, NaN where it
+    takes none: missing, not finite as a float32, or for a range not positive (the core refuses those)."""
+    if values is None:
+        return np.full(frames, np.nan, dtype=np.float32)
+    if len(values) != frames:
+        raise ValueError(f"Expected {name} for {frames} frames, got {len(values)}")
+    with np.errstate(over="ignore", invalid="ignore"):  # beyond float32: infinite, then none
+        out = np.asarray(values, dtype=np.float64).astype(np.float32)
+        keep = np.isfinite(out) & ((out > 0) if name == "ranges" else True)
+    return np.where(keep, out, np.float32(np.nan))
+
+
+def sense_bytes(depths: np.ndarray | None, ranges: np.ndarray | None, frames: int) -> bytes:
+    """Each frame's depth and range as little-endian float32 pairs, NaN where the core takes none (as_readings): the
+    sense file uwslam.mvo_stream --sense sends with the frames."""
+    columns = [as_readings(depths, frames, "depths"), as_readings(ranges, frames, "ranges")]
+    return np.column_stack(columns).astype("<f4").tobytes()
+
+
+def metric_expectation(run: Run, sense: bytes, beam: Beam | None) -> dict:
+    """What the board must report for a run with depths or ranges: the sense file's SHA-256, the beam's bits (its axis,
+    then the cosine of its half angle, as run_odometry gives them) and after each step mvo_metric's flag, centre,
+    scale and variance as float bits (zero until the scale is known)."""
+    if run.metric is None:
+        raise ValueError("The run had no depths or ranges")
+    cosine = None if beam is None else float(np.cos(np.radians(beam.half_angle_deg)))
+    return {
+        "sense_sha256": hashlib.sha256(sense).hexdigest(),
+        "beam_bits": None if beam is None else [float_bits(v) for v in (*beam.axis, cosine)],
+        "known": [int(metric is not None) for metric in run.metric],
+        "centre_bits": [[float_bits(v) for v in (metric or (0.0, 0.0, 0.0))] for metric in run.metric],
+        "scale_bits": [float_bits(scale) for scale in run.scales],
+        "variance_bits": [float_bits(variance) for variance in run.variances],
+    }
 
 
 def as_steps(steps: list[StepC]):

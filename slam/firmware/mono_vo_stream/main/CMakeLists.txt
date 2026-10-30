@@ -1,5 +1,6 @@
-set(SOURCES "main.c" "live.c" "jpeg_check.c" "../../../core/mono_vo.c" "../../../core/mono_vo_numerics.c" "../../../core/mono_vo_tracking.c"
-    "../../../core/mono_vo_homography.c" "../../../core/mono_vo_essential.c" "../../../core/mono_map.c"
+set(SOURCES "main.c" "sensors.c" "live.c" "jpeg_check.c" "../../../core/mono_vo.c" "../../../core/mono_vo_numerics.c" "../../../core/mono_vo_tracking.c"
+    "../../../core/mono_vo_homography.c" "../../../core/mono_vo_essential.c" "../../../core/mono_vo_scale.c"
+    "../../../core/mono_map.c"
     "../../../core/mono_cloud.c" "../../../core/voxel_map.c" "../../../core/obstacle_dir.c" "../../../core/path_plan.c"
     "../../../core/frame_prep.c" "mvo_vector.S") # the tracker's window kernels in the ESP32-P4's vector instructions
 if(NOT CMAKE_BUILD_EARLY_EXPANSION AND NOT CONFIG_IDF_TARGET_ESP32P4) # sdkconfig is read after the early pass
@@ -18,7 +19,7 @@ target_compile_options(${COMPONENT_LIB} PRIVATE -ffp-contract=off)
 # the SHA-256 of the odometry's implementation files back to back in this order, the list uwslam.mvo.CORE_FILES gives.
 set(CORE "${CMAKE_CURRENT_LIST_DIR}/../../../core")
 set(MVO_CORE_FILES mono_vo.c mono_vo_numerics.c mono_vo_tracking.c mono_vo_homography.c mono_vo_essential.c
-    mono_vo_internal.h)
+    mono_vo_scale.c mono_vo_internal.h)
 set(MVO_CORE_TEXT "")
 foreach(name IN LISTS MVO_CORE_FILES)
     file(READ "${CORE}/${name}" text)

@@ -1,7 +1,7 @@
 /*
  * mono_vo_internal.h - what the units of the monocular visual odometry share; not part of its interface (mono_vo.h).
  * It holds the scratch that one step passes from unit to unit, the small helpers every unit inlines and each unit's
- * entry points. A build compiles all five units:
+ * entry points. A build compiles all six units:
  *
  *   mono_vo.c             the public functions and the step
  *   mono_vo_numerics.c    Jacobi eigenvectors and the 3x3 SVD, Gaussian elimination, Householder QR and one-sided
@@ -10,6 +10,7 @@
  *   mono_vo_homography.c  the rotation of a pure turn and the parallax test
  *   mono_vo_essential.c   the motion from the essential matrix: eight-point MSAC, decomposition and triangulation,
  *                         robust Levenberg-Marquardt, the direction search; the translation for a known rotation
+ *   mono_vo_scale.c       the metric scale from a depth sensor and a forward ranger, the world centre in metres
  */
 #ifndef MONO_VO_INTERNAL_H
 #define MONO_VO_INTERNAL_H
@@ -72,6 +73,9 @@ static inline float mvo_root(float v)
 }
 
 static inline float mvo_abs(float v) { return v < 0.0f ? -v : v; }
+
+/* Whether v is a number and not an infinity, without libm. */
+static inline int mvo_finite(float v) { return v - v == 0.0f; }
 
 static inline void mat3_mul(const float a[9], const float b[9], float out[9])
 {
@@ -154,5 +158,12 @@ int mvo_translation_pose(mvo_t *s, int n, const float r[9], float t[3]);
 int mvo_translation_evidence(const mvo_t *s, int n, const float rotation_ab[9], const float r[9], const float t[3]);
 int mvo_triangulate(const float r[9], const float t[3], const float ra[2], const float rb[2], float out[3]);
 float mvo_ray_spread(const float r[9], int k);
+
+/* mono_vo_scale.c */
+/* mvo_start: a new run's scale, keeping the beam, the first frame's depth its vertical's zero. */
+void mvo_scale_start(mvo_t *s);
+/* After every step's world pose (moved: the step's move in the world's axes, the odometry's unit): the readings'
+ * observations, then the metric centre. */
+void mvo_scale_step(mvo_t *s, const float moved[3]);
 
 #endif

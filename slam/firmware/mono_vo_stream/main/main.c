@@ -32,6 +32,18 @@
  *   host:  imu <count> <fnv>                      as gyro, readings of 28 bytes: dt, rate x, y, z, then the specific
  *                                                 force x, y, z (m/s^2, the IMU's axes)
  *   board: imu readings=<n> dropped=<forces the core left out> us=<t>
+ *   host:  depth <bits>                           a depth sensor's reading for the next frame (mvo_depth_reading):
+ *                                                 metres below the surface as float bits; for the first frame too,
+ *                                                 whose depth is the metric vertical's zero. A reading waits for
+ *                                                 the next step; a newer one replaces it
+ *   board: depth set
+ *   host:  beam <x> <y> <z> <cos>                 a forward ranger's beam (mvo_range_setup), as float bits: its axis
+ *                                                 in the camera's axes and the cosine of its half angle; after every
+ *                                                 start, which clears it
+ *   board: beam set
+ *   host:  range <bits>                           the ranger's reading for the next frame (mvo_range_reading), metres;
+ *                                                 one for the first frame is dropped (no points to compare yet)
+ *   board: range set                              (these sensor commands: sensors.c)
  *   host:  frame <index> <fnv> [<mask fnv>]       then the frame's 76800 bytes, and with a mask fnv its 600 bytes:
  *                                                 bit i of the mask (byte i / 8, least significant bit first) is cell
  *                                                 i in row-major order, set where it is not water
@@ -43,9 +55,13 @@
  *               cloud_continuous=<0 or 1> cloud_us=<t> voxels=<n> voxel_filed=<n> voxel_us=<t>
  *               dir_choice=<d> dir_blocked=<bits> dir_us=<t> plan=<action> plan_dir=<d> plan_turn=<-1, 0 or 1>
  *               plan_hash=<fnv of the pp_plan_t> plan_us=<t> gyro=<how the step used the gyro, MVO_GYRO_*>
+ *               metric=<0 or 1> metric_x_bits=<bits> metric_y_bits=<bits> metric_z_bits=<bits> scale_bits=<bits>
+ *               scale_var_bits=<bits>
  *                                                 dir_*: the obstacle directions after this frame's mask (unchanged
  *                                                 without one): the choice (-1: none free) and bit d set where
- *                                                 direction d is blocked; plan*: the plan after this step
+ *                                                 direction d is blocked; plan*: the plan after this step; metric*:
+ *                                                 the world centre in metres, the scale and its variance
+ *                                                 (mvo_metric; zero until a depth or a range has given the scale)
  *   host:  end
  *   board: map cell_bits=<float bits> origin_x=<n> origin_z=<n> observations=<n> frames=<n>
  *              slice_y_bits=<float bits> height_resets=<n> hash=<fnv of the mm_map_t> map_continuous=<0 or 1>
@@ -127,9 +143,6 @@
 #define LINE_BYTES 160
 #define IDLE_MS 1000       /* a `ready` line this often while no command comes */
 #define LINK_BAUD 921600   /* a UART link's rate once the firmware runs (uwslam.mvo_stream.LINK_BAUD) */
-#define GYRO_READINGS 256  /* the most gyro or IMU readings one step takes (uwslam.mvo_stream.GYRO_READINGS) */
-#define GYRO_READING_BYTES 16
-#define IMU_READING_BYTES 28
 #if CONFIG_SPIRAM
 #define HELPER_STACK 6144 /* the second core's task: half of a frame's preparation too (two rows of sums) */
 #else
@@ -159,7 +172,6 @@ static od_layout_t s_layout;
 static od_state_t s_dirs;
 static pp_plan_t s_plan;
 static uint8_t s_packed[MASK_BYTES], s_mask[MASK_WIDTH * MASK_HEIGHT];
-static uint8_t s_readings[GYRO_READINGS * IMU_READING_BYTES];
 static float s_points[MVO_MAX_FEATURES][3];
 static int s_session_ready, s_streaming, s_started, s_map_continuous;
 static int64_t s_next_frame;
@@ -386,103 +398,6 @@ static void start(const char *line)
     printf("started state_bytes=%" PRIu32 " cores=%d simd=%d\n", mvo_state_size(), cores, simd);
 }
 
-static void mount(const char *line)
-{
-    uint32_t bits[9];
-    float matrix[9];
-    if (!s_streaming) {
-        printf("error start required\n");
-        return;
-    }
-    if (sscanf(line, "mount %" SCNu32 " %" SCNu32 " %" SCNu32 " %" SCNu32 " %" SCNu32 " %" SCNu32 " %" SCNu32
-               " %" SCNu32 " %" SCNu32, &bits[0], &bits[1], &bits[2], &bits[3], &bits[4], &bits[5], &bits[6],
-               &bits[7], &bits[8]) != 9) {
-        printf("error bad mount line\n");
-        return;
-    }
-    memcpy(matrix, bits, sizeof matrix);
-    if (!mvo_gyro_mount(s_state, matrix)) {
-        printf("error mount not finite\n");
-        return;
-    }
-    printf("mounted\n");
-}
-
-static void accel_bias(const char *line)
-{
-    uint32_t bits[3];
-    float bias[3];
-    if (!s_streaming) {
-        printf("error start required\n");
-        return;
-    }
-    if (sscanf(line, "accel_bias %" SCNu32 " %" SCNu32 " %" SCNu32, &bits[0], &bits[1], &bits[2]) != 3) {
-        printf("error bad accel_bias line\n");
-        return;
-    }
-    memcpy(bias, bits, sizeof bias);
-    if (!mvo_imu_set_accel_bias(s_state, bias)) {
-        printf("error accel_bias not finite\n");
-        return;
-    }
-    printf("accel_bias set\n");
-}
-
-/* A step's gyro readings (`gyro`, with_force 0) or IMU readings (`imu`, with_force 1), integrated by the core into
- * the rotation, and the forces into the up, that the next frame's step may use. */
-static void readings(const char *line, int with_force)
-{
-    const char *name = with_force ? "imu" : "gyro";
-    const int size = with_force ? IMU_READING_BYTES : GYRO_READING_BYTES;
-    uint32_t expected;
-    int count, i, dropped = 0;
-    int64_t begin;
-    if (sscanf(line + strlen(name), " %d %" SCNu32, &count, &expected) != 2 || count < 0) {
-        printf("error bad %s line\n", name);
-        return;
-    }
-    if (count > GYRO_READINGS) { /* consume what was sent, a buffer at a time, to keep the command framing */
-        int left = (count < 65536 ? count : 65536) * size;
-        while (left > 0) {
-            const int part = left < (int)sizeof s_readings ? left : (int)sizeof s_readings;
-            if (!read_exact(s_readings, part)) {
-                break;
-            }
-            left -= part;
-        }
-        printf("error %s readings over %d\n", name, GYRO_READINGS);
-        return;
-    }
-    /* As with a frame: consume the payload even when it cannot be used, to keep the command framing. */
-    if (!read_exact(s_readings, count * size)) {
-        printf("error %s readings arrived incomplete\n", name);
-        return;
-    }
-    if (!s_streaming || !s_started) {
-        printf("error %s readings need a started run\n", name);
-        return;
-    }
-    if (fnv(2166136261u, s_readings, (size_t)count * size) != expected) {
-        printf("error %s hash mismatch\n", name);
-        return;
-    }
-    begin = esp_timer_get_time();
-    for (i = 0; i < count; ++i) {
-        float reading[7]; /* dt, the rate, then the force */
-        memcpy(reading, s_readings + i * size, (size_t)size);
-        if (with_force) {
-            dropped += !mvo_imu_reading(s_state, reading + 1, reading + 4, reading[0]);
-        } else {
-            mvo_gyro_rate(s_state, reading + 1, reading[0]);
-        }
-    }
-    if (with_force) {
-        printf("imu readings=%d dropped=%d us=%" PRId64 "\n", count, dropped, esp_timer_get_time() - begin);
-    } else {
-        printf("gyro readings=%d us=%" PRId64 "\n", count, esp_timer_get_time() - begin);
-    }
-}
-
 static void process(int index, int with_mask, const char *extra);
 
 void process_frame(int index, const char *extra)
@@ -569,10 +484,14 @@ static void process(int index, int with_mask, const char *extra)
                extra);
     } else {
         mvo_step_t step;
-        int observed = 0, mapped = 0, cloud_accepted, voxel_filed;
+        int observed = 0, mapped = 0, cloud_accepted, voxel_filed, metric_known;
         int64_t begin = esp_timer_get_time(), total, map_us = 0, cloud_us, voxel_us, plan_us;
+        float metric[5]; /* the world centre in metres, then the scale and its variance */
+        uint32_t metric_bits[5];
         mvo_step(s_state, &step);
         total = esp_timer_get_time() - begin;
+        metric_known = mvo_metric(s_state, metric, &metric[3], &metric[4]);
+        memcpy(metric_bits, metric, sizeof metric_bits);
         begin = esp_timer_get_time();
         cloud_accepted = mc_update(s_cloud, s_state, &step);
         cloud_us = esp_timer_get_time() - begin;
@@ -599,13 +518,16 @@ static void process(int index, int with_mask, const char *extra)
                " cloud_count=%" PRIu32 " cloud_accepted=%d cloud_dropped=%" PRIu32
                " cloud_continuous=%" PRId32 " cloud_us=%" PRId64 " voxels=%" PRIu32 " voxel_filed=%d voxel_us=%" PRId64
                " dir_choice=%" PRId32 " dir_blocked=%" PRIu32 " dir_us=%" PRId64 " plan=%" PRId32 " plan_dir=%" PRId32
-               " plan_turn=%" PRId32 " plan_hash=%" PRIu32 " plan_us=%" PRId64 " gyro=%d%s\n",
+               " plan_turn=%" PRId32 " plan_hash=%" PRIu32 " plan_us=%" PRId64 " gyro=%d metric=%d metric_x_bits=%" PRIu32
+               " metric_y_bits=%" PRIu32 " metric_z_bits=%" PRIu32 " scale_bits=%" PRIu32 " scale_var_bits=%" PRIu32
+               "%s\n",
                index, step.kind, step.tracks, step.inliers, step.scale_points, fnv(2166136261u, &step, sizeof step),
                s_state->timing.detect_us, s_state->timing.track_us, s_state->timing.motion_us, total, observed, mapped,
                map_us, s_map_continuous, s_cloud->count, cloud_accepted, s_cloud->dropped,
                s_cloud->continuous, cloud_us, s_voxels->count, voxel_filed, voxel_us, s_dirs.choice, blocked, dir_us,
                s_plan.action, s_plan.direction, s_plan.turn, fnv(2166136261u, &s_plan, sizeof s_plan), plan_us,
-               mvo_gyro_used(s_state), extra);
+               mvo_gyro_used(s_state), metric_known, metric_bits[0], metric_bits[1], metric_bits[2], metric_bits[3],
+               metric_bits[4], extra);
     }
 }
 
@@ -777,14 +699,8 @@ void app_main(void)
             start(line);
         } else if (strncmp(line, "frame ", 6) == 0) {
             frame(line);
-        } else if (strncmp(line, "gyro ", 5) == 0) {
-            readings(line, 0);
-        } else if (strncmp(line, "imu ", 4) == 0) {
-            readings(line, 1);
-        } else if (strncmp(line, "accel_bias ", 11) == 0) {
-            accel_bias(line);
-        } else if (strncmp(line, "mount ", 6) == 0) {
-            mount(line);
+        } else if (sensor_command(line)) {
+            /* answered: an IMU's, the depth sensor's or the ranger's command (sensors.c) */
         } else if (strcmp(line, "end") == 0) {
             end();
         } else if (strcmp(line, "cloud") == 0) {

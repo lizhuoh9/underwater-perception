@@ -21,16 +21,17 @@ the chip's USB-Serial-JTAG port ([feed.json](feed.json)). The dev board runs at 
 
 | | `check` | `live` |
 |---|---:|---:|
-| Frames: stepped / dropped (after the first) | 169 / 0 | 167 / 2 (frames 140, 158) |
-| JPEG decode, median / max | 6.1 / 6.1 ms | 6.1 / 6.5 ms |
-| Averaging onto 320×240, median / max | 21.6 / 22.7 ms | 21.7 / 36.2 ms |
-| Odometry step, median / max | 134 / 164 ms | 162 / 194 ms |
-| A frame's work (decode, averaging, step, maps, plan), mean / median / max | 158 / 164 / 193 ms | 192 / 198 / 226 ms |
-| Waiting for the worker, median / max | | 29 / 192 ms |
-| From a frame's last byte sent to its answer, mean / median / max | | 251 / 234 / 407 ms |
-| Free at the end: internal RAM / PSRAM / the worker's stack | 66,452 / 19,387,740 / 11,716 B | 66,452 / 19,387,740 / 11,384 B |
+| Frames: stepped / dropped (after the first) | 169 / 0 | 167 / 2 (frames 139, 159) |
+| JPEG decode, median / max | 6.1 / 6.2 ms | 6.1 / 7.3 ms |
+| Averaging onto 320×240, median / max | 21.6 / 22.2 ms | 21.8 / 35.6 ms |
+| Odometry step, median / max | 134 / 164 ms | 164 / 195 ms |
+| A frame's work (decode, averaging, step, maps, plan), mean / median / max | 159 / 165 / 193 ms | 192 / 199 / 226 ms |
+| Waiting for the worker, median / max | | 30 / 197 ms |
+| From a frame's last byte sent to its answer, mean / median / max | | 253 / 234 / 407 ms |
+| Free at the end: internal RAM / PSRAM / the worker's stack | 65,856 / 19,387,740 / 11,620 B | 65,856 / 19,387,740 / 11,288 B |
 
-In `live` the step is slower than in `check` (162 against 134 ms in the median) because the next frame comes in during
+These two runs are of the tree with the metric scale (the odometry's state 592 B larger, its steps the same). In
+`live` the step is slower than in `check` (164 against 134 ms in the median) because the next frame comes in during
 it: the USB-Serial-JTAG driver wakes the command loop for every 64-byte packet and drops what its 8 KB receive buffer
 cannot hold, so the loop runs above the worker. A camera on the P4's MIPI-CSI port would hand its frames over by
 DMA instead (ESP-IDF's CSI driver moves them with the DW-GDMA); that is not measured here.
@@ -55,6 +56,9 @@ The seed alone can change a score twofold on this clip, so the rows do not diffe
 80 on the board costs the odometry nothing measurable.
 
 ## Chroma subsampling and other sizes
+
+This section's and the next one's runs were made with the tree before the metric scale (commit 7573d35): the
+decoding, the frame checks and the averaging have not changed since.
 
 The same frames as 4:2:2 and 4:4:4 JPEGs (`prepare --sampling`, in [sampling_422](sampling_422) and
 [sampling_444](sampling_444)), streamed with `--check`: the board's 320×240 frames and all 169 steps come out with the

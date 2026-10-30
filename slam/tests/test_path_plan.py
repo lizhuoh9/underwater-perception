@@ -33,6 +33,7 @@ class PathPlanContractTests(unittest.TestCase):
                 "mono_vo_tracking.c",
                 "mono_vo_homography.c",
                 "mono_vo_essential.c",
+                "mono_vo_scale.c",
             )
             sources = [
                 ROOT / "tests/c/path_plan_check.c",

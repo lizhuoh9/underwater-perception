@@ -17,7 +17,13 @@ class MvoFailoverTests(unittest.TestCase):
         source = Path(__file__).resolve().parent / "c" / "mvo_failover_check.c"
         units = [
             CORE_DIR / name
-            for name in ("mono_vo.c", "mono_vo_numerics.c", "mono_vo_homography.c", "mono_vo_essential.c")
+            for name in (
+                "mono_vo.c",
+                "mono_vo_numerics.c",
+                "mono_vo_homography.c",
+                "mono_vo_essential.c",
+                "mono_vo_scale.c",
+            )
         ]
         with tempfile.TemporaryDirectory() as folder:
             binary = Path(folder) / "mvo_failover_check.exe"

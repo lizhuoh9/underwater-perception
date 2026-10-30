@@ -742,3 +742,66 @@ class GyroFileTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(ValueError, message):
                 mvo_stream.validate_expected_gyro({**good, key: value}, expected)
+
+
+def float_bits(value: float) -> int:
+    return struct.unpack("<I", struct.pack("<f", value))[0]
+
+
+class SenseFileTests(unittest.TestCase):
+    """The sense file (each frame's depth and range) and the metric expectation the host checks before it opens a
+    board."""
+
+    good = {
+        "sense_sha256": "0" * 64,
+        "beam_bits": None,
+        "known": [0, 1],
+        "centre_bits": [[0, 0, 0], [1, 2, 3]],
+        "scale_bits": [0, 5],
+        "variance_bits": [0, 6],
+    }
+
+    def test_sense_file_gives_the_bits_the_core_takes(self):
+        rows = [(2.5, float("nan")), (float("inf"), 3.0), (-0.5, 0.0), (1.0, -2.0)]
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "sense.bin"
+            path.write_bytes(b"".join(struct.pack("<2f", *row) for row in rows))
+            sense = mvo_stream.read_sense_file(path, 4)
+            with self.assertRaisesRegex(ValueError, "5 frames need 40"):
+                mvo_stream.read_sense_file(path, 5)
+        # A depth above the surface is a number like any other; a range of zero or less is none, as in the core.
+        expected = [(float_bits(2.5), None), (None, float_bits(3.0)), (float_bits(-0.5), None), (float_bits(1.0), None)]
+        self.assertEqual(sense, expected)
+
+    def test_metric_expectation_is_checked(self):
+        expected = {"frames": 3}
+        mvo_stream.validate_expected_metric(self.good, expected)
+        mvo_stream.validate_expected_metric({**self.good, "beam_bits": [0, 0, 1065353216, 1065209685]}, expected)
+        without_beam = {key: value for key, value in self.good.items() if key != "beam_bits"}
+        for metric, message in (
+            ({**self.good, "sense_sha256": "x"}, "SHA-256"),
+            (without_beam, "beam"),
+            ({**self.good, "beam_bits": [0, 0, 1]}, "beam"),
+            ({**self.good, "known": [0, 2]}, "knew the scale"),
+            ({**self.good, "known": [0]}, "knew the scale"),
+            ({**self.good, "centre_bits": [[0, 0, 0], [1, 2]]}, "centre bits"),
+            ({**self.good, "scale_bits": [0, -1]}, "scale bits"),
+            ({**self.good, "variance_bits": [0]}, "variance bits"),
+        ):
+            with self.assertRaisesRegex(ValueError, message):
+                mvo_stream.validate_expected_metric(metric, expected)
+
+    def test_ranges_without_a_beam_are_refused_before_the_board_opens(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            sense = folder / "sense.bin"
+            sense.write_bytes(struct.pack("<4f", 2.0, 1.5, 2.1, float("nan")))
+            metric = {**self.good, "known": [1], "centre_bits": [[0, 0, 0]], "scale_bits": [5], "variance_bits": [6]}
+            metric["sense_sha256"] = hashlib.sha256(sense.read_bytes()).hexdigest()
+            expected = folder / "vo.json"
+            expected.write_text(json.dumps({"frames": 2, "config": "p4", "max_features": 300, "metric": metric}))
+            with mock.patch.object(mvo_stream, "Board", side_effect=AssertionError("the board was opened")):
+                with self.assertRaisesRegex(ValueError, "no ranger's beam"):
+                    mvo_stream.stream("host-only", folder / "frames.bin", expected, sense_path=sense)
+                with self.assertRaisesRegex(ValueError, "go together"):
+                    mvo_stream.stream("host-only", folder / "frames.bin", expected)

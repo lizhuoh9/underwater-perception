@@ -77,15 +77,37 @@
  * does not set it) settle the world's up for good, and nothing is levelled before. After every step from then on the
  * world rotation turns towards it about the level axis of the two (a tilt, never a turn of the heading) by the sine of
  * their angle times MVO_IMU_LEVEL_RATE times the readings' seconds, at most MVO_IMU_LEVEL_MAX, so the tilt the steps
- * gather is taken back within about a second. Only the world poses change: a step's own motion, the bias learnt, the
- * points and the scale stay as they were, and a step without forces is levelled by none, bit for bit. On the same
- * harbour sequences, with the accelerometer's bias calibrated on the other sequence (about 0.6 m/s^2 across the
- * vertical, a 4-degree tilt, alike on both), the tilt over the whole sequences came out 1.6 degrees off in the median
- * of both and 16 seeds instead of 19 with the gyro alone, the whole orientation 7.7 instead of 21, and the path's
- * height, after an alignment that turns it only about the vertical, 0.32 m off instead of 0.76; over 10 s windows the
- * tilt 0.68 degrees instead of 2.0 (lower in 97% of 1040 paired runs). The path after a full alignment, whose error is
- * the scale's and the heading's, stayed where it was (2.05 against 2.03 m). Uncalibrated, the tilt came out 5.3 degrees
- * off. The motion's own accelerations count as tilt: AQUALOC's ROV moves slowly, and a robot's thrust is untested.
+ * gather fades with a time constant of about a second. Only the world poses change: a step's own motion, the bias
+ * learnt, the points and the scale stay as they were, and a step without forces is levelled by none, bit for bit. On
+ * the same harbour sequences, with the accelerometer's bias calibrated on the other sequence (about 0.6 m/s^2 across
+ * the vertical, a 4-degree tilt, alike on both), the tilt over the whole sequences came out 1.6 degrees off in the
+ * median of both and 16 seeds instead of 19 with the gyro alone, the whole orientation 7.7 instead of 21, and the
+ * path's height, after an alignment that turns it only about the vertical, 0.32 m off instead of 0.76; over 10 s
+ * windows the tilt 0.68 degrees instead of 2.0 (lower in 97% of 1040 paired runs). The path after a full alignment
+ * stayed where it was (2.05 against 2.03 m): almost all of its error is horizontal, which gravity does not show.
+ * Uncalibrated, the tilt came out 5.3 degrees off. The motion's own accelerations count as tilt; a robot's thrust is
+ * untested.
+ *
+ * A metric scale is optional (mvo_metric: the world centre in metres, once the scale is known). The odometry's unit
+ * is the camera's and drifts; a depth sensor (mvo_depth_reading: a frame's depth below the surface in metres, given
+ * before mvo_start for the first frame and before mvo_step for the others) and a forward ranger (mvo_range_setup: its
+ * beam's axis in the camera's axes and the cosine of its half angle; mvo_range_reading: a frame's range in metres)
+ * observe it. A Kalman filter on the scale, metres per unit, as a random walk whose variance grows by MVO_SCALE_DRIFT
+ * times the scale's square per second (the readings' seconds, else MVO_SCALE_STEP_TIME a step), weighs the
+ * observations. Once the accelerometer's up has settled, the depth's change over the last MVO_DEPTH_HORIZON seconds
+ * against the odometry's change along the world's down observes it, when the depth changed by MVO_DEPTH_MIN_CHANGE,
+ * both the same way, with MVO_DEPTH_NOISE on both ends. With the first frame's depth, the metric centre's vertical is
+ * the depth's change since then. A range observes it against the tracked points in the beam, at least
+ * MVO_RANGE_POINTS of them: the distance within which a share MVO_RANGE_SHARE of them lie, as the echo comes from the
+ * nearest surface, with a relative error of MVO_RANGE_NOISE. The first observation scales the path so far as well,
+ * so it must be good to MVO_SCALE_FIRST_SPREAD of itself, a depth's counting the odometry's own vertical error too,
+ * MVO_DEPTH_TRAVEL of the distance it moved meanwhile: a small climb or dive over a long swim gives no first scale.
+ * After it each step adds its move times the scale. Later observations are not gated: on AQUALOC an innovation
+ * gate, that vertical error in every observation's variance, or leaving out windows over lost steps each lost
+ * accuracy, as the scale drifts and single observations scatter widely (their variances weigh them). The odometry's
+ * own steps, world poses and points stay as they were, bit for bit, and without readings nothing changes. On
+ * AQUALOC's harbour sequences (their depth sensor) and on rangers simulated from the lake's reconstruction it was
+ * measured against the reference in metres: results/aqualoc and results/lake_clip/ranger.
  *
  * C99, no heap, no libm (a local square root, by Newton steps without division), xorshift32 for RANSAC, so a PC build
  * and an ESP32-P4 build give identical results with -ffp-contract=off and without fast-math. It follows the OpenCV
@@ -154,10 +176,21 @@
 #define MVO_GYRO_MISS 0.0174524064f /* sin 1 degree: the most a step's miss counts */
 #define MVO_GYRO_BIAS_LIMIT 0.17453293f /* 10 degrees per second: the most bias the estimate takes, per axis */
 #define MVO_IMU_UP_STEPS 10 /* the world's up: the mean of this many agreeing steps' measured ups */
-#define MVO_IMU_UP_AGREE 0.9961947f /* cos 5 degrees: of AQUALOC's 1072 runs 3 degrees left 3 unsettled, 5 none */
+#define MVO_IMU_UP_AGREE 0.9961947f /* cos 5 degrees: of AQUALOC's 1072 re-chained runs, 3 degrees left 3 unsettled */
 #define MVO_IMU_LEVEL_RATE 1.0f /* per second of readings: the share of a step's tilt that the step takes back */
 #define MVO_IMU_LEVEL_MAX 0.0348995f /* sin 2 degrees: the most one step's levelling turns */
 #define MVO_IMU_FORCE_MAX 49.0f /* m/s^2, 5 g: a reading's force beyond is a knock or a fault, not gravity */
+#define MVO_SCALE_DRIFT 0.03f /* per second: the scale's variance grows by this times the scale's square */
+#define MVO_SCALE_STEP_TIME 0.2f /* s: a step's time when no IMU readings measure it (the board's 5 Hz) */
+#define MVO_SCALE_FIRST_SPREAD 0.3f /* the first observation's standard deviation at most: this share of it */
+#define MVO_DEPTH_HORIZON 2.0f /* s: the depth's change over this time observes the scale */
+#define MVO_DEPTH_MIN_CHANGE 0.1f /* m: a smaller change observes nothing */
+#define MVO_DEPTH_NOISE 0.02f /* m: the depth sensor's noise, one standard deviation */
+#define MVO_DEPTH_TRAVEL 0.07f /* the odometry's vertical error, levelled by the IMU: this share of its travel */
+#define MVO_DEPTH_RING 32 /* depth readings kept: MVO_DEPTH_HORIZON at up to 15 frames a second */
+#define MVO_RANGE_NOISE 0.2f /* a range's relative error against the points in its beam */
+#define MVO_RANGE_POINTS 5 /* points in the beam a range needs */
+#define MVO_RANGE_SHARE 0.1f /* the points' quantile a range is compared with */
 #define MVO_PYRAMID_BYTES (MVO_WIDTH * MVO_HEIGHT * 4 / 3 + 64) /* one frame's pyramid, level 0 first */
 #define MVO_SIDE (2 * MVO_WINDOW + 1) /* the tracking window's side */
 
@@ -251,6 +284,23 @@ typedef struct {
     int32_t up_steps;    /* how many it holds; MVO_IMU_UP_STEPS: settled */
 } mvo_gyro_t;
 
+/* The metric scale's part of the state (mvo_depth_reading, mvo_range_setup, mvo_range_reading, mvo_metric). */
+typedef struct {
+    float depth, range;      /* the next frame's readings, m */
+    int32_t has_depth, has_range;
+    float beam[3], beam_cos; /* the ranger's axis (unit, the camera's axes) and the cosine of its half angle */
+    int32_t has_beam;
+    float first_depth;       /* the run's first frame's depth: the metric vertical's zero */
+    int32_t has_first_depth;
+    /* recent depths, with the odometry's position along the down, the time and the odometry's path length then */
+    float ring_depth[MVO_DEPTH_RING], ring_down[MVO_DEPTH_RING], ring_time[MVO_DEPTH_RING], ring_path[MVO_DEPTH_RING];
+    int32_t ring_count, ring_next;
+    float time, step_time;   /* seconds since the run's start, and this step's */
+    float path;              /* the odometry's path length since the run's start, its unit */
+    float scale, variance;   /* metres per odometry unit (0: not observed yet) and its variance */
+    float metric[3];         /* the world centre in metres */
+} mvo_scale_t;
+
 typedef struct {
     mvo_camera_t camera;
     uint8_t *pyramid[2];      /* both frames' pyramids (MVO_PYRAMID_BYTES each, the caller's) */
@@ -265,6 +315,7 @@ typedef struct {
     uint32_t next_id;         /* id of the next detected feature */
     mvo_timing_t timing;
     mvo_gyro_t gyro;
+    mvo_scale_t scale;
     /* Optional, set after mvo_init: runs work(context, 0) and work(context, 1) at the same time (one per core) and
      * returns when both are done. NULL runs them one after the other; the results are the same either way. */
     void (*parallel)(void (*work)(void *context, int part), void *context);
@@ -321,6 +372,19 @@ int mvo_imu_set_accel_bias(mvo_t *s, const float bias[3]);
 /* The world's up as the accelerometer measured it (unit, the world's axes: the first camera's); zero until it has
  * settled (see above). */
 void mvo_imu_up(const mvo_t *s, float up[3]);
+/* A depth sensor's reading for the next frame: its depth below the surface, m (see above). Returns 0, keeping
+ * nothing, when it is not finite. */
+int mvo_depth_reading(mvo_t *s, float depth);
+/* A forward ranger's beam: its axis in the camera's axes (any nonzero length) and the cosine of its half angle, given
+ * after mvo_init, which clears it. Returns 0, changing nothing, for a zero or not finite axis or a cosine not between
+ * 0 and 1. mvo_start keeps it. */
+int mvo_range_setup(mvo_t *s, const float axis[3], float half_angle_cos);
+/* The ranger's reading for the next frame: the range along the beam, m. Returns 0, keeping nothing, without a beam
+ * or when it is not finite and positive. One given before mvo_start is dropped: there are no points to compare yet. */
+int mvo_range_reading(mvo_t *s, float range);
+/* The world centre in metres, the scale (metres per odometry unit) and its variance (either pointer may be NULL);
+ * returns 0, all zero, until the scale is known. */
+int mvo_metric(const mvo_t *s, float centre[3], float *scale, float *variance);
 /* The portable tracker kernels (see mvo_kernels_t). */
 void mvo_lk_template_c(mvo_window_t *window, const uint8_t *src, int stride, const int16_t weights[4], int64_t g[3]);
 void mvo_lk_sums_c(const mvo_window_t *window, const uint8_t *src, int stride, const int16_t weights[4],

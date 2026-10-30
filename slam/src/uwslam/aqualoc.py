@@ -394,14 +394,19 @@ def fit_bias(steps: list[np.ndarray], mount: np.ndarray, reference: list[np.ndar
     return bias
 
 
-def vertical_from_depth(raw: Path, t0: int, stamps: np.ndarray, frames: np.ndarray, centres: np.ndarray) -> dict:
-    """The reference's downward vertical: the depth sensor regressed on the reference's centres (depth = a + g . c, so
-    g points down, and |g| is 1 for a metric reference)."""
+def read_depth(raw: Path, t0: int) -> tuple[np.ndarray, np.ndarray, int]:
+    """The depth sensor's plausible readings: times (seconds from t0), depths (m) and how many were dropped."""
     _, rows = read_csv(one(raw, "harbor_depth_sequence_*.csv"))
     depth = np.array([[float(v) for v in row[:2]] for row in rows])
     plausible = np.abs(depth[:, 1] - np.median(depth[:, 1])) < DEPTH_OUTLIER_M
-    depth = depth[plausible]
-    measured = np.interp(stamps[frames], (depth[:, 0].astype(np.int64) - t0) / 1e9, depth[:, 1])
+    return (depth[plausible, 0].astype(np.int64) - t0) / 1e9, depth[plausible, 1], int((~plausible).sum())
+
+
+def vertical_from_depth(raw: Path, t0: int, stamps: np.ndarray, frames: np.ndarray, centres: np.ndarray) -> dict:
+    """The reference's downward vertical: the depth sensor regressed on the reference's centres (depth = a + g . c, so
+    g points down, and |g| is 1 for a metric reference)."""
+    times, depths, dropped = read_depth(raw, t0)
+    measured = np.interp(stamps[frames], times, depths)
     design = np.column_stack([np.ones(len(frames)), centres])
     solution, *_ = np.linalg.lstsq(design, measured, rcond=None)
     g = solution[1:]
@@ -409,7 +414,7 @@ def vertical_from_depth(raw: Path, t0: int, stamps: np.ndarray, frames: np.ndarr
         "vertical_world": (g / np.linalg.norm(g)).tolist(),
         "depth_slope_norm": float(np.linalg.norm(g)),
         "depth_residual_rms_m": float(np.sqrt(np.mean((measured - design @ solution) ** 2))),
-        "depth_samples_dropped": int((~plausible).sum()),
+        "depth_samples_dropped": dropped,
     }
 
 
@@ -497,14 +502,11 @@ def prepare(raw: Path, trajectory: Path, camera_calib: Path, imu_calib: Path, ou
         mount=mount,
         vertical=np.array(checks["vertical_world"]),
         accel_bias_fit=np.array(checks["accel_bias_fit"]),
+        depths=np.interp(stamps[picks], *read_depth(raw, t0)[:2]),  # the depth sensor at each frame, m
     )
     dump_json(output / "camera.json", {"source": camera_calib.name, "camera": camera})
     dump_json(output / "checks.json", checks)
     return checks
-
-
-def float_bits(value: float) -> int:
-    return struct.unpack("<I", struct.pack("<f", value))[0]
 
 
 def readings_file(path: Path, steps: list[np.ndarray]) -> None:
@@ -518,7 +520,8 @@ def board_files(prepared: Path, output: Path, calibration: Path | None = None) -
     same with (dt, x, y, z, ax, ay, az): --imu) and three expectations from the PC build of the same core, seed
     uwslam.mvo.SEED: board_expected_camera.json (the camera alone), board_expected_gyro.json (the gyro, its bias
     learnt from zero) and board_expected_imu.json (the IMU, the accelerometer's bias the one fitted to the
-    `calibration` sequence, or none)."""
+    `calibration` sequence, or none); for a sequence prepared with its depths also sense.bin (each frame's depth:
+    --sense) and board_expected_depth.json (the IMU and the depth sensor: the metric scale)."""
     from uwslam.aqualoc_score import load_prepared
 
     if output.exists() and any(output.iterdir()):
@@ -530,16 +533,22 @@ def board_files(prepared: Path, output: Path, calibration: Path | None = None) -
     gyro_file, imu_file = output / "gyro.bin", output / "imu.bin"
     readings_file(gyro_file, sequence.readings)
     readings_file(imu_file, sequence.imu_readings())
-    runs = (
-        ("camera", None, None),
-        ("gyro", mvo.GyroReadings(sequence.mount, sequence.readings), gyro_file),
-        ("imu", mvo.GyroReadings(sequence.mount, sequence.imu_readings(), None, accel_bias), imu_file),
-    )
+    imu = mvo.GyroReadings(sequence.mount, sequence.imu_readings(), None, accel_bias)
+    runs = [
+        ("camera", None, None, None),
+        ("gyro", mvo.GyroReadings(sequence.mount, sequence.readings), gyro_file, None),
+        ("imu", imu, imu_file, None),
+    ]
+    if sequence.depths is not None:
+        sense = mvo.sense_bytes(sequence.depths, None, len(sequence.frames))
+        (output / "sense.bin").write_bytes(sense)
+        runs.append(("depth", imu, imu_file, sequence.depths))
     summary = {}
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as scratch:
         vo = mvo.build(Path(scratch))
-        for name, gyro, source in runs:
-            run = mvo.run_odometry(vo, list(sequence.frames), sequence.camera, mvo.SEED, gyro)
+        for name, gyro, source, depths in runs:
+            run = mvo.run_odometry(vo, list(sequence.frames), sequence.camera, mvo.SEED, gyro, depths)
+            sensor = "imu" if name == "depth" else name  # the depth run reads the IMU too
             expected = {
                 "sequence": prepared.name,
                 "rate_hz": RATE_HZ,
@@ -556,23 +565,25 @@ def board_files(prepared: Path, output: Path, calibration: Path | None = None) -
                 **mvo.build_config(),
             }
             if gyro is not None:
-                expected[name] = {
-                    "mount_bits": [float_bits(v) for v in np.asarray(sequence.mount, dtype=np.float32).reshape(9)],
+                expected[sensor] = {
+                    "mount_bits": [mvo.float_bits(v) for v in np.asarray(sequence.mount, dtype=np.float32).reshape(9)],
                     "readings_file": source.name,
                     "readings_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
                     "used": run.gyro_used,
-                    "final_bias_bits": [float_bits(v) for v in run.gyro_bias[-1]],
+                    "final_bias_bits": [mvo.float_bits(v) for v in run.gyro_bias[-1]],
                 }
-            if name == "imu":
+            if sensor == "imu":
                 bias = np.zeros(3) if accel_bias is None else accel_bias
                 expected["imu"].update(
                     {
                         "accel_bias_from": None if calibration is None else calibration.name,
-                        "accel_bias_bits": [float_bits(v) for v in np.asarray(bias, dtype=np.float32)],
-                        "final_up_bits": [float_bits(v) for v in run.imu_up],
+                        "accel_bias_bits": [mvo.float_bits(v) for v in np.asarray(bias, dtype=np.float32)],
+                        "final_up_bits": [mvo.float_bits(v) for v in run.imu_up],
                         "forces_dropped": run.forces_dropped,
                     }
                 )
+            if depths is not None:
+                expected["metric"] = {"sense_file": "sense.bin", **mvo.metric_expectation(run, sense, None)}
             dump_json(output / f"board_expected_{name}.json", expected)
             summary[name] = {"kinds": {k: expected["kinds"].count(k) for k in mvo.KINDS.values()}}
     return summary

@@ -15,7 +15,10 @@ from uwslam.paths import CORE_DIR
 
 SOURCE = Path(__file__).resolve().parent / "c" / "mvo_carry_check.c"
 RATIO_SOURCE = Path(__file__).resolve().parent / "c" / "mvo_ratio_check.c"
-UNITS = [CORE_DIR / name for name in ("mono_vo.c", "mono_vo_numerics.c", "mono_vo_homography.c", "mono_vo_essential.c")]
+UNITS = [
+    CORE_DIR / name
+    for name in ("mono_vo.c", "mono_vo_numerics.c", "mono_vo_homography.c", "mono_vo_essential.c", "mono_vo_scale.c")
+]
 
 
 def build(folder: Path) -> Path:

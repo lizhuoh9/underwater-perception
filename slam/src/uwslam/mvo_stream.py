@@ -11,7 +11,9 @@ frame's obstacle directions (the choice and the blocked set) and the final state
 once and each step's readings before its frame, and how every step used the gyro and the final bias estimate must
 equal the PC's. With --imu (imu.bin, beside an expectation with an imu entry) the same with each step's IMU readings
 (the gyro's and the accelerometer's), after the accelerometer's calibrated bias, and the world's up the board measured
-must equal the PC's too.
+must equal the PC's too. With --sense (each frame's depth and range: the sense.bin `python -m uwslam.aqualoc board`
+writes, or the ranger's from `python -m uwslam.ranger`, beside an expectation with a metric entry) the board gets the
+ranger's beam once and each frame's readings before it, and every step's metric centre and scale must equal the PC's.
 
 The frames file contains raw 320x240 grey frames back to back, from `python -m uwslam.mvo compare --board-frames` or
 `python -m uwslam.mono_cloud --board-files`. Its VO expectation gives the camera, the seed, the sources' SHA-256
@@ -78,6 +80,8 @@ DIRECTIONS = 15  # OD_DIRECTIONS
 GYRO_READINGS, GYRO_READING_BYTES = 256, 16  # the firmware's: the most readings a step takes, and one's size
 IMU_READING_BYTES = 28  # an IMU reading: dt, the rate and the specific force
 GYRO_USES = ("none", "translation", "rotation", "lost")  # MVO_GYRO_*
+SENSE_BYTES = 8  # a frame's depth and range, little-endian float32, NaN where none (uwslam.mvo.sense_bytes)
+METRIC_FIELDS = ("metric", "metric_x_bits", "metric_y_bits", "metric_z_bits", "scale_bits", "scale_var_bits")
 
 
 def fnv(data: bytes) -> int:
@@ -157,6 +161,49 @@ def validate_expected_gyro(gyro: dict, expected: dict, imu: bool = False) -> Non
             or not all(type(b) is int and 0 <= b <= 0xFFFFFFFF for b in bits)
         ):
             raise ValueError(f"The IMU expectation needs {what}'s bits")
+
+
+def is_bits(values, count: int) -> bool:
+    return (
+        isinstance(values, list)
+        and len(values) == count
+        and all(type(b) is int and 0 <= b <= 0xFFFFFFFF for b in values)
+    )
+
+
+def read_sense_file(path: Path, frames: int) -> list[tuple[int | None, int | None]]:
+    """Each frame's depth and range from the sense file, as the bits the firmware's depth and range commands take;
+    None where the core takes no reading (uwslam.mvo.as_readings): not finite, or a range not positive."""
+    data = path.read_bytes()
+    if len(data) != frames * SENSE_BYTES:
+        raise ValueError(
+            f"{path.name} holds {len(data)} bytes; the expected run's {frames} frames need {frames * SENSE_BYTES}"
+        )
+    readings = []
+    for at in range(0, len(data), SENSE_BYTES):
+        (depth, distance), bits = struct.unpack_from("<2f", data, at), struct.unpack_from("<2I", data, at)
+        taken = (math.isfinite(depth), math.isfinite(distance) and distance > 0)
+        readings.append(tuple(b if keep else None for keep, b in zip(taken, bits)))
+    return readings
+
+
+def validate_expected_metric(metric: dict, expected: dict) -> None:
+    """Refuse a metric expectation that does not fit the run before opening the board."""
+    steps = expected["frames"] - 1
+    if not is_sha256(metric.get("sense_sha256")):
+        raise ValueError("The metric expectation needs the sense file's SHA-256")
+    if "beam_bits" not in metric or (metric["beam_bits"] is not None and not is_bits(metric["beam_bits"], 4)):
+        raise ValueError("The metric expectation's beam needs four float bits (the axis and the cosine) or null")
+    known = metric.get("known")
+    if not isinstance(known, list) or len(known) != steps or any(k not in (0, 1) for k in known):
+        raise ValueError("The metric expectation needs whether each step knew the scale")
+    centres = metric.get("centre_bits")
+    if not isinstance(centres, list) or len(centres) != steps or not all(is_bits(c, 3) for c in centres):
+        raise ValueError("The metric expectation needs each step's metric centre bits")
+    if not is_bits(metric.get("scale_bits"), steps):
+        raise ValueError("The metric expectation needs each step's scale bits")
+    if not is_bits(metric.get("variance_bits"), steps):
+        raise ValueError("The metric expectation needs each step's scale variance bits")
 
 
 def validate_expected_map(expected_map: dict, expected: dict) -> None:
@@ -494,10 +541,12 @@ def stream(
     baud: int = LINK_BAUD,
     gyro_path: Path | None = None,
     imu_path: Path | None = None,
+    sense_path: Path | None = None,
 ) -> tuple[dict, list[str]]:
     """Runs the frames (the first `limit` of them, when given) through the board on `cores` cores, tracking with the
     vector kernels or (simd False) the portable ones and, with masks, building the map, and with a gyro or IMU
-    expectation sending each step's readings before its frame; the record and the board's lines."""
+    expectation sending each step's readings before its frame, and with a metric one each frame's depth and range;
+    the record and the board's lines."""
     expected = json.loads(expected_path.read_text(encoding="utf-8"))
     expectation_config(expected)  # refuse expectations of another build before opening the board
     if (expected.get("gyro") is None) != (gyro_path is None):
@@ -516,6 +565,17 @@ def stream(
         if sha256_file(readings_path) != expected_gyro["readings_sha256"]:
             raise ValueError(f"The {sensor} readings file's SHA-256 differs from the PC run's")
         gyro_payloads = read_gyro_file(readings_path, expected["frames"] - 1, reading_bytes)
+    expected_metric = expected.get("metric")
+    if (expected_metric is None) != (sense_path is None):
+        raise ValueError("A metric expectation and a sense file go together")
+    sense = []
+    if expected_metric is not None:
+        validate_expected_metric(expected_metric, expected)
+        if sha256_file(sense_path) != expected_metric["sense_sha256"]:
+            raise ValueError("The sense file's SHA-256 differs from the PC run's")
+        sense = read_sense_file(sense_path, expected["frames"])
+        if expected_metric["beam_bits"] is None and any(reading[1] is not None for reading in sense):
+            raise ValueError("The sense file holds ranges, and the metric expectation no ranger's beam")
     if masks_path is not None and expected_map_path is None:
         raise ValueError("A map expectation is required when streaming masks")
     expected_map = json.loads(expected_map_path.read_text(encoding="utf-8")) if masks_path is not None else None
@@ -626,12 +686,16 @@ def stream(
         if sensor == "imu" and expected_gyro is not None:
             board.send(("accel_bias " + " ".join(str(b) for b in expected_gyro["accel_bias_bits"]) + "\n").encode())
             board.reply(("accel_bias set",), REPLY_TIMEOUT_S)
+        if expected_metric is not None and expected_metric["beam_bits"] is not None:
+            board.send(("beam " + " ".join(str(b) for b in expected_metric["beam_bits"]) + "\n").encode())
+            board.reply(("beam set",), REPLY_TIMEOUT_S)
         board.send(f"selftest {SELFTEST_CASES} {SELFTEST_SEED}\n".encode())
         selftest = fields(board.reply(("selftest",), SELFTEST_TIMEOUT_S))
         if selftest["template_mismatches"] or selftest["sums_mismatches"] or selftest["block_mismatches"]:
             raise RuntimeError(f"The board's vector kernels differ from the portable ones: {selftest}")
         steps, first, continuous_from_kind = [], None, 1
         voxel_mismatches, dir_mismatches, plan_mismatches, gyro_mismatches, gyro_us = [], [], [], [], []
+        metric_mismatches = []
         forces_dropped = 0
         checked = (
             expected_map is not None
@@ -659,6 +723,10 @@ def stream(
                     f"Mask {index} is {'present' if record and record[0] else 'absent'}, unlike in the "
                     "direction expectation"
                 )
+            for name, bits in zip(("depth", "range"), sense[index] if sense else ()):  # the frame's readings
+                if bits is not None:
+                    board.send(f"{name} {bits}\n".encode())
+                    board.reply((f"{name} set",), REPLY_TIMEOUT_S)
             if expected_gyro is not None and index > 0:  # the readings of the step this frame ends
                 payload = gyro_payloads[index - 1]
                 board.send(f"{sensor} {len(payload) // reading_bytes} {fnv(payload)}\n".encode() + payload)
@@ -723,6 +791,13 @@ def stream(
                         raise RuntimeError(f"Board step {index} has invalid direction timing")
                 if expected_gyro is not None and step.get("gyro") != expected_gyro["used"][index - 1]:
                     gyro_mismatches.append(index)
+                if expected_metric is not None and [step.get(key) for key in METRIC_FIELDS] != [
+                    expected_metric["known"][index - 1],
+                    *expected_metric["centre_bits"][index - 1],
+                    expected_metric["scale_bits"][index - 1],
+                    expected_metric["variance_bits"][index - 1],
+                ]:
+                    metric_mismatches.append(index)
                 if expected_plan is not None:
                     if (
                         step.get("plan") != expected_plan["actions"][index - 1]
@@ -902,6 +977,17 @@ def stream(
                     "match": record["imu"]["match"] and up_match is not False,
                 }
             )
+    if expected_metric is not None:
+        record["metric"] = {
+            "sense_file": sense_path.name,
+            "sense_sha256": expected_metric["sense_sha256"],
+            "beam_bits": expected_metric["beam_bits"],
+            "depths": sum(reading[0] is not None for reading in sense[:count]),
+            "ranges": sum(reading[1] is not None for reading in sense[:count]),
+            "known_steps": sum(step.get("metric") == 1 for step in steps),
+            "mismatched_steps": metric_mismatches,
+            "match": not metric_mismatches,
+        }
     record["per_step"] = steps
     return record, board.lines
 
@@ -955,6 +1041,8 @@ def write_board_section(results: Path) -> None:
                 f"IMU: the gyro's use, its final bias and the world's up {verdict[record['imu']['match']]}"
                 + (f" ({integration['mean']:.0f} µs to integrate a step's readings)" if integration else "")
             )
+        if record.get("metric"):
+            extra.append(f"metric path and scale {verdict[record['metric']['match']]}")
         extra_cell = "; ".join(extra) if extra else "—"
         step_time = (
             f"{t['total_ms']['mean']:.0f} / {t['total_ms']['median']:.0f} / {t['total_ms']['max']:.0f} ms"
@@ -1001,6 +1089,7 @@ def write_board_section(results: Path) -> None:
     records = [json.loads(path.read_text(encoding="utf-8")) for path in sorted((results / "board").glob("*.json"))]
     with_gyro = any(record.get("gyro") for record in records)
     with_imu = any(record.get("imu") for record in records)
+    with_metric = any(record.get("metric") for record in records)
     section += [
         "Re-run (after `uwslam.mvo compare --board-frames` and `uwslam.mono_map --board-masks`"
         + (", or for a gyro or IMU sequence `uwslam.aqualoc board`" if with_gyro or with_imu else "")
@@ -1026,6 +1115,14 @@ def write_board_section(results: Path) -> None:
                 "--expected <board_expected_imu.json> --label <name>   # with the IMU"
             ]
             if with_imu
+            else []
+        ),
+        *(
+            [
+                "python -m uwslam.mvo_stream --port <port> --frames <frames file> [--imu <IMU readings>] --sense "
+                "<sense file> --expected <expectation with a metric entry> --label <name>   # depths or ranges"
+            ]
+            if with_metric
             else []
         ),
         "```",
@@ -1078,6 +1175,9 @@ def main() -> None:
     )
     parser.add_argument("--gyro", type=Path, help="Each step's gyro readings, for an expectation with a gyro entry")
     parser.add_argument("--imu", type=Path, help="Each step's IMU readings, for an expectation with an imu entry")
+    parser.add_argument(
+        "--sense", type=Path, help="Each frame's depth and range, for an expectation with a metric entry"
+    )
     parser.add_argument("--label", required=True, help="Name of the saved record, e.g. p4_360mhz_usj_5hz")
     parser.add_argument("--frames-limit", type=int, help="Stream only the first this many frames")
     parser.add_argument("--cores", type=int, choices=(1, 2), default=2, help="Run on one core or on both")
@@ -1133,6 +1233,7 @@ def main() -> None:
         args.baud,
         args.gyro,
         args.imu,
+        args.sense,
     )
     if args.cloud_output is not None:
         write_cloud_ply(args.cloud_output, record["cloud"])
@@ -1185,6 +1286,11 @@ def main() -> None:
                 f"final bias match = {record[sensor]['bias_match']}"
                 + (f", final up match = {record['imu']['up_match']}" if sensor == "imu" else "")
             )
+    if "metric" in record:
+        print(
+            f"metric: {record['metric']['known_steps']} steps with the scale known, "
+            f"{len(record['metric']['mismatched_steps'])} differ from the PC's"
+        )
     if "plan" in record:
         print(
             f"plans: hash match = {record['plan']['match']}, {len(record['plan']['mismatched_steps'])} steps differ, "
