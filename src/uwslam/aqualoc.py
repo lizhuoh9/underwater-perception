@@ -1,6 +1,7 @@
-"""AQUALOC harbour sequences (Ferrera et al., IJRR 2019) as the odometry's input with the dataset's own gyro: the
-camera's frames at 5 Hz in a 320x240 camera the core models exactly, each step's raw gyro readings for the core to
-integrate (mvo_gyro_rate), the reference poses, and the board's files. Scoring is uwslam.aqualoc_score.
+"""AQUALOC harbour sequences (Ferrera et al., IJRR 2019) as the odometry's input with the dataset's own IMU: the
+camera's frames at 5 Hz in a 320x240 camera the core models exactly, each step's raw gyro and accelerometer readings
+for the core to integrate (mvo_gyro_rate, mvo_imu_reading), the reference poses, and the board's files. Scoring is
+uwslam.aqualoc_score.
 
 The data is not in the repository: from https://www.lirmm.fr/aqualoc/ take a harbour sequence's raw-data archive
 (images, imu, depth csv files) and the meta files harbor_camera_calib.yaml, harbor_imu_camera_calib.yaml and
@@ -17,12 +18,16 @@ new_harbor_colmap_traj_sequence_NN.txt (the README calls the new_ references the
 - Gyro: between each pair of frame stamps moved onto the IMU's clock (Kalibr's timeshift_cam_imu), the IMU's angular
   rates cut at the stamps (linear interpolation there) into readings of (dt, the mean of the reading's two end rates):
   the midpoint rule. The mount is T_cam_imu's rotation (IMU axes into the camera's).
+- Accelerometer: its specific forces cut the same way, into the same pieces. The checks compare the up they measure
+  over each step with the reference's and fit the accelerometer's bias to it (force = bias + s up, least squares).
+  That fit serves the checks and calibrates the other sequences in uwslam.aqualoc_score; the core never sees the
+  reference.
 - Reference: the Colmap trajectory (every 5th image, metric through the pressure sensor), camera-to-world, slerped and
   linearly interpolated to the frames' stamps. Its vertical comes from the depth sensor regressed on its centres.
 
   python -m uwslam.aqualoc prepare <raw_data folder> --trajectory <txt> --camera-calib <yaml> --imu-calib <yaml>
       --output <fresh folder>
-  python -m uwslam.aqualoc board <prepared folder> --output <fresh folder>
+  python -m uwslam.aqualoc board <prepared folder> --output <fresh folder> [--calibration <other prepared folder>]
 """
 
 import argparse
@@ -329,6 +334,51 @@ def reference_at(
     return np.array(out_r), np.array(out_c)
 
 
+def mean_force(readings: np.ndarray, forces: np.ndarray, bias: np.ndarray) -> np.ndarray:
+    """A step's time-weighted mean specific force in the IMU's axes at its end frame B (float64): each reading's force
+    turned into A with the gyro's rotation (less the bias) at the reading's middle, the sum turned into B."""
+    rotation = np.eye(3)
+    total = np.zeros(3)
+    for (dt, *w), f in zip(readings, forces):
+        half = exp_so3((np.array(w) - bias) * dt / 2)
+        total += rotation @ half @ f * dt
+        rotation = rotation @ half @ half
+    return rotation.T @ total / readings[:, 0].sum()
+
+
+def fit_accel_bias(forces: np.ndarray, ups: np.ndarray) -> tuple[np.ndarray, float]:
+    """The accelerometer's bias b and the scale s with force = b + s up (both in the IMU's axes), least squares."""
+    design = np.zeros((3 * len(forces), 4))
+    for k, up in enumerate(ups):
+        design[3 * k : 3 * k + 3, :3] = np.eye(3)
+        design[3 * k : 3 * k + 3, 3] = up
+    solution, *_ = np.linalg.lstsq(design, forces.reshape(-1), rcond=None)
+    return solution[:3], float(solution[3])
+
+
+def up_angles_deg(forces: np.ndarray, ups: np.ndarray) -> np.ndarray:
+    cosine = np.sum(forces * ups, axis=1) / np.linalg.norm(forces, axis=1)
+    return np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0)))
+
+
+def accel_checks(steps: list[np.ndarray], forces: list[np.ndarray], gyro_bias: np.ndarray, ups: np.ndarray) -> dict:
+    """The up the accelerometer measures over each step against the reference's (ups: unit, the IMU's axes at each
+    step's end), before and after the fitted bias."""
+    mean = np.array([mean_force(r, f, gyro_bias) for r, f in zip(steps, forces)])
+    bias, scale = fit_accel_bias(mean, ups)
+    before, after = up_angles_deg(mean, ups), up_angles_deg(mean - bias, ups)
+    return {
+        "accel_force_median": float(np.median(np.linalg.norm(mean, axis=1))),
+        "accel_up_error_deg": {"median": float(np.median(before)), "p90": float(np.percentile(before, 90))},
+        "accel_bias_fit": bias.tolist(),
+        "accel_scale_fit": scale,
+        "accel_up_error_without_fitted_bias_deg": {
+            "median": float(np.median(after)),
+            "p90": float(np.percentile(after, 90)),
+        },
+    }
+
+
 def fit_bias(steps: list[np.ndarray], mount: np.ndarray, reference: list[np.ndarray]) -> np.ndarray:
     """The constant bias (rad/s, the IMU's axes) that best fits the steps' reference turns: to first order the
     gyro's miss log(gyro^T reference), in the IMU's axes, is minus the bias times the step's time; least squares, two
@@ -378,8 +428,11 @@ def prepare(raw: Path, trajectory: Path, camera_calib: Path, imu_calib: Path, ou
     imu = np.array([[float(v) for v in row] for row in imu_rows])
     imu_times = (imu[:, 0].astype(np.int64) - t0) / 1e9
     rate_columns = [column(imu_header, f"w_rs_s_{axis}") for axis in "xyz"]
+    force_columns = [column(imu_header, f"a_rs_s_{axis}") for axis in "xyz"]
     if not all("rad s^-1" in imu_header[c] for c in rate_columns):
         raise ValueError(f"Expected angular rates in rad/s: {imu_header}")
+    if not all("m s^-2" in imu_header[c] for c in force_columns):
+        raise ValueError(f"Expected specific forces in m/s^2: {imu_header}")
     if np.any(np.diff(imu_times) <= 0):
         raise ValueError("IMU stamps must increase")
     rates = imu[:, rate_columns]
@@ -393,6 +446,10 @@ def prepare(raw: Path, trajectory: Path, camera_calib: Path, imu_calib: Path, ou
         raise ValueError("Fewer than two frames inside both the reference and the IMU's record")
     ref_r, ref_c = reference_at(frames, centres, rotations, stamps, stamps[picks])
     steps = [step_readings(imu_times, rates, stamps[a] + shift, stamps[b] + shift) for a, b in zip(picks, picks[1:])]
+    forces = [
+        step_readings(imu_times, imu[:, force_columns], stamps[a] + shift, stamps[b] + shift)[:, 1:]
+        for a, b in zip(picks, picks[1:])
+    ]
     turns = [ref_r[k].T @ ref_r[k + 1] for k in range(len(steps))]
     errors = np.array([angle_deg(integrate(s, mount).T @ turn) for s, turn in zip(steps, turns)])
     bias = fit_bias(steps, mount, turns)
@@ -420,6 +477,8 @@ def prepare(raw: Path, trajectory: Path, camera_calib: Path, imu_calib: Path, ou
         **vertical_from_depth(raw, t0, stamps, frames, centres),
         "camera": camera_checks,
     }
+    ups = np.array([mount.T @ -(r.T @ np.array(checks["vertical_world"])) for r in ref_r[1:]])
+    checks.update(accel_checks(steps, forces, bias, ups))
     map_x, map_y = remap_tables(calibration, camera)
     images = one(raw, "harbor_images_sequence_*")
     grey = np.stack([resample(images / names[k], map_x, map_y) for k in picks])
@@ -434,8 +493,10 @@ def prepare(raw: Path, trajectory: Path, camera_calib: Path, imu_calib: Path, ou
         reference_centres=ref_c,
         reading_offsets=offsets,
         readings=np.concatenate(steps).astype(np.float32),
+        forces=np.concatenate(forces).astype(np.float32),
         mount=mount,
         vertical=np.array(checks["vertical_world"]),
+        accel_bias_fit=np.array(checks["accel_bias_fit"]),
     )
     dump_json(output / "camera.json", {"source": camera_calib.name, "camera": camera})
     dump_json(output / "checks.json", checks)
@@ -446,26 +507,38 @@ def float_bits(value: float) -> int:
     return struct.unpack("<I", struct.pack("<f", value))[0]
 
 
-def board_files(prepared: Path, output: Path) -> dict:
+def readings_file(path: Path, steps: list[np.ndarray]) -> None:
+    """Per step a little-endian uint32 count, then that many float32 rows (uwslam.mvo_stream --gyro or --imu)."""
+    path.write_bytes(b"".join(struct.pack("<I", len(rows)) + rows.astype("<f4").tobytes() for rows in steps))
+
+
+def board_files(prepared: Path, output: Path, calibration: Path | None = None) -> dict:
     """The board's files for a prepared sequence at 5 Hz: frames.bin (raw 320x240 frames), gyro.bin (per step a
-    little-endian uint32 count, then that many (dt, x, y, z) float32 readings: uwslam.mvo_stream --gyro) and two
-    expectations from the PC build of the same core, seed uwslam.mvo.SEED: board_expected_gyro.json (the bias learnt
-    from zero) and board_expected_camera.json (the camera alone)."""
+    little-endian uint32 count, then that many (dt, x, y, z) float32 readings: uwslam.mvo_stream --gyro), imu.bin (the
+    same with (dt, x, y, z, ax, ay, az): --imu) and three expectations from the PC build of the same core, seed
+    uwslam.mvo.SEED: board_expected_camera.json (the camera alone), board_expected_gyro.json (the gyro, its bias
+    learnt from zero) and board_expected_imu.json (the IMU, the accelerometer's bias the one fitted to the
+    `calibration` sequence, or none)."""
     from uwslam.aqualoc_score import load_prepared
 
     if output.exists() and any(output.iterdir()):
         raise FileExistsError("Refusing to overwrite; choose a fresh --output")
     sequence = load_prepared(prepared)
+    accel_bias = None if calibration is None else load_prepared(calibration).accel_bias_fit
     output.mkdir(parents=True, exist_ok=True)
     (output / "frames.bin").write_bytes(b"".join(np.ascontiguousarray(f).tobytes() for f in sequence.frames))
-    gyro_file = output / "gyro.bin"
-    gyro_file.write_bytes(
-        b"".join(struct.pack("<I", len(rows)) + rows.astype("<f4").tobytes() for rows in sequence.readings)
+    gyro_file, imu_file = output / "gyro.bin", output / "imu.bin"
+    readings_file(gyro_file, sequence.readings)
+    readings_file(imu_file, sequence.imu_readings())
+    runs = (
+        ("camera", None, None),
+        ("gyro", mvo.GyroReadings(sequence.mount, sequence.readings), gyro_file),
+        ("imu", mvo.GyroReadings(sequence.mount, sequence.imu_readings(), None, accel_bias), imu_file),
     )
     summary = {}
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as scratch:
         vo = mvo.build(Path(scratch))
-        for name, gyro in (("camera", None), ("gyro", mvo.GyroReadings(sequence.mount, sequence.readings))):
+        for name, gyro, source in runs:
             run = mvo.run_odometry(vo, list(sequence.frames), sequence.camera, mvo.SEED, gyro)
             expected = {
                 "sequence": prepared.name,
@@ -483,13 +556,23 @@ def board_files(prepared: Path, output: Path) -> dict:
                 **mvo.build_config(),
             }
             if gyro is not None:
-                expected["gyro"] = {
+                expected[name] = {
                     "mount_bits": [float_bits(v) for v in np.asarray(sequence.mount, dtype=np.float32).reshape(9)],
-                    "readings_file": gyro_file.name,
-                    "readings_sha256": hashlib.sha256(gyro_file.read_bytes()).hexdigest(),
+                    "readings_file": source.name,
+                    "readings_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
                     "used": run.gyro_used,
                     "final_bias_bits": [float_bits(v) for v in run.gyro_bias[-1]],
                 }
+            if name == "imu":
+                bias = np.zeros(3) if accel_bias is None else accel_bias
+                expected["imu"].update(
+                    {
+                        "accel_bias_from": None if calibration is None else calibration.name,
+                        "accel_bias_bits": [float_bits(v) for v in np.asarray(bias, dtype=np.float32)],
+                        "final_up_bits": [float_bits(v) for v in run.imu_up],
+                        "forces_dropped": run.forces_dropped,
+                    }
+                )
             dump_json(output / f"board_expected_{name}.json", expected)
             summary[name] = {"kinds": {k: expected["kinds"].count(k) for k in mvo.KINDS.values()}}
     return summary
@@ -498,21 +581,24 @@ def board_files(prepared: Path, output: Path) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)
-    make = commands.add_parser("prepare", help="Frames, gyro readings and reference of one harbour sequence")
+    make = commands.add_parser("prepare", help="Frames, IMU readings and reference of one harbour sequence")
     make.add_argument("raw", type=Path, help="The sequence's raw_data folder (images, imu and depth csv files)")
     make.add_argument("--trajectory", type=Path, required=True, help="new_harbor_colmap_traj_sequence_NN.txt")
     make.add_argument("--camera-calib", type=Path, required=True, help="harbor_camera_calib.yaml")
     make.add_argument("--imu-calib", type=Path, required=True, help="harbor_imu_camera_calib.yaml")
     make.add_argument("--output", type=Path, required=True)
-    board = commands.add_parser("board", help="The board's frames, gyro readings and expectations")
+    board = commands.add_parser("board", help="The board's frames, gyro and IMU readings and expectations")
     board.add_argument("prepared", type=Path)
     board.add_argument("--output", type=Path, required=True)
+    board.add_argument(
+        "--calibration", type=Path, help="A prepared sequence whose fitted accelerometer bias calibrates the IMU's"
+    )
     args = parser.parse_args()
     if args.command == "prepare":
         checks = prepare(args.raw, args.trajectory, args.camera_calib, args.imu_calib, args.output)
         print(json.dumps(checks, indent=1))
     else:
-        print(json.dumps(board_files(args.prepared, args.output), indent=1))
+        print(json.dumps(board_files(args.prepared, args.output, args.calibration), indent=1))
 
 
 if __name__ == "__main__":

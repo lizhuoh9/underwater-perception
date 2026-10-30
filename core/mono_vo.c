@@ -63,13 +63,14 @@ int mvo_gyro_mount(mvo_t *s, const float mount[9])
     return 1;
 }
 
-void mvo_gyro_rate(mvo_t *s, const float rate[3], float dt)
+/* mvo_gyro_rate's work; returns 0 when it drops the reading. */
+static int integrate(mvo_t *s, const float rate[3], float dt)
 {
     mvo_gyro_t *g = &s->gyro;
     const float half = 0.5f * dt;
     float w[3], h[3], h2, sine, d[4], q[4], scale;
     if (!(dt > 0.0f)) {
-        return;
+        return 0;
     }
     w[0] = rate[0] - g->bias[0];
     w[1] = rate[1] - g->bias[1];
@@ -80,7 +81,7 @@ void mvo_gyro_rate(mvo_t *s, const float rate[3], float dt)
     h[2] *= half;
     h2 = dot3(h, h);
     if (!(h2 < 1.0f)) { /* not finite, or a reading turning 2 rad or more: far outside the series */
-        return;
+        return 0;
     }
     sine = 1.0f - h2 * (1.0f / 6.0f - h2 * (1.0f / 120.0f)); /* sin |h| / |h| */
     d[0] = 1.0f - h2 * (0.5f - h2 * (1.0f / 24.0f));         /* cos |h| */
@@ -99,6 +100,80 @@ void mvo_gyro_rate(mvo_t *s, const float rate[3], float dt)
     g->pending[2] *= scale;
     g->pending[3] *= scale;
     g->pending_time += dt;
+    return 1;
+}
+
+void mvo_gyro_rate(mvo_t *s, const float rate[3], float dt) { (void)integrate(s, rate, dt); }
+
+/* v turned by the unit quaternion q (w, x, y, z): v + 2 w (q x v) + 2 q x (q x v). */
+static void quat_turn(const float q[4], const float v[3], float out[3])
+{
+    float a[3], b[3];
+    a[0] = q[2] * v[2] - q[3] * v[1];
+    a[1] = q[3] * v[0] - q[1] * v[2];
+    a[2] = q[1] * v[1] - q[2] * v[0];
+    b[0] = q[2] * a[2] - q[3] * a[1];
+    b[1] = q[3] * a[0] - q[1] * a[2];
+    b[2] = q[1] * a[1] - q[2] * a[0];
+    out[0] = v[0] + 2.0f * (q[0] * a[0] + b[0]);
+    out[1] = v[1] + 2.0f * (q[0] * a[1] + b[1]);
+    out[2] = v[2] + 2.0f * (q[0] * a[2] + b[2]);
+}
+
+int mvo_imu_reading(mvo_t *s, const float rate[3], const float accel[3], float dt)
+{
+    mvo_gyro_t *g = &s->gyro;
+    float before[4], f[3], c[3], a[3], b[3];
+    int i;
+    memcpy(before, g->pending, sizeof before);
+    if (!integrate(s, rate, dt)) {
+        return 0;
+    }
+    for (i = 0; i < 3; ++i) {
+        f[i] = accel[i] - g->accel_bias[i];
+    }
+    if (!(dot3(f, f) < MVO_IMU_FORCE_MAX * MVO_IMU_FORCE_MAX)) { /* not finite, or a knock: no reading of gravity */
+        return 0;
+    }
+    mat3_vec(g->mount, f, c);
+    quat_turn(before, c, a); /* into A at the reading's two ends: their mean is its middle to second order */
+    quat_turn(g->pending, c, b);
+    for (i = 0; i < 3; ++i) {
+        g->force[i] += 0.5f * dt * (a[i] + b[i]);
+    }
+    g->force_time += dt;
+    return 1;
+}
+
+int mvo_imu_set_accel_bias(mvo_t *s, const float bias[3])
+{
+    int i;
+    for (i = 0; i < 3; ++i) {
+        if (!is_finite(bias[i])) {
+            return 0;
+        }
+    }
+    memcpy(s->gyro.accel_bias, bias, sizeof s->gyro.accel_bias);
+    return 1;
+}
+
+/* The direction of the agreeing ups' sum, settled or not; zero for none. */
+static void mean_up(const mvo_gyro_t *g, float up[3])
+{
+    const float size2 = dot3(g->up_sum, g->up_sum);
+    const float scale = size2 > 0.0f ? mvo_rsqrt(size2) : 0.0f;
+    up[0] = g->up_sum[0] * scale;
+    up[1] = g->up_sum[1] * scale;
+    up[2] = g->up_sum[2] * scale;
+}
+
+void mvo_imu_up(const mvo_t *s, float up[3])
+{
+    if (s->gyro.up_steps < MVO_IMU_UP_STEPS) {
+        up[0] = up[1] = up[2] = 0.0f;
+        return;
+    }
+    mean_up(&s->gyro, up);
 }
 
 void mvo_gyro_bias(const mvo_t *s, float bias[3]) { memcpy(bias, s->gyro.bias, sizeof s->gyro.bias); }
@@ -148,6 +223,22 @@ static int take_readings(mvo_t *s, float rotation[9], float *time)
     g->pending[0] = 1.0f;
     g->pending[1] = g->pending[2] = g->pending[3] = 0.0f;
     g->pending_time = 0.0f;
+    g->measured[0] = g->measured[1] = g->measured[2] = 0.0f;
+    g->level_time = 0.0f;
+    if (g->force_time > 0.0f) { /* the up the forces measured, into the world through A's rotation (the last frame) */
+        float up[3], size2;
+        mat3_vec(s->world_rotation, g->force, up);
+        size2 = dot3(up, up);
+        if (size2 > 0.0f && size2 < 3.0e38f) {
+            const float scale = mvo_rsqrt(size2);
+            g->measured[0] = up[0] * scale;
+            g->measured[1] = up[1] * scale;
+            g->measured[2] = up[2] * scale;
+            g->level_time = g->force_time;
+        }
+    }
+    g->force[0] = g->force[1] = g->force[2] = 0.0f;
+    g->force_time = 0.0f;
     return any;
 }
 
@@ -215,6 +306,66 @@ void mvo_start(mvo_t *s)
     refill(s);
 }
 
+/* Until the world's up has settled, the step's measured up joins the agreeing ones, or starts them again when it
+ * lies outside MVO_IMU_UP_AGREE of their mean, and nothing turns. From the step that settles it on, the world
+ * rotation after the step turns so that the step's measured up moves towards the world's up: about their cross
+ * product in the world's axes, which tilts and leaves the heading, by the sine of their angle times
+ * MVO_IMU_LEVEL_RATE times the readings' seconds (at most 1), and at most MVO_IMU_LEVEL_MAX. A measured up more
+ * than a right angle from the world's turns nothing. */
+static void level(mvo_t *s)
+{
+    mvo_gyro_t *g = &s->gyro;
+    float up[3], v[3], gain, size2, h2, sine, q[4], turn[9];
+    if (!(g->level_time > 0.0f)) {
+        return;
+    }
+    if (g->up_steps < MVO_IMU_UP_STEPS) {
+        mean_up(g, up);
+        if (g->up_steps > 0 && !(dot3(g->measured, up) >= MVO_IMU_UP_AGREE)) { /* not still: start again */
+            g->up_sum[0] = g->up_sum[1] = g->up_sum[2] = 0.0f;
+            g->up_steps = 0;
+        }
+        g->up_sum[0] += g->measured[0];
+        g->up_sum[1] += g->measured[1];
+        g->up_sum[2] += g->measured[2];
+        if (++g->up_steps < MVO_IMU_UP_STEPS) {
+            return;
+        }
+    }
+    mean_up(g, up);
+    if (!(dot3(g->measured, up) > 0.0f)) {
+        return;
+    }
+    gain = g->level_time * MVO_IMU_LEVEL_RATE;
+    if (gain > 1.0f) gain = 1.0f;
+    v[0] = gain * (g->measured[1] * up[2] - g->measured[2] * up[1]);
+    v[1] = gain * (g->measured[2] * up[0] - g->measured[0] * up[2]);
+    v[2] = gain * (g->measured[0] * up[1] - g->measured[1] * up[0]);
+    size2 = dot3(v, v);
+    if (size2 > MVO_IMU_LEVEL_MAX * MVO_IMU_LEVEL_MAX) {
+        const float scale = MVO_IMU_LEVEL_MAX * mvo_rsqrt(size2);
+        v[0] *= scale;
+        v[1] *= scale;
+        v[2] *= scale;
+    }
+    h2 = 0.25f * dot3(v, v); /* the turn's half angle, squared: at most a degree */
+    sine = 0.5f * (1.0f - h2 * (1.0f / 6.0f - h2 * (1.0f / 120.0f)));
+    q[0] = 1.0f - h2 * (0.5f - h2 * (1.0f / 24.0f));
+    q[1] = sine * v[0];
+    q[2] = sine * v[1];
+    q[3] = sine * v[2];
+    turn[0] = 1.0f - 2.0f * (q[2] * q[2] + q[3] * q[3]);
+    turn[1] = 2.0f * (q[1] * q[2] - q[0] * q[3]);
+    turn[2] = 2.0f * (q[1] * q[3] + q[0] * q[2]);
+    turn[3] = 2.0f * (q[1] * q[2] + q[0] * q[3]);
+    turn[4] = 1.0f - 2.0f * (q[1] * q[1] + q[3] * q[3]);
+    turn[5] = 2.0f * (q[2] * q[3] - q[0] * q[1]);
+    turn[6] = 2.0f * (q[1] * q[3] - q[0] * q[2]);
+    turn[7] = 2.0f * (q[2] * q[3] + q[0] * q[1]);
+    turn[8] = 1.0f - 2.0f * (q[1] * q[1] + q[2] * q[2]);
+    mat3_mul(turn, s->world_rotation, s->world_rotation);
+}
+
 static void finish(mvo_t *s, mvo_step_t *out, const float rotation_ab[9], const float centre[3], int kind, int tracks,
                    int inliers, int scale_points)
 {
@@ -231,6 +382,7 @@ static void finish(mvo_t *s, mvo_step_t *out, const float rotation_ab[9], const 
         s->world_centre[i] += moved[i];
     }
     mat3_mul(s->world_rotation, rotation_ab, s->world_rotation);
+    level(s);
     memcpy(out->world_rotation, s->world_rotation, sizeof out->world_rotation);
     memcpy(out->world_centre, s->world_centre, sizeof out->world_centre);
     ++s->steps;

@@ -1,11 +1,11 @@
 # uwslam
 
-Monocular-camera SLAM for a small underwater robot: one camera, an optional gyro, no rangers. A C core that gives the
-same results bit for bit on a PC and on an ESP32-P4 turns the robot camera's grey frames into the camera's motion and a
-continuing 3D map, turns the segmentation model's water mask into the directions of the view that are blocked, and from
-both plans where to head next. Everything is checked on a lake clip against a 3D reconstruction of it, the gyro on two
-sequences of the AQUALOC dataset, whose camera and gyro share one clock, and both on an ESP32-P4 by streaming them to
-the board over USB.
+Monocular-camera SLAM for a small underwater robot: one camera, an optional IMU (a gyro and an accelerometer), no
+rangers. A C core that gives the same results bit for bit on a PC and on an ESP32-P4 turns the robot camera's grey
+frames into the camera's motion and a continuing 3D map, turns the segmentation model's water mask into the
+directions of the view that are blocked, and from both plans where to head next. Everything is checked on a lake clip
+against a 3D reconstruction of it, the IMU on two sequences of the AQUALOC dataset, whose camera and IMU share one
+clock, and both on an ESP32-P4 by streaming them to the board over USB.
 
 [中文说明](README.zh-CN.md)
 
@@ -23,7 +23,7 @@ Two older maps stay beside them: [core/mono_map](core/mono_map.h), a top-view ob
 
 ## Findings
 
-All numbers but the gyro's (item 6) come from the lake clip: the first 33.8 s of an underwater video filmed along a
+All numbers but the IMU's (items 6 and 7) come from the lake clip: the first 33.8 s of an underwater video filmed along a
 wall in a lake, at 30 FPS. The reference is a WaterSplat reconstruction of it: 88 camera poses (their stamps times 3,
 one video frame later, see [mask_motion](results/lake_clip/mask_motion/RESULTS.md)) and its point cloud, taken as
 metres. The water masks are the
@@ -58,15 +58,21 @@ heading and about a point in the plan's shares.
    water directions.
 5. **The ESP32-P4 gives the PC's results, at 5 Hz.** With the clip streamed at 5 and 10 Hz, the board gives every
    odometry step, the voxel map, the directions, the plan and the obstacle map exactly as the PC does. At 360 MHz on
-   two cores a 5 Hz step takes 127 ms (median 132, at most 154); the voxel map adds 0.48 ms, the directions 0.18 ms and
+   two cores a 5 Hz step takes 127 ms (median 131, at most 154); the voxel map adds 0.48 ms, the directions 0.18 ms and
    the plan 1.78 ms, within the 200 ms between frames. At 10 Hz a step takes 102 ms (median 99, at most 163), and 158
-   of the 338 steps take longer than the 100 ms between frames. 99,848 B of internal RAM stay free.
+   of the 338 steps take longer than the 100 ms between frames. 96,712 B of internal RAM stay free.
 6. **A gyro fills in what the camera alone cannot tell apart.** On AQUALOC's harbour sequences, whose camera looks
    down at the seabed and takes much of the travel over it for turns, the gyro brings the 10 s windows' path error from
-   0.233 to 0.060 m in the median (lower in 93% of 1040 paired runs) and the whole sequences' from 3.25 to 2.04 m, with
-   the yaw 8.4° off instead of 66°. The core integrates the gyro's raw readings and learns its bias itself, and the
+   0.233 to 0.060 m in the median (lower in 93% of 1040 paired runs) and the whole sequences' from 3.25 to 2.03 m, with
+   the yaw 8.3° off instead of 66°. The core integrates the gyro's raw readings and learns its bias itself, and the
    ESP32-P4 gives every step as the PC does. Without readings a step is the camera's alone, bit for bit
    ([Gyro](#gyro-optional)).
+7. **An accelerometer keeps the map level.** With the gyro alone the path tilts by tens of degrees over a sequence.
+   With the accelerometer, its bias calibrated on the other sequence, the tilt comes out 1.6° off instead of 19.3°,
+   the whole orientation 7.7° instead of 20.9°, and the path's height 0.32 m instead of 0.76 m when the path may turn
+   only about the vertical. The position after a full alignment stays about where it was (2.05 m against 2.03 m):
+   almost all of what is left is horizontal, which gravity does not show. The ESP32-P4 gives every step and the
+   world's up as the PC does ([Accelerometer](#accelerometer-optional)).
 
 ## Repository layout
 
@@ -86,14 +92,14 @@ heading and about a point in the plan's shares.
 │   ├── obstacle_dir.py         the directions on the lake clip, scored against the reconstruction's depth
 │   ├── path_plan.py            the plan on the lake clip, scored against the reconstruction's free corridors
 │   ├── mono_map.py, mono_cloud.py   the older maps
-│   ├── aqualoc.py              AQUALOC's harbour sequences as the core's input: frames, gyro readings, reference
-│   ├── aqualoc_score.py        the odometry on them with and without the gyro
-│   ├── mvo_stream.py           streams frames, masks and gyro readings to the board and checks every step against the PC
+│   ├── aqualoc.py              AQUALOC's harbour sequences as the core's input: frames, IMU readings, reference
+│   ├── aqualoc_score.py        the odometry on them with and without the gyro and the accelerometer
+│   ├── mvo_stream.py           streams frames, masks and IMU readings to the board and checks every step against the PC
 │   └── experiments/            the OpenCV prototype (mono_vo), the reference poses and masks (mask_motion), the
 │                               segmentation model runner (segmenter)
 ├── tests/                      unittest suite; tests/c/ holds the C contract checks and firmware host harnesses
 ├── results/lake_clip/          results, one folder per tool, each with RESULTS.md; the board's expectations and records
-└── results/aqualoc/            the gyro's scores; per sequence the preparation's checks, the board's expectations and records
+└── results/aqualoc/            the IMU's scores; per sequence the preparation's checks, the board's expectations and records
 ```
 
 ## Getting started
@@ -126,7 +132,7 @@ of the repository either:
 python -m uwslam.aqualoc prepare <raw_data folder> --trajectory <new_harbor_colmap_traj_sequence_NN.txt> \
     --camera-calib <harbor_camera_calib.yaml> --imu-calib <harbor_imu_camera_calib.yaml> --output <prepared folder>
 python -m uwslam.aqualoc_score <prepared seq01> <prepared seq07> --output results/aqualoc_2 --jobs 8
-python -m uwslam.aqualoc board <prepared folder> --output <board files>
+python -m uwslam.aqualoc board <prepared folder> --output <board files> --calibration <the other prepared folder>
 ```
 
 The water masks come from [mask_motion](src/uwslam/experiments/mask_motion.py), which runs an exported ESP-DL int8
@@ -275,8 +281,8 @@ seeds, and in brackets the share of the runs, paired by window and seed, in whic
 | 10 s windows: position RMSE after alignment | 0.233 m | 0.060 m (93%) | 0.067 m (95%) |
 | 10 s windows: yaw RMSE | 3.74° | 2.84° (57%) | 1.07° (90%) |
 | 10 s windows: whole-orientation RMSE | 21.2° | 5.4° (98%) | 3.0° (98%) |
-| Whole sequences: position RMSE after alignment | 3.25 m | 2.04 m (100%) | |
-| Whole sequences: yaw RMSE | 66° | 8.4° (100%) | |
+| Whole sequences: position RMSE after alignment | 3.25 m | 2.03 m (100%) | |
+| Whole sequences: yaw RMSE | 66° | 8.3° (100%) | |
 
 "Carried in" starts each window from the bias the whole-sequence run had learnt by then, as a robot running all along
 would. On its own the camera files 74% of sequence 01's steps and 43% of sequence 07's as turns (seed 12345): travel
@@ -287,7 +293,7 @@ costs the windows' position a little (0.055 m when the bias is not learnt) and b
 did not help (whole sequences 2.13 m).
 
 On the ESP32-P4 every step, how it used the gyro and the final bias estimate equal the PC's (records in
-[results/aqualoc](results/aqualoc)); the board integrates a step's 40–42 readings in 39 µs:
+[results/aqualoc](results/aqualoc)); the board integrates a step's 40–42 readings in 45 µs:
 
 | Odometry per step, mean / median / max | Camera alone | With the gyro |
 |---|---:|---:|
@@ -297,6 +303,55 @@ On the ESP32-P4 every step, how it used the gyro and the final bias estimate equ
 What this does not show is the lake clip's failure: the fast swings of a forward-looking camera. The lake clip has no
 gyro, and one simulated from its reference was too coarse (about 1–2° a step against the images, where the gyro must
 match them to about 0.25°). That test needs the robot's own camera and gyro logged on one clock.
+
+## Accelerometer (optional)
+
+An accelerometer on the gyro's mounting keeps the world poses level. The core takes its readings with the gyro's
+([core/mono_vo.h](core/mono_vo.h)): `mvo_imu_reading` for every IMU reading since the last frame, the rate as
+`mvo_gyro_rate` takes it and the specific force over the same seconds (m/s², the IMU's axes), less a calibrated bias
+(`mvo_imu_set_accel_bias`); a force beyond 5 g, a knock or a fault, is left out. It turns the forces since the last
+frame into that frame's axes with the gyro; their sum points along that frame's up, which the frame's world rotation
+carries into the world's axes (the first camera's). Ten such ups in a row that agree (each within 5° of the mean of the
+ones before it; one outside starts the count again, so thrust at the start, which reads as tilt, does not set it) settle
+the world's up, and nothing is levelled before. After every step from then on the world rotation turns towards it, about
+the level axis between the two, so the tilt changes and the heading does not: by the sine of their angle times the
+readings' seconds per second (a fifth of it at 5 Hz: the tilt the steps gather fades with a time constant of about a
+second), and by at most 2° a step. Only the world poses change, and with them the maps and the plan; a step's own
+motion, the gyro's bias and the scale do not, and a step without forces is levelled by none, bit for bit. `mvo_imu_up`
+gives the world's up.
+
+On AQUALOC the up the accelerometer measures is 4° off the reference's on both sequences, in the same direction of the
+IMU's axes: an accelerometer bias of about 0.6 m/s² across the vertical. With the bias fitted to its own reference, the
+measured up is 0.75° (01) and 1.23° (07) off in the median step. Each sequence is calibrated with the bias fitted to the
+other, as a calibration made on another day would be ([results/aqualoc/RESULTS.md](results/aqualoc/RESULTS.md)). At 5
+Hz, median over both sequences and 16 seeds, and in brackets the share of the runs, paired by window and seed, in which
+it is lower than with the gyro alone:
+
+| | Gyro alone | IMU, calibrated | IMU, uncalibrated |
+|---|---:|---:|---:|
+| Whole sequences: tilt RMSE | 19.3° | 1.6° (100%) | 5.3° (100%) |
+| Whole sequences: whole-orientation RMSE | 20.9° | 7.7° (100%) | 9.8° (100%) |
+| Whole sequences: yaw RMSE | 8.3° | 7.6° (62%) | 8.2° (31%) |
+| Whole sequences: height RMSE, the path turned only about the vertical | 0.76 m | 0.32 m (100%) | 0.29 m (100%) |
+| Whole sequences: position RMSE, the path turned only about the vertical | 2.28 m | 2.06 m (100%) | 2.05 m (100%) |
+| Whole sequences: position RMSE after a full alignment | 2.03 m | 2.05 m (44%) | 2.03 m (78%) |
+| 10 s windows: tilt RMSE | 2.04° | 0.68° (97%) | 1.61° (73%) |
+| 10 s windows: whole-orientation RMSE | 5.4° | 3.5° (99%) | 3.9° (68%) |
+| 10 s windows: position RMSE after a full alignment | 0.060 m | 0.058 m (52%) | 0.058 m (55%) |
+
+With the gyro alone the path tilts by tens of degrees over a sequence. A full alignment turns that back, so the position
+error barely shows it, but the robot's map and its sense of level are off by as much; an alignment that may turn the
+path only about the vertical shows it. Almost all of the position error left after either alignment is horizontal (the
+height's part is 0.32 m of 2.06 m), where gravity tells nothing. Uncalibrated, the accelerometer's 4° tilts the world as
+the robot turns: 5.3° over the sequences, though the height came out no worse here (0.29 m).
+
+On the ESP32-P4 every step, how it used the gyro, the final bias estimate and the world's up equal the PC's (records
+in [results/aqualoc](results/aqualoc)). A step takes as long as with the gyro alone (sequence 07: 105 / 102 / 183 ms,
+01: 87 / 87 / 139 ms, mean / median / max), the board integrates a step's IMU readings in 92–93 µs, and
+96,712 B of internal RAM stay free.
+
+The motion's own accelerations read as tilt. On AQUALOC they did not keep the levelling from helping (above); a robot
+driven by thrust pulses, a jet-propelled one for instance, is untested, and so is a forward-looking camera.
 
 ## Continuing voxel map
 
@@ -440,6 +495,15 @@ python -m uwslam.mvo_stream --port <PORT> --frames <board files>/frames.bin --gy
     --expected results/aqualoc/seq07/board_expected_gyro.json --label <name>
 ```
 
+For the IMU, `--imu` with `imu.bin` and `board_expected_imu.json` also sends the accelerometer's calibrated bias
+once (`accel_bias`) and each step's IMU readings (`imu`), and checks the world's up the board measured and the
+forces it left out too:
+
+```bash
+python -m uwslam.mvo_stream --port <PORT> --frames <board files>/frames.bin --imu <board files>/imu.bin \
+    --expected results/aqualoc/seq07/board_expected_imu.json --label <name>
+```
+
 [mvo_vector.S](firmware/mono_vo_stream/main/mvo_vector.S) holds the tracker's window kernels in the P4's vector
 instructions: a row of the 19×19 window takes three vectors of eight 16-bit lanes, and the kernels give exactly the
 integers of the C ones. A call costs 19.6 µs (a window) and 6.5 µs (its sums), against 118 and 36 µs for the C kernels
@@ -451,12 +515,12 @@ Measured with the lake clip's lens over the USB-Serial-JTAG port (records `p4_36
 | | 5 Hz (169 steps) | 10 Hz (338 steps) |
 |---|---:|---:|
 | Steps, voxel map, directions, plans and obstacle map equal to the PC's | all | all |
-| Odometry per step, mean / median / max | 127 / 132 / 154 ms | 102 / 99 / 163 ms |
-| Tracking / motion / detection, mean | 86 / 25 / 16 ms | 65 / 28 / 8 ms |
+| Odometry per step, mean / median / max | 127 / 131 / 154 ms | 102 / 99 / 163 ms |
+| Tracking / motion / detection, mean | 86 / 25 / 16 ms | 66 / 28 / 8 ms |
 | Voxel map update, mean / max | 0.48 / 2.6 ms | 0.55 / 4.1 ms |
 | Obstacle directions, mean | 0.18 ms | 0.18 ms |
 | Plan, mean / max | 1.78 / 3.0 ms | 1.83 / 2.9 ms |
-| Internal RAM free at the end | 99,848 B | 99,848 B |
+| Internal RAM free at the end | 96,712 B | 96,712 B |
 
 A 5 Hz step stays within the 200 ms between frames; at 10 Hz 158 of the 338 steps take longer than the 100 ms between
 frames. Everything lives in internal RAM: the two image pyramids (about 100 KB each), the odometry's state and the
@@ -472,9 +536,12 @@ the 5 Hz clip's 170 frames took 38 s), and the segmentation model is not in them
   Settings such as the 60 baselines of the step length's points were chosen on this clip alone.
 - A single camera: no metric scale, and the odometry drifts, in scale above all. The map closes no loops and does not
   relocalise after a loss.
-- The gyro is checked only on AQUALOC's downward-looking camera over a nearly flat seabed and on slow motion. The lake
-  clip's own failure, fast swings of a forward-looking camera, needs the robot's camera and gyro logged on one clock;
+- The IMU is checked only on AQUALOC's downward-looking camera over a nearly flat seabed and on slow motion. The lake
+  clip's own failure, fast swings of a forward-looking camera, needs the robot's camera and IMU logged on one clock;
   the bias the core learns from its own rotations stays a few tenths of a degree per second off on each axis.
+- The accelerometer needs its bias calibrated (AQUALOC's tilted it by 4°), and the motion's own accelerations read as
+  tilt: a robot driven by thrust pulses is untested. The world's up settles on the first 10 steps in a row that agree;
+  the world's axes stay the first camera's (levelled, not turned upright: `mvo_imu_up` gives the up).
 - The mask's directions are the camera's, not gravity-aligned; the mask cannot tell range.
 - The planner is local and scored open-loop on a clip the robot did not steer: it has not driven a robot yet.
 - The board check streams recorded frames and masks over a serial link; it does not include capture, the segmentation

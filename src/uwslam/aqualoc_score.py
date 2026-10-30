@@ -1,13 +1,18 @@
-"""The odometry on an AQUALOC sequence prepared by uwslam.aqualoc, with and without the dataset's gyro: 10 s windows
-every 5 s and the whole sequence, every seed of uwslam.mvo.SEEDS, each gyro run paired with the camera alone on the same
-window and seed.
+"""The odometry on an AQUALOC sequence prepared by uwslam.aqualoc, with and without the dataset's IMU: 10 s windows
+every 5 s and the whole sequence, every seed of uwslam.mvo.SEEDS, each run paired with a base mode on the same window
+and seed.
 
-Modes: `off` (the camera alone); `gyro` (the readings, the bias learnt online from zero at the run's start); `warm`
-(windows only: the bias starts from the estimate the whole-sequence gyro run of the same seed held after the step
-before the window, what a robot running all along would have). Each run is scored as uwslam.experiments.mono_vo
-scores the lake clip (ATE after a similarity alignment, its heading, lost steps), plus two attitude scores, since the
-harbour camera looks down and that heading is then a tilt: the yaw about the reference's vertical and the whole
-orientation error (the angle of R_est^T R_ref), both from the run's first frame, where estimate and reference coincide.
+Modes: `off` (the camera alone); `gyro` (the gyro's readings, the bias learnt online from zero at the run's start);
+`warm` (windows only: the bias starts from the estimate the whole-sequence gyro run of the same seed held after the step
+before the window, what a robot running all along would have); `imu` (the gyro and the accelerometer, its bias
+calibrated: the mean of the biases fitted to the other sequences given, standing in for a calibration on another
+day; not run with one sequence); `imu_raw` (the accelerometer uncalibrated). gyro and warm pair with off, the imu
+modes with gyro. Each run is scored as uwslam.experiments.mono_vo scores the lake clip (ATE after a similarity
+alignment, its heading, lost steps), plus scores from the run's first frame, where estimate and reference coincide:
+the yaw about the reference's vertical, the tilt (the angle between the estimated and the reference's up in the
+camera), the whole orientation error (the angle of R_est^T R_ref), and the ATE after an alignment that turns only about
+the reference's vertical (scale, that turn and an offset: a path that leans is not turned back), with its vertical
+part, the height error.
 
   python -m uwslam.aqualoc_score <prepared folder> [<prepared folder> ...] --output <fresh folder> [--jobs <processes>]
 """
@@ -25,8 +30,28 @@ from uwslam import mvo
 from uwslam.utils import dump_json
 
 WINDOW_FRAMES, WINDOW_EVERY = 50, 25  # 10 s windows every 5 s at 5 Hz
-METRICS = ("ate_rmse", "yaw_rmse_deg", "orientation_rmse_deg", "heading_rmse_deg", "lost")
-LABELS = ("ATE (m)", "yaw RMSE (°)", "orientation RMSE (°)", "heading RMSE (°)", "lost steps")
+METRICS = (
+    "ate_rmse",
+    "levelled_ate_rmse",
+    "height_rmse",
+    "yaw_rmse_deg",
+    "tilt_rmse_deg",
+    "orientation_rmse_deg",
+    "heading_rmse_deg",
+    "lost",
+)
+LABELS = (
+    "ATE (m)",
+    "levelled ATE (m)",
+    "height (m)",
+    "yaw RMSE (°)",
+    "tilt RMSE (°)",
+    "orientation RMSE (°)",
+    "heading RMSE (°)",
+    "lost steps",
+)
+DIGITS = (3, 3, 3, 2, 2, 2, 2, 0)
+BASES = {"gyro": "off", "warm": "off", "imu": "gyro", "imu_raw": "gyro"}  # what each mode is paired with
 USES = ("camera", "gyro_translation", "gyro_rotation", "gyro_lost")  # MVO_GYRO_*, the first as the camera's own step
 
 
@@ -41,8 +66,16 @@ class Prepared:
     reference_rotations: np.ndarray
     reference_centres: np.ndarray
     readings: list[np.ndarray]
+    forces: list[np.ndarray]
     mount: np.ndarray
     vertical: np.ndarray
+    accel_bias_fit: np.ndarray
+
+    def imu_readings(self, first: int = 0, end: int | None = None) -> list[np.ndarray]:
+        """The steps' IMU readings, float32 rows of (dt, rate x, y, z, force x, y, z) (uwslam.mvo.GyroReadings)."""
+        return [
+            np.column_stack([r, f]).astype(np.float32) for r, f in zip(self.readings[first:end], self.forces[first:end])
+        ]
 
 
 def load_prepared(folder: Path) -> Prepared:
@@ -53,7 +86,9 @@ def load_prepared(folder: Path) -> Prepared:
         raise ValueError(f"{folder.name}: frames_5hz.npy must hold 320x240 grey frames")
     if len(frames) != len(data["stamps"]) or len(data["reading_offsets"]) != len(frames):
         raise ValueError(f"{folder.name}: frames, stamps and readings disagree")
-    offsets, rows = data["reading_offsets"], data["readings"]
+    if "forces" not in data or data["forces"].shape != (len(data["readings"]), 3):
+        raise ValueError(f"{folder.name}: no accelerometer readings; prepare it again with uwslam.aqualoc")
+    offsets, rows, forces = data["reading_offsets"], data["readings"], data["forces"]
     values = json.loads((folder / "camera.json").read_text(encoding="utf-8"))["camera"]
     return Prepared(
         folder.name,
@@ -63,8 +98,10 @@ def load_prepared(folder: Path) -> Prepared:
         data["reference_rotations"],
         data["reference_centres"],
         [rows[offsets[k] : offsets[k + 1]] for k in range(len(offsets) - 1)],
+        [forces[offsets[k] : offsets[k + 1]] for k in range(len(offsets) - 1)],
         data["mount"],
         data["vertical"],
+        data["accel_bias_fit"],
     )
 
 
@@ -79,6 +116,20 @@ def yaw_about(rotations: np.ndarray, axis: np.ndarray) -> np.ndarray:
     x = rotations[:, :, 0] - np.outer(rotations[:, :, 0] @ axis, axis)
     x /= np.linalg.norm(x, axis=1, keepdims=True)
     return np.unwrap(np.arctan2(np.cross(x[0], x) @ axis, x @ x[0]))
+
+
+def levelled(centres: np.ndarray, reference: np.ndarray, up: np.ndarray) -> np.ndarray:
+    """The centres after the similarity alignment onto the reference that turns only about `up` (unit): the vertical
+    parts take no part in the turn, which maximises the horizontal parts' agreement."""
+    x, y = centres - centres.mean(axis=0), reference - reference.mean(axis=0)
+    xh, yh = x - np.outer(x @ up, up), y - np.outer(y @ up, up)
+    angle = np.arctan2(np.sum(np.cross(xh, yh) @ up), np.sum(xh * yh))
+    k = np.array([[0.0, -up[2], up[1]], [up[2], 0.0, -up[0]], [-up[1], up[0], 0.0]])
+    turn = np.eye(3) + np.sin(angle) * k + (1.0 - np.cos(angle)) * k @ k
+    xr = x @ turn.T
+    size = np.sum(xr * xr)
+    scale = np.sum(xr * y) / size if size > 0 else 0.0
+    return scale * xr + reference.mean(axis=0)
 
 
 def score_run(sequence: Prepared, first: int, run: "mvo.Run") -> dict:
@@ -99,37 +150,56 @@ def score_run(sequence: Prepared, first: int, run: "mvo.Run") -> dict:
     yaw = yaw_about(rotations, vertical) - yaw_about(window_r, vertical)
     yaw = np.degrees(np.abs((yaw + np.pi) % (2 * np.pi) - np.pi))
     orientation = np.array([angle_deg(a.T @ b) for a, b in zip(rotations, window_r)])
+    est_up, ref_up = rotations.transpose(0, 2, 1) @ vertical, window_r.transpose(0, 2, 1) @ vertical
+    tilt = np.degrees(np.arccos(np.clip(np.sum(est_up * ref_up, axis=1), -1.0, 1.0)))
+    error = levelled(centres, window_c, vertical) - window_c
     used = run.gyro_used or [0] * len(run.steps)
     return {
         "first": first,
         **{key: result[key] for key in ("ate_rmse", "heading_rmse_deg", "lost", "kinds")},
+        "levelled_ate_rmse": float(np.sqrt(np.mean(np.sum(error**2, axis=1)))),
+        "height_rmse": float(np.sqrt(np.mean((error @ vertical) ** 2))),
         "yaw_rmse_deg": float(np.sqrt(np.mean(yaw**2))),
+        "tilt_rmse_deg": float(np.sqrt(np.mean(tilt**2))),
         "orientation_rmse_deg": float(np.sqrt(np.mean(orientation**2))),
         "uses": {name: used.count(code) for code, name in enumerate(USES)},
     }
 
 
-def score_seed(vo, sequence: Prepared, seed: int) -> dict:
-    """One seed's runs on the sequence, keyed by command and mode: the whole sequence, then every window."""
+def readings_for(sequence: Prepared, mode: str, accel_bias, first: int = 0, end: int | None = None, bias=None):
+    """The mode's readings for the steps first..end (None for off)."""
+    if mode == "off":
+        return None
+    if mode in ("gyro", "warm"):
+        return mvo.GyroReadings(sequence.mount, sequence.readings[first:end], bias)
+    return mvo.GyroReadings(
+        sequence.mount, sequence.imu_readings(first, end), None, accel_bias if mode == "imu" else None
+    )
+
+
+def score_seed(vo, sequence: Prepared, seed: int, accel_bias: np.ndarray | None = None) -> dict:
+    """One seed's runs on the sequence, keyed by command and mode: the whole sequence, then every window. The imu mode
+    runs only with an accelerometer bias to calibrate it."""
     n = len(sequence.frames)
     spans = [(s, s + WINDOW_FRAMES) for s in range(0, n - WINDOW_FRAMES + 1, WINDOW_EVERY)]
-    out = {"full": {"off": [], "gyro": []}, "windows": {"off": [], "gyro": [], "warm": []}}
+    imu_modes = ("imu", "imu_raw") if accel_bias is not None else ("imu_raw",)
+    full_modes, window_modes = ("off", "gyro", *imu_modes), ("off", "gyro", "warm", *imu_modes)
+    out = {"full": {m: [] for m in full_modes}, "windows": {m: [] for m in window_modes}}
     frames = list(sequence.frames)
-    for mode, gyro in (("off", None), ("gyro", mvo.GyroReadings(sequence.mount, sequence.readings))):
-        run = mvo.run_odometry(vo, frames, sequence.camera, seed, gyro)
+    for mode in full_modes:
+        run = mvo.run_odometry(vo, frames, sequence.camera, seed, readings_for(sequence, mode, accel_bias))
         out["full"][mode].append({"seed": seed, **score_run(sequence, 0, run)})
-        if gyro is not None:
+        if mode != "off":
             out["full"][mode][-1]["final_bias_dps"] = np.degrees(run.gyro_bias[-1]).tolist()
+        if mode == "gyro":
             carried = run.gyro_bias
     for first, end in spans:
         window = list(sequence.frames[first:end])
-        readings = sequence.readings[first : end - 1]
-        for mode in ("off", "gyro", "warm"):
-            gyro = None
-            if mode != "off":
-                bias = np.array(carried[first - 1], dtype=np.float32) if mode == "warm" and first > 0 else None
-                gyro = mvo.GyroReadings(sequence.mount, readings, bias)
-            run = mvo.run_odometry(vo, window, sequence.camera, seed, gyro)
+        for mode in window_modes:
+            bias = np.array(carried[first - 1], dtype=np.float32) if mode == "warm" and first > 0 else None
+            run = mvo.run_odometry(
+                vo, window, sequence.camera, seed, readings_for(sequence, mode, accel_bias, first, end - 1, bias)
+            )
             out["windows"][mode].append({"seed": seed, **score_run(sequence, first, run)})
     return out
 
@@ -142,13 +212,28 @@ def merge(per_seed: list[dict]) -> dict:
     }
 
 
-def score_sequence(vo, sequence: Prepared) -> dict:
+def score_sequence(vo, sequence: Prepared, accel_bias: np.ndarray | None) -> dict:
     """Every seed's runs on the sequence, one after the other."""
     per_seed = []
     for seed in mvo.SEEDS:
-        per_seed.append(score_seed(vo, sequence, seed))
+        per_seed.append(score_seed(vo, sequence, seed, accel_bias))
         print(f"{sequence.name} seed {seed} scored", flush=True)
     return merge(per_seed)
+
+
+def fitted_accel_bias(folder: Path) -> np.ndarray:
+    """The accelerometer bias uwslam.aqualoc fitted to the prepared sequence's reference, without loading its frames."""
+    with np.load(folder / "sequence.npz") as archive:
+        return archive["accel_bias_fit"]
+
+
+def calibrations(folders: list[Path]) -> dict:
+    """Each sequence's accelerometer calibration: the mean of the biases fitted to the other sequences, or None."""
+    fitted = {f.name: fitted_accel_bias(f) for f in folders}
+    return {
+        name: np.mean([b for other, b in fitted.items() if other != name], axis=0) if len(fitted) > 1 else None
+        for name in fitted
+    }
 
 
 WORKER = {}  # a worker process's core and the sequences it has loaded
@@ -158,22 +243,27 @@ def start_worker(scratch: str) -> None:
     WORKER["vo"] = mvo.build(Path(scratch) / f"worker{os.getpid()}")
 
 
-def worker_score(folder: str, seed: int) -> dict:
+def worker_score(folder: str, seed: int, accel_bias: np.ndarray | None) -> dict:
     if folder not in WORKER:
         WORKER[folder] = load_prepared(Path(folder))
-    return score_seed(WORKER["vo"], WORKER[folder], seed)
+    return score_seed(WORKER["vo"], WORKER[folder], seed, accel_bias)
 
 
 def score_all(folders: list[Path], jobs: int) -> dict:
     """Every sequence's runs, the seeds spread over `jobs` processes (each with its own build of the core)."""
+    accel = calibrations(folders)
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as scratch:  # Windows keeps the loaded library locked
         if jobs <= 1:
             vo = mvo.build(Path(scratch))
-            return {folder.name: score_sequence(vo, load_prepared(folder)) for folder in folders}
+            return {f.name: score_sequence(vo, load_prepared(f), accel[f.name]) for f in folders}
         from concurrent.futures import ProcessPoolExecutor
 
         with ProcessPoolExecutor(jobs, initializer=start_worker, initargs=(scratch,)) as pool:
-            futures = {(f.name, seed): pool.submit(worker_score, str(f), seed) for f in folders for seed in mvo.SEEDS}
+            futures = {
+                (f.name, seed): pool.submit(worker_score, str(f), seed, accel[f.name])
+                for f in folders
+                for seed in mvo.SEEDS
+            }
             done = {key: future.result() for key, future in futures.items()}
         return {f.name: merge([done[(f.name, seed)] for seed in mvo.SEEDS]) for f in folders}
 
@@ -190,12 +280,12 @@ def paired(runs: list[dict], base: list[dict] | None, metric: str) -> dict:
 
 def tables(scores: dict) -> dict:
     """Per sequence (and all together), command and mode: each metric's median and the share of the pairs in which the
-    mode is lower than off."""
+    mode is lower than its base (BASES)."""
     out = {}
     groups = {name: runs for name, runs in scores.items()}
     if len(scores) > 1:
         groups["all"] = {
-            command: {mode: [r for runs in scores.values() for r in runs[command][mode]] for mode in modes}
+            command: {mode: [r for runs in scores.values() for r in runs[command].get(mode, [])] for mode in modes}
             for command, modes in next(iter(scores.values())).items()
         }
     for name, runs in groups.items():
@@ -203,7 +293,8 @@ def tables(scores: dict) -> dict:
             command: {
                 mode: {
                     "runs": len(mode_runs),
-                    **{m: paired(mode_runs, None if mode == "off" else by_mode["off"], m) for m in METRICS},
+                    **({"base": BASES[mode]} if mode in BASES else {}),
+                    **{m: paired(mode_runs, by_mode[BASES[mode]] if mode in BASES else None, m) for m in METRICS},
                 }
                 for mode, mode_runs in by_mode.items()
             }
@@ -215,13 +306,17 @@ def tables(scores: dict) -> dict:
 
 def write_report(output: Path, summary: dict) -> None:
     lines = [
-        "# The odometry with and without the gyro on AQUALOC harbour sequences",
+        "# The odometry with and without the IMU on AQUALOC harbour sequences",
         "",
         f"5 Hz, {len(mvo.SEEDS)} seeds; 10 s windows every 5 s and whole sequences. Each cell is the median over the "
-        "runs and, for a gyro mode, the share of the runs paired with `off` (same window, same seed) in which it is "
-        "lower. `gyro` learns the bias from zero at the run's start; `warm` starts each window from the whole-sequence "
-        "run's estimate at that point. The camera looks down at the seabed: yaw is about the vertical, orientation the "
-        "whole rotation error, heading the turn about the first camera's y axis (a tilt here).",
+        "runs and, for a mode with a base, the share of the runs paired with the base (same window, same seed) in "
+        "which it is lower: `gyro` and `warm` against `off`, `imu` and `imu_raw` against `gyro`. `gyro` learns the "
+        "bias from zero at the run's start; `warm` starts each window from the whole-sequence run's estimate at that "
+        "point; `imu` adds the accelerometer, its bias calibrated with the other sequences' fitted one; `imu_raw` "
+        "adds it uncalibrated. The camera looks down at the seabed: yaw is about the vertical, tilt the angle between "
+        "the estimated and the reference's up, orientation the whole rotation error, heading the turn about the first "
+        "camera's y axis (a tilt here); the levelled ATE turns the path only about the vertical, and height is its "
+        "vertical part.",
         "",
     ]
     for command, title in (("windows", "10 s windows"), ("full", "Whole sequences")):
@@ -230,14 +325,23 @@ def write_report(output: Path, summary: dict) -> None:
         for name, by_command in summary["tables"].items():
             for mode, row in by_command.get(command, {}).items():
                 cells = []
-                for metric, digits in zip(METRICS, (3, 2, 2, 2, 0)):
+                for metric, digits in zip(METRICS, DIGITS):
                     cell = f"{row[metric]['median']:.{digits}f}"
                     if "lower_share" in row[metric]:
                         cell += f" ({row[metric]['lower_share'] * 100:.0f}%)"
                     cells.append(cell)
                 lines.append(f"| {name} | {mode} | {row['runs']} | " + " | ".join(cells) + " |")
         lines.append("")
-    lines += ["## The bias the whole-sequence runs learnt (deg/s, the IMU's axes)", ""]
+    lines += ["## The accelerometer's calibration (m/s², the IMU's axes)", ""]
+    for name, bias in summary["accel_bias_calibration"].items():
+        fitted = summary["accel_bias_fit"][name]
+        lines.append(
+            f"- {name}: fitted to its reference "
+            + ", ".join(f"{axis} {v:+.3f}" for axis, v in zip("xyz", fitted))
+            + "; calibrated with "
+            + ("none" if bias is None else ", ".join(f"{axis} {v:+.3f}" for axis, v in zip("xyz", bias)))
+        )
+    lines += ["", "## The bias the whole-sequence gyro runs learnt (deg/s, the IMU's axes)", ""]
     for name, biases in summary["final_bias_dps"].items():
         b = np.array(biases)
         lines.append(
@@ -277,6 +381,10 @@ def main() -> None:
         "window_every": WINDOW_EVERY,
         "tables": tables(scores),
         "final_bias_dps": {name: [r["final_bias_dps"] for r in s["full"]["gyro"]] for name, s in scores.items()},
+        "accel_bias_fit": {f.name: fitted_accel_bias(f).tolist() for f in args.prepared},
+        "accel_bias_calibration": {
+            name: None if bias is None else bias.tolist() for name, bias in calibrations(args.prepared).items()
+        },
         "fitted_bias_dps": {
             folder.name: json.loads((folder / "checks.json").read_text(encoding="utf-8"))["fitted_bias_dps"]
             for folder in args.prepared

@@ -1,5 +1,6 @@
 """uwslam.aqualoc and uwslam.aqualoc_score on a small synthetic sequence in AQUALOC's harbour layout: Kalibr's camera
-and camera-IMU files, image, IMU and depth csv files, a Colmap trajectory, all from one known motion and gyro bias.
+and camera-IMU files, image, IMU and depth csv files, a Colmap trajectory, all from one known motion, gyro bias and
+accelerometer bias (the accelerometer reads gravity alone, as if the travel did not accelerate).
 
 Needs gcc and OpenCV; skipped without either.
 """
@@ -25,6 +26,8 @@ T0_NS = 1_550_000_000_000_000_000
 IMAGES, FPS, IMU_HZ = 41, 20.0, 200.0  # 2 s of images: 11 frames at 5 Hz
 RATE_IMU = np.array([0.05, -0.12, 0.08])  # rad/s, the IMU's axes
 BIAS_IMU = np.array([0.004, 0.02, -0.006])  # rad/s
+ACCEL_BIAS_IMU = np.array([0.3, -0.2, 0.4])  # m/s^2
+GRAVITY_WORLD = np.array([0.0, 0.0, 9.81])  # the reference's z is the depth: gravity points along it
 SHIFT = -0.02  # t_imu = t_cam + shift
 MOUNT = np.array([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])  # the IMU's axes into the camera's
 CAMERA_YAML = """cam0:
@@ -76,7 +79,9 @@ def write_sequence(folder: Path) -> dict:
         )
         for t in imu_times:
             rate = RATE_IMU + BIAS_IMU
-            out.write(f"{T0_NS + int(round(t * 1e9))},{rate[0]},{rate[1]},{rate[2]},0.0,0.0,9.81\n")
+            force = MOUNT.T @ (camera_to_world(t - SHIFT).T @ -GRAVITY_WORLD) + ACCEL_BIAS_IMU  # at rest: up
+            values = ",".join(str(v) for v in (*rate, *force))
+            out.write(f"{T0_NS + int(round(t * 1e9))},{values}\n")
     centre = lambda t: np.array([0.3 * np.sin(t), 0.1 * t * t, 3.0 + 0.05 * t])  # noqa: E731  z is the depth
     with (raw / "harbor_depth_sequence_01.csv").open("w", encoding="utf-8") as out:
         out.write("#timestamp [ns],depth [m]\n")
@@ -141,6 +146,20 @@ class AqualocTests(unittest.TestCase):
         np.testing.assert_allclose(self.checks["vertical_world"], [0.0, 0.0, 1.0], atol=1e-6)
         self.assertAlmostEqual(self.checks["depth_slope_norm"], 1.0, places=6)
 
+    def test_the_forces_measure_the_reference_up_less_the_fitted_bias(self):
+        sequence = aqualoc_score.load_prepared(self.prepared)
+        self.assertEqual([len(f) for f in sequence.forces], [len(r) for r in sequence.readings])
+        # The step's turn carries the bias with each reading: the fit sees it turned by about half a step's 1.7 deg.
+        np.testing.assert_allclose(self.checks["accel_bias_fit"], ACCEL_BIAS_IMU, atol=0.02)
+        np.testing.assert_allclose(sequence.accel_bias_fit, self.checks["accel_bias_fit"])
+        self.assertAlmostEqual(self.checks["accel_scale_fit"], 9.81, delta=0.01)
+        self.assertGreater(self.checks["accel_up_error_deg"]["median"], 1.0)  # the bias left in: about 2.5 degrees
+        self.assertLess(self.checks["accel_up_error_without_fitted_bias_deg"]["median"], 0.02)
+        rows = sequence.imu_readings(2, 4)
+        self.assertEqual(len(rows), 2)
+        np.testing.assert_array_equal(rows[0][:, :4], sequence.readings[2])
+        np.testing.assert_array_equal(rows[1][:, 4:], sequence.forces[3])
+
     def test_step_readings_cut_the_samples_at_the_stamps(self):
         times = np.array([0.0, 0.01, 0.02, 0.03])
         rates = np.array([[0.0, 0.0, 0.0], [1.0, 2.0, 3.0], [2.0, 4.0, 6.0], [3.0, 6.0, 9.0]])
@@ -150,9 +169,9 @@ class AqualocTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "outside the IMU"):
             aqualoc.step_readings(times, rates, -0.01, 0.02)
 
-    def test_board_files_hold_the_readings_and_both_expectations(self):
+    def test_board_files_hold_the_readings_and_the_expectations(self):
         output = self.folder / "board"
-        aqualoc.board_files(self.prepared, output)
+        aqualoc.board_files(self.prepared, output, self.prepared)
         expected = json.loads((output / "board_expected_gyro.json").read_text(encoding="utf-8"))
         camera_only = json.loads((output / "board_expected_camera.json").read_text(encoding="utf-8"))
         self.assertNotIn("gyro", camera_only)
@@ -163,6 +182,17 @@ class AqualocTests(unittest.TestCase):
         mount = [struct.unpack("<f", struct.pack("<I", bits))[0] for bits in expected["gyro"]["mount_bits"]]
         np.testing.assert_allclose(np.reshape(mount, (3, 3)), MOUNT)
         self.assertEqual(len(expected["gyro"]["used"]), expected["steps"])
+        imu = json.loads((output / "board_expected_imu.json").read_text(encoding="utf-8"))
+        self.assertNotIn("gyro", imu)
+        payloads = mvo_stream.read_gyro_file(output / "imu.bin", imu["frames"] - 1, mvo_stream.IMU_READING_BYTES)
+        for payload, rows in zip(payloads, sequence.imu_readings()):
+            self.assertEqual(payload, rows.astype("<f4").tobytes())
+        bias = [struct.unpack("<f", struct.pack("<I", bits))[0] for bits in imu["imu"]["accel_bias_bits"]]
+        np.testing.assert_allclose(bias, sequence.accel_bias_fit, rtol=1e-6)
+        self.assertEqual(imu["imu"]["accel_bias_from"], self.prepared.name)
+        up = [struct.unpack("<f", struct.pack("<I", bits))[0] for bits in imu["imu"]["final_up_bits"]]
+        self.assertAlmostEqual(float(np.linalg.norm(up)), 1.0, places=5)
+        mvo_stream.validate_expected_gyro(imu["imu"], imu, imu=True)
         with self.assertRaises(FileExistsError):
             aqualoc.board_files(self.prepared, output)
 
@@ -177,14 +207,34 @@ class AqualocTests(unittest.TestCase):
             import tempfile as scratch_files
 
             with scratch_files.TemporaryDirectory(ignore_cleanup_errors=True) as scratch:
-                scores = aqualoc_score.score_sequence(mvo.build(Path(scratch)), sequence)
+                vo = mvo.build(Path(scratch))
+                alone = aqualoc_score.score_sequence(vo, sequence, None)
+                scores = aqualoc_score.score_sequence(vo, sequence, sequence.accel_bias_fit)
             tables = aqualoc_score.tables({"seq01": scores})
+        self.assertNotIn("imu", alone["full"])  # without a calibration, only the raw accelerometer
+        self.assertEqual(len(alone["full"]["imu_raw"]), 2)
         self.assertEqual(len(scores["full"]["gyro"]), 2)
+        self.assertEqual(len(scores["full"]["imu"]), 2)
         self.assertEqual([r["first"] for r in scores["windows"]["warm"]], [0, 5, 0, 5])
         row = tables["seq01"]["windows"]["gyro"]
         self.assertEqual(row["runs"], 4)
+        self.assertEqual(row["base"], "off")
         self.assertIn("lower_share", row["ate_rmse"])
         self.assertNotIn("lower_share", tables["seq01"]["windows"]["off"]["ate_rmse"])
+        self.assertEqual(tables["seq01"]["windows"]["imu"]["base"], "gyro")
+        for metric in aqualoc_score.METRICS:
+            self.assertTrue(np.isfinite(scores["windows"]["imu"][0][metric]), metric)
+
+    def test_a_levelled_alignment_turns_only_about_the_vertical(self):
+        rng = np.random.default_rng(5)
+        reference = rng.normal(size=(30, 3))
+        up = np.array([0.0, 0.0, 1.0])
+        turn = aqualoc.exp_so3(up * 0.7)
+        moved = 2.5 * reference @ turn.T + np.array([1.0, -2.0, 0.5])
+        np.testing.assert_allclose(aqualoc_score.levelled(moved, reference, up), reference, atol=1e-9)
+        leaning = moved @ aqualoc.exp_so3(np.array([0.05, 0.0, 0.0])).T  # a lean it may not take back
+        error = aqualoc_score.levelled(leaning, reference, up) - reference
+        self.assertGreater(np.abs(error @ up).max(), 0.05)
 
     def test_seeds_spread_over_processes_score_the_same(self):
         with patch.object(mvo, "SEEDS", (mvo.SEED, 2)), patch("builtins.print"):

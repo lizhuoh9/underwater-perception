@@ -1,8 +1,8 @@
 {
   "task": "Continuing voxel map from the C monocular odometry and the water masks on the lake clip, scored against the reference cloud",
   "sources_sha256": {
-    "core_sha256": "bdcacc6386b6e819a97ed993fe5bff054b9e7c71ad058538834acb263c51fcc2",
-    "header_sha256": "5531c01e53ccdbb72719b1b73e02122bdc3e9067d6c1ad482586a1f45c6318dd",
+    "core_sha256": "c90e4c217ae3c52bdf94b13e99503c095fa4f3228fc0fd9bc6ba4cad1792422a",
+    "header_sha256": "eff98693b23bc6bb696fdc764aee03a015a3d8e0b5c74ce6e1259eaaa472ad61",
     "voxel_sha256": "b803ea6bf97c0334f71e65c3df31b06c2430e628b34f67a1c02d99f82a8eb0c5",
     "voxel_header_sha256": "6e9a931ac4d330e8c25cda1e2fedc2fad212fe73e5060b9694fdc5fcd928b5de"
   },

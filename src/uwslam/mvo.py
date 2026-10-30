@@ -213,6 +213,11 @@ def build(output: Path) -> ctypes.CDLL:
     vo.mvo_gyro_set_bias.restype = ctypes.c_int
     vo.mvo_gyro_used.argtypes = [ctypes.c_void_p]
     vo.mvo_gyro_used.restype = ctypes.c_int
+    vo.mvo_imu_reading.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_float]
+    vo.mvo_imu_reading.restype = ctypes.c_int
+    vo.mvo_imu_set_accel_bias.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    vo.mvo_imu_set_accel_bias.restype = ctypes.c_int
+    vo.mvo_imu_up.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
     vo.mvo_sqrt.argtypes = [ctypes.c_float]
     vo.mvo_sqrt.restype = ctypes.c_float
     vo.mvo_lk_template_c.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p]
@@ -261,38 +266,64 @@ def clip_camera() -> Camera:
     return camera_for(HFOV_DEG, ASPECT, LENS)
 
 
+FORCE_RANGE = (4.9, 19.6)  # m/s^2: half to twice gravity, for the median force of an IMU's readings
+
+
 @dataclass(frozen=True)
 class GyroReadings:
-    """A gyro for run_odometry: its mounting (3x3, a rate in the gyro's axes turned into the camera's), each step's
-    readings as float32 rows of (dt seconds, rate x, y, z in rad/s in the gyro's axes), and optionally the bias estimate
-    to start from (rad/s, the gyro's axes; mvo_gyro_set_bias)."""
+    """A gyro, or an IMU (a gyro and an accelerometer), for run_odometry: its mounting (3x3, a vector in the IMU's
+    axes turned into the camera's), each step's readings as float32 rows of (dt seconds, rate x, y, z in rad/s) for a
+    gyro (mvo_gyro_rate) or of (dt, rate x, y, z, specific force x, y, z in m/s^2) for an IMU (mvo_imu_reading), all in
+    the IMU's axes and every step the same kind, optionally the gyro's bias estimate to start from (rad/s;
+    mvo_gyro_set_bias), and for an IMU optionally the accelerometer's calibrated bias (m/s^2; mvo_imu_set_accel_bias).
+    The forces' median size must lie within FORCE_RANGE: forces in g, mg or raw counts would be gated or misread."""
 
     mount: np.ndarray
     steps: list[np.ndarray]
     bias: np.ndarray | None = None
+    accel_bias: np.ndarray | None = None
 
     def __post_init__(self):
         if np.asarray(self.mount).shape != (3, 3) or not np.all(np.isfinite(self.mount)):
             raise ValueError("The gyro's mount must be a finite 3x3 matrix")
-        if self.bias is not None and (np.asarray(self.bias).shape != (3,) or not np.all(np.isfinite(self.bias))):
-            raise ValueError("The gyro's starting bias must be three finite numbers")
+        for name, value in (("gyro's starting bias", self.bias), ("accelerometer's bias", self.accel_bias)):
+            if value is not None and (np.asarray(value).shape != (3,) or not np.all(np.isfinite(value))):
+                raise ValueError(f"The {name} must be three finite numbers")
+        widths = {rows.shape[1] for rows in self.steps if rows.ndim == 2}
         for k, rows in enumerate(self.steps):
-            if rows.dtype != np.float32 or rows.ndim != 2 or rows.shape[1] != 4:
-                raise ValueError(f"Step {k}'s gyro readings must be float32 rows of (dt, x, y, z)")
+            if rows.dtype != np.float32 or rows.ndim != 2 or rows.shape[1] not in (4, 7) or len(widths) != 1:
+                raise ValueError(
+                    f"Step {k}'s readings must be float32 rows of (dt, x, y, z) or (dt, x, y, z, ax, ay, az), every "
+                    "step alike"
+                )
             if not np.all(np.isfinite(rows)) or np.any(rows[:, 0] <= 0):
-                raise ValueError(f"Step {k}'s gyro readings need finite values and positive durations")
+                raise ValueError(f"Step {k}'s readings need finite values and positive durations")
+        if self.accel_bias is not None and widths != {7}:
+            raise ValueError("An accelerometer's bias needs readings with forces")
+        if widths == {7}:
+            sizes = np.concatenate([np.linalg.norm(rows[:, 4:], axis=1) for rows in self.steps])
+            median = float(np.median(sizes)) if len(sizes) else FORCE_RANGE[0]
+            if not FORCE_RANGE[0] <= median <= FORCE_RANGE[1]:
+                raise ValueError(f"The forces must be in m/s^2: their median size is {median:g}")
+
+    @property
+    def has_accel(self) -> bool:
+        return any(rows.shape[1] == 7 for rows in self.steps)
 
 
 @dataclass(frozen=True)
 class Run:
     """One run of run_odometry: the steps, each step's FNV-1a hash, the PC's ms per step and, with a gyro, how each
-    step used it (MVO_GYRO_*) and the bias estimate after it (rad/s, the gyro's axes)."""
+    step used it (MVO_GYRO_*) and the bias estimate after it (rad/s, the gyro's axes); with an accelerometer, the
+    world's up it measured (mvo_imu_up) at the end and how many forces the core left out (mvo_imu_reading)."""
 
     steps: list
     hashes: list[int]
     ms_per_step: float
     gyro_used: list[int]
     gyro_bias: list[tuple[float, float, float]]
+    imu_up: tuple[float, float, float] | None = None
+    forces_dropped: int = 0
 
 
 def run_odometry(
@@ -312,6 +343,10 @@ def run_odometry(
             start = np.ascontiguousarray(gyro.bias, dtype=np.float32)  # alive through the call
             if not vo.mvo_gyro_set_bias(state, start.ctypes.data):
                 raise ValueError("The core refused the starting bias: beyond MVO_GYRO_BIAS_LIMIT")
+        if gyro.accel_bias is not None:
+            accel_bias = np.ascontiguousarray(gyro.accel_bias, dtype=np.float32)
+            if not vo.mvo_imu_set_accel_bias(state, accel_bias.ctypes.data):
+                raise ValueError("The core refused the accelerometer's bias")
 
     def load(frame: np.ndarray) -> None:
         if frame.shape != (HEIGHT, WIDTH) or frame.dtype != np.uint8:
@@ -322,14 +357,19 @@ def run_odometry(
     load(frames[0])
     vo.mvo_start(state)
     steps, hashes, used, biases = [], [], [], []
+    dropped = 0
     bias = np.zeros(3, dtype=np.float32)
     started = time.perf_counter()
     for k, frame in enumerate(frames[1:]):
         load(frame)
         if gyro is not None:
             for row in gyro.steps[k]:
-                rate = np.ascontiguousarray(row[1:])
-                vo.mvo_gyro_rate(state, rate.ctypes.data, float(row[0]))
+                rate = np.ascontiguousarray(row[1:4])
+                if len(row) == 7:
+                    force = np.ascontiguousarray(row[4:])
+                    dropped += not vo.mvo_imu_reading(state, rate.ctypes.data, force.ctypes.data, float(row[0]))
+                else:
+                    vo.mvo_gyro_rate(state, rate.ctypes.data, float(row[0]))
         step = StepC()
         vo.mvo_step(state, ctypes.byref(step))
         steps.append(step)
@@ -338,7 +378,12 @@ def run_odometry(
             used.append(int(vo.mvo_gyro_used(state)))
             vo.mvo_gyro_bias(state, bias.ctypes.data)
             biases.append(tuple(float(v) for v in bias))
-    return Run(steps, hashes, (time.perf_counter() - started) * 1000 / max(1, len(steps)), used, biases)
+    up = None
+    if gyro is not None and gyro.has_accel:
+        values = np.zeros(3, dtype=np.float32)
+        vo.mvo_imu_up(state, values.ctypes.data)
+        up = tuple(float(v) for v in values)
+    return Run(steps, hashes, (time.perf_counter() - started) * 1000 / max(1, len(steps)), used, biases, up, dropped)
 
 
 def run_frames(

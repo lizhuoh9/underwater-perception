@@ -64,16 +64,34 @@
  * and 07 (a camera looking down at the seabed, the dataset's own 200 Hz gyro on its clock), at 5 Hz over 16 seeds, the
  * path after one alignment over 10 s windows came out 0.060 m off in the median instead of 0.233 (lower in 93% of 1040
  * paired runs): the camera alone took much of the travel over that floor for turns. Over the whole sequences it came
- * out 2.04 m off instead of 3.25, and the yaw 8.4 degrees instead of 66; without the bias learnt, sequence 01's 1.3
+ * out 2.03 m off instead of 3.25, and the yaw 8.3 degrees instead of 66; without the bias learnt, sequence 01's 1.3
  * degrees per second left a yaw error of 121 degrees. The camera's own rotations take a little travel across the view
  * for a turn that tilts its axis, so the learnt bias stays a few tenths of a degree per second off on each axis. The
  * fast swings of a forward-looking camera, where the lake clip loses its travel, are untested: that clip has no gyro.
+ *
+ * An accelerometer on the gyro's mounting is optional too (mvo_imu_reading: a gyro reading with the specific force over
+ * the same seconds, less a calibrated bias, mvo_imu_set_accel_bias; a force beyond MVO_IMU_FORCE_MAX is dropped as a
+ * knock or a fault). The forces since the last frame, turned into its axes with the gyro, measure that frame's up,
+ * which its world rotation carries into the world's axes. MVO_IMU_UP_STEPS such ups in a row that agree (each within
+ * MVO_IMU_UP_AGREE of their mean; one outside starts the count again, so that thrust at the start, which reads as tilt,
+ * does not set it) settle the world's up for good, and nothing is levelled before. After every step from then on the
+ * world rotation turns towards it about the level axis of the two (a tilt, never a turn of the heading) by the sine of
+ * their angle times MVO_IMU_LEVEL_RATE times the readings' seconds, at most MVO_IMU_LEVEL_MAX, so the tilt the steps
+ * gather is taken back within about a second. Only the world poses change: a step's own motion, the bias learnt, the
+ * points and the scale stay as they were, and a step without forces is levelled by none, bit for bit. On the same
+ * harbour sequences, with the accelerometer's bias calibrated on the other sequence (about 0.6 m/s^2 across the
+ * vertical, a 4-degree tilt, alike on both), the tilt over the whole sequences came out 1.6 degrees off in the median
+ * of both and 16 seeds instead of 19 with the gyro alone, the whole orientation 7.7 instead of 21, and the path's
+ * height, after an alignment that turns it only about the vertical, 0.32 m off instead of 0.76; over 10 s windows the
+ * tilt 0.68 degrees instead of 2.0 (lower in 97% of 1040 paired runs). The path after a full alignment, whose error is
+ * the scale's and the heading's, stayed where it was (2.05 against 2.03 m). Uncalibrated, the tilt came out 5.3 degrees
+ * off. The motion's own accelerations count as tilt: AQUALOC's ROV moves slowly, and a robot's thrust is untested.
  *
  * C99, no heap, no libm (a local square root, by Newton steps without division), xorshift32 for RANSAC, so a PC build
  * and an ESP32-P4 build give identical results with -ffp-contract=off and without fast-math. It follows the OpenCV
  * prototype's design, not its numbers: the prototype uses OpenCV's five-point solver and its own Lucas-Kanade, stops
  * tracking the pairs recoverPose drops as too far, and takes every median depth ratio as it comes. One mvo_t is about
- * 9.8 KB; the caller also provides two image pyramids of MVO_PYRAMID_BYTES (about 100 KB each, 16-byte aligned for
+ * 10 KB; the caller also provides two image pyramids of MVO_PYRAMID_BYTES (about 100 KB each, 16-byte aligned for
  * vector kernels), separate blocks so that they fit a fragmented heap. Most of a step splits in two halves that can run at once (mvo_t.parallel): pyramid level 1
  * (half the rows each), the tracking (half the features), each RANSAC batch (half the samples), the corner search (half
  * the rows), the direction search (half the directions), the two pose refinements, a lone refinement's Jacobian (its
@@ -135,6 +153,11 @@
 #define MVO_GYRO_CALM 0.0013704652f /* 1 - cos 3 degrees: a step the gyro turns further teaches no bias */
 #define MVO_GYRO_MISS 0.0174524064f /* sin 1 degree: the most a step's miss counts */
 #define MVO_GYRO_BIAS_LIMIT 0.17453293f /* 10 degrees per second: the most bias the estimate takes, per axis */
+#define MVO_IMU_UP_STEPS 10 /* the world's up: the mean of this many agreeing steps' measured ups */
+#define MVO_IMU_UP_AGREE 0.9961947f /* cos 5 degrees: of AQUALOC's 1072 runs 3 degrees left 3 unsettled, 5 none */
+#define MVO_IMU_LEVEL_RATE 1.0f /* per second of readings: the share of a step's tilt that the step takes back */
+#define MVO_IMU_LEVEL_MAX 0.0348995f /* sin 2 degrees: the most one step's levelling turns */
+#define MVO_IMU_FORCE_MAX 49.0f /* m/s^2, 5 g: a reading's force beyond is a knock or a fault, not gravity */
 #define MVO_PYRAMID_BYTES (MVO_WIDTH * MVO_HEIGHT * 4 / 3 + 64) /* one frame's pyramid, level 0 first */
 #define MVO_SIDE (2 * MVO_WINDOW + 1) /* the tracking window's side */
 
@@ -209,7 +232,8 @@ typedef struct {
     void (*block)(uint8_t *out, int size, const uint8_t *img, int w, int h, const int origin[2]);
 } mvo_kernels_t;
 
-/* The gyro's part of the state (see mvo_gyro_mount and mvo_gyro_rate). */
+/* The gyro's part of the state (see mvo_gyro_mount and mvo_gyro_rate), and an accelerometer's on the same mounting
+ * (mvo_imu_reading). */
 typedef struct {
     float mount[9];     /* row-major: a rate in the gyro's axes, turned into the camera's */
     float bias[3];      /* the estimated bias, rad/s in the gyro's axes, taken off every reading */
@@ -218,6 +242,13 @@ typedef struct {
     float usual_time;   /* a running average of the seconds a step's readings cover; 0 before the first */
     int32_t bias_steps; /* the steps the estimate learnt from, at most MVO_GYRO_BIAS_STEPS */
     int32_t used;       /* how the last step used the gyro (MVO_GYRO_*) */
+    float accel_bias[3]; /* the accelerometer's calibrated bias, m/s^2 in its axes, taken off every reading */
+    float force[3];      /* the specific force since the last frame in A's axes, summed over the readings' seconds */
+    float force_time;    /* the seconds it covers; 0: the next step is not levelled */
+    float measured[3];   /* the step's measured up in the world's axes, unit; zero when it has none */
+    float level_time;    /* the seconds behind measured */
+    float up_sum[3];     /* the sum of the agreeing measured ups: the world's up is its direction */
+    int32_t up_steps;    /* how many it holds; MVO_IMU_UP_STEPS: settled */
 } mvo_gyro_t;
 
 typedef struct {
@@ -278,6 +309,18 @@ void mvo_gyro_bias(const mvo_t *s, float bias[3]);
 int mvo_gyro_set_bias(mvo_t *s, const float bias[3]);
 /* How the last step used the gyro (MVO_GYRO_*). */
 int mvo_gyro_used(const mvo_t *s);
+/* One reading of an IMU, a gyro and an accelerometer on the mounting mvo_gyro_mount sets: the rate as mvo_gyro_rate
+ * takes it, and the accelerometer's specific force (m/s^2, the IMU's axes, the calibrated bias still in it) over the
+ * same dt seconds. Whatever mvo_gyro_rate drops is dropped whole; a force, less the bias, that is not finite or beyond
+ * MVO_IMU_FORCE_MAX drops the accelerometer's part only. Returns 1 when the force was taken, else 0. The forces since
+ * the last frame, turned into its axes with the gyro, level the next step (see above); mvo_start drops them. */
+int mvo_imu_reading(mvo_t *s, const float rate[3], const float accel[3], float dt);
+/* The accelerometer's bias (a calibration, m/s^2 in the IMU's axes; mvo_init sets zero), taken off every reading
+ * after it. Returns 0, changing nothing, when an entry is not finite. */
+int mvo_imu_set_accel_bias(mvo_t *s, const float bias[3]);
+/* The world's up as the accelerometer measured it (unit, the world's axes: the first camera's); zero until it has
+ * settled (see above). */
+void mvo_imu_up(const mvo_t *s, float up[3]);
 /* The portable tracker kernels (see mvo_kernels_t). */
 void mvo_lk_template_c(mvo_window_t *window, const uint8_t *src, int stride, const int16_t weights[4], int64_t g[3]);
 void mvo_lk_sums_c(const mvo_window_t *window, const uint8_t *src, int stride, const int16_t weights[4],

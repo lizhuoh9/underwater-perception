@@ -1,21 +1,22 @@
 # uwslam
 
-Monocular-camera SLAM for a small underwater robot, with an optional gyro. A C core (`core/`) runs bit-identically on a
-PC and an ESP32-P4; Python tools (`src/uwslam/`) bind it with ctypes and score it against a reconstruction of a lake
-clip, and the gyro path on AQUALOC's harbour sequences (camera and gyro on one clock).
+Monocular-camera SLAM for a small underwater robot, with an optional IMU (gyro, and an accelerometer that levels the
+world poses). A C core (`core/`) runs bit-identically on a PC and an ESP32-P4; Python tools (`src/uwslam/`) bind it
+with ctypes and score it against a reconstruction of a lake clip, and the IMU path on AQUALOC's harbour sequences
+(camera and IMU on one clock).
 
 ## Layout
 
 - `core/`: C99, no heap, no libm. Odometry `mono_vo*.c` (five units, listed in `mono_vo_internal.h`), `voxel_map.c`,
   `obstacle_dir.c`, `path_plan.c`, `mono_map.c`, `mono_cloud.c`; prefixes `mvo_`, `vm_`, `od_`, `pp_`, `mm_`, `mc_`.
 - `src/uwslam/`: bindings and lake-clip tools (`mvo`, `voxel_map`, `obstacle_dir`, `path_plan`, `mono_map`,
-  `mono_cloud`), AQUALOC's sequences with their gyro (`aqualoc`: prepare, board files; `aqualoc_score`), the board host
+  `mono_cloud`), AQUALOC's sequences with their IMU (`aqualoc`: prepare, board files; `aqualoc_score`), the board host
   `mvo_stream`, and `experiments/` (OpenCV prototype `mono_vo`, reference poses and masks `mask_motion`, `segmenter`).
 - `tests/`: unittest suite; `tests/c/` holds the C contract checks and the firmware host harnesses.
 - `firmware/mono_vo_stream/`: the ESP32-P4 firmware; frames and masks arrive over the console UART, or over the chip's
   own USB-Serial-JTAG port when built with `sdkconfig.usb_serial_jtag`.
 - `results/lake_clip/`: the committed results, including the board's expected-hash files and its records, and the
-  inputs the tools share (`mask_motion`, the OpenCV prototype `mono_vo`). `results/aqualoc/`: the gyro's scores and,
+  inputs the tools share (`mask_motion`, the OpenCV prototype `mono_vo`). `results/aqualoc/`: the IMU's scores and,
   per sequence, its checks, the board's expectations and records (the data itself is not in the repository).
 - `local/`: experiment folders, not in git.
 
@@ -30,7 +31,7 @@ python -m uwslam.mono_map <video> --reconstruction <folder> --output <fresh fold
 python -m uwslam.voxel_map <video> --reconstruction <folder> --output <fresh folder>    # obstacle_dir, path_plan alike
 python -m uwslam.aqualoc prepare <raw_data> --trajectory <txt> --camera-calib <yaml> --imu-calib <yaml> --output <fresh>
 python -m uwslam.aqualoc_score <prepared seq01> <prepared seq07> --output <fresh folder> --jobs 8
-python -m uwslam.aqualoc board <prepared> --output <fresh folder>    # frames, gyro readings, expectations for mvo_stream
+python -m uwslam.aqualoc board <prepared> --output <fresh folder> --calibration <other prepared>    # for mvo_stream
 ruff format src tests .claude/skills && ruff check src tests .claude/skills    # the configuration is in pyproject.toml
 ```
 
@@ -44,10 +45,12 @@ reads two to a side); the board names it `p4` and the host refuses expectations 
 - Accuracy: the `lake-score` skill. Score against a control run of the last commit with identical settings, over the
   16 seeds in `uwslam.mvo.SEEDS`, on the 10 s clip windows as well as the full clip. One run or one seed proves
   nothing: the seed alone can change a score twofold.
-- The gyro path: `uwslam.aqualoc_score` on both prepared sequences (10 s windows and whole sequences, 16 seeds, each
-  gyro run paired with the camera alone); without readings a step must stay bit-identical (the lake's step hashes).
-- Board: the `board-check` skill. Every step, map, voxel, direction and plan hash must equal the PC's; for the gyro,
-  stream a sequence from `uwslam.aqualoc board` with `--gyro`.
+- The IMU path: `uwslam.aqualoc_score` on both prepared sequences (10 s windows and whole sequences, 16 seeds; gyro
+  runs paired with the camera alone, IMU runs with the gyro alone; the accelerometer calibrated with the other
+  sequence's fitted bias); without readings a step must stay bit-identical (the lake's step hashes), and gyro-only
+  readings must give the gyro's steps bit for bit.
+- Board: the `board-check` skill. Every step, map, voxel, direction and plan hash must equal the PC's; for the IMU,
+  stream a sequence from `uwslam.aqualoc board` with `--imu`, and with `--gyro`.
 - A change to `core/` or its headers changes the source SHA-256 the firmware checks (`uwslam.mvo.CORE_FILES`, guarded
   by `tests/test_mvo_sources.py`): regenerate the expected files in `results/lake_clip/` and reflash. Finish comment
   edits in `core/` before generating results, since a comment changes the hashes too.
@@ -65,6 +68,6 @@ reads two to a side); the board names it `p4` and the host refuses expectations 
 - The board is an ESP32-P4 dev board (two RISC-V cores at 360 MHz, no PSRAM used). Its firmware tracks with
   `mvo_vector.S` (the 19×19 window kernels; the block copy stays C).
 - At real 5 Hz input a step must stay under 200 ms on the board; a lake step takes about 127 ms (at most 154), with
-  the gyro on AQUALOC at most 183 ms; about 99 KB of internal RAM stay free.
+  the gyro or the IMU on AQUALOC at most 183 ms; about 97 KB of internal RAM stay free.
 
 Paths on this machine are in `CLAUDE.local.md`. Repeated procedures are skills in `.claude/skills/`.

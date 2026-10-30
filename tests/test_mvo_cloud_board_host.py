@@ -345,6 +345,76 @@ class MonoCloudBoardHostTests(unittest.TestCase):
         self.assertTrue(record["gyro"]["bias_match"])
         self.assertEqual(record["gyro"]["used"]["rotation"], run.gyro_used.count(2))
 
+    def test_imu_readings_through_the_firmware_match_the_pc(self):
+        """An IMU mounted and read through the firmware's mount, accel_bias and imu commands: every step (its world
+        pose levelled by the forces), how each used the gyro, the final bias and the world's up equal the PC's."""
+        from tests.test_mvo_gyro import readings
+
+        # Fourteen frames: the first ten steps' ups agree and settle the world's up, the last three are levelled.
+        poses = [
+            (euler_rotation(np.radians(1.5 * k), 0.0, 0.0), np.array([0.30 * k, 0.0, 0.15 * k])) for k in range(14)
+        ]
+        mount = euler_rotation(0.4, -0.9, 1.2)  # the IMU's axes, turned into the camera's
+        offset = np.array([0.3, -0.2, 0.5])  # the accelerometer's bias, in its axes
+        up = np.array([0.0, -9.81, 0.0])  # the specific force at rest, in the first camera's axes
+        steps = []
+        for k in range(len(poses) - 1):
+            gyro = readings(poses[k][0].T @ poses[k + 1][0], (0.01, -0.02, 0.005), mount)
+            tilt = np.array([0.0, 0.0, 0.4 * max(0, k - 9)])  # a tilt the camera does not see, once the up is set
+            force = mount.T @ (poses[k + 1][0].T @ up) + offset + tilt
+            rows = np.column_stack([gyro, np.tile(force, (len(gyro), 1))]).astype(np.float32)
+            rows[3, 4:] = 60.0  # a knock beyond 5 g: the core leaves that force out, on the board too
+            steps.append(rows)
+        frames = [render(r, c, self.camera, texture(1), texture(2)) for r, c in poses]
+        run = mvo.run_odometry(self.vo, frames, self.camera, mvo.SEED, mvo.GyroReadings(mount, steps, None, offset))
+        gyro_alone = mvo.run_odometry(
+            self.vo, frames, self.camera, mvo.SEED, mvo.GyroReadings(mount, [s[:, :4].copy() for s in steps])
+        )
+        self.assertNotEqual(run.hashes, gyro_alone.hashes)  # the forces levelled the world poses
+
+        def bits(value: float) -> int:
+            return struct.unpack("<I", struct.pack("<f", value))[0]
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp:
+            folder = Path(temp)
+            frames_path, imu_path, expected_path = folder / "frames.bin", folder / "imu.bin", folder / "vo.json"
+            frames_path.write_bytes(b"".join(np.ascontiguousarray(frame).tobytes() for frame in frames))
+            imu_path.write_bytes(
+                b"".join(struct.pack("<I", len(rows)) + rows.astype("<f4").tobytes() for rows in steps)
+            )
+            expected = {
+                "frames": len(frames),
+                "every": 1,
+                "rate_hz": None,
+                "step_hashes": run.hashes,
+                "camera_bits": [bits(getattr(self.camera, name)) for name in ("fx", "fy", "cx", "cy")],
+                "seed": mvo.SEED,
+                **{key: self.fingerprints[key] for key in ("core_sha256", "header_sha256")},
+                **mvo.build_config(),
+                "imu": {
+                    "mount_bits": [bits(v) for v in mount.astype(np.float32).reshape(9)],
+                    "readings_sha256": hashlib.sha256(imu_path.read_bytes()).hexdigest(),
+                    "used": run.gyro_used,
+                    "final_bias_bits": [bits(v) for v in run.gyro_bias[-1]],
+                    "accel_bias_bits": [bits(v) for v in offset.astype(np.float32)],
+                    "final_up_bits": [bits(v) for v in run.imu_up],
+                    "forces_dropped": run.forces_dropped,
+                },
+            }
+            expected_path.write_text(json.dumps(expected), encoding="utf-8")
+            with (
+                patch.object(mvo_stream, "Board", side_effect=lambda port, baud: ProcessBoard(self.program)),
+                patch("builtins.print"),
+            ):
+                record, _ = mvo_stream.stream("host-only", frames_path, expected_path, cores=1, imu_path=imu_path)
+                with self.assertRaisesRegex(ValueError, "go together"):
+                    mvo_stream.stream("host-only", frames_path, expected_path, cores=1, gyro_path=imu_path)
+        self.assertTrue(record["all_match"])
+        self.assertTrue(record["imu"]["match"])
+        self.assertTrue(record["imu"]["bias_match"])
+        self.assertTrue(record["imu"]["up_match"])
+        self.assertEqual(record["imu"]["forces_dropped"], len(steps))
+
     def test_normal_video_real_vo_and_firmware_produce_identical_cloud(self):
         result, record, lines = self.replay(self.frames)
         self.assertTrue(all(item["kind"] == "essential" for item in result["trajectory"][1:]))

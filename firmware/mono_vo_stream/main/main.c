@@ -26,6 +26,12 @@
  *                                                 floats (seconds, rad/s in the gyro's axes) for the step to the next
  *                                                 frame, at most GYRO_READINGS; the core integrates them
  *   board: gyro readings=<n> us=<t>
+ *   host:  accel_bias <b0> <b1> <b2>              an accelerometer's calibrated bias (mvo_imu_set_accel_bias), as
+ *                                                 float bits, m/s^2 in the IMU's axes
+ *   board: accel_bias set
+ *   host:  imu <count> <fnv>                      as gyro, readings of 28 bytes: dt, rate x, y, z, then the specific
+ *                                                 force x, y, z (m/s^2, the IMU's axes)
+ *   board: imu readings=<n> dropped=<forces the core left out> us=<t>
  *   host:  frame <index> <fnv> [<mask fnv>]       then the frame's 76800 bytes, and with a mask fnv its 600 bytes:
  *                                                 bit i of the mask (byte i / 8, least significant bit first) is cell
  *                                                 i in row-major order, set where it is not water
@@ -49,6 +55,9 @@
  *          plan frames=<n> action=<a> direction=<d> turn=<t> hash=<fnv of the pp_plan_t>
  *          gyro bias_x_bits=<float bits> bias_y_bits=<float bits> bias_z_bits=<float bits> bias_steps=<n>
  *                                                 the gyro's bias estimate (rad/s, its axes; zero without a gyro)
+ *          imu up_x_bits=<float bits> up_y_bits=<float bits> up_z_bits=<float bits> up_steps=<n>
+ *                                                 the world's up the accelerometer measured (mvo_imu_up; zero
+ *                                                 until it has settled); up_steps: the agreeing ups behind it
  *          end heap_internal_free=<bytes> largest_block=<bytes> stack_free_words=<n> map_continuous=<0 or 1>
  *              cloud_count=<n> cloud_dropped=<n> cloud_continuous=<0 or 1> cloud_hash=<fnv of the mc_map_t>
  *   host:  cloud                                  read the current 3D cloud without changing it
@@ -97,8 +106,9 @@
 #define IDLE_MS 1000       /* a `ready` line this often while no command comes */
 #define CHUNK_WAIT_MS 5000 /* longest pause allowed inside a frame's bytes */
 #define LINK_BAUD 921600   /* a UART link's rate once the firmware runs (uwslam.mvo_stream.LINK_BAUD) */
-#define GYRO_READINGS 256  /* the most gyro readings one step takes (uwslam.mvo_stream.GYRO_READINGS) */
+#define GYRO_READINGS 256  /* the most gyro or IMU readings one step takes (uwslam.mvo_stream.GYRO_READINGS) */
 #define GYRO_READING_BYTES 16
+#define IMU_READING_BYTES 28
 
 /* cloud_hash covers the entire struct, whose representation the host reconstructs from the exported point fields. */
 typedef char cloud_point_wire_layout[(sizeof(float) == 4 && sizeof(mc_point_t) == 24 &&
@@ -122,7 +132,7 @@ static od_layout_t s_layout;
 static od_state_t s_dirs;
 static pp_plan_t s_plan;
 static uint8_t s_packed[MASK_BYTES], s_mask[MASK_WIDTH * MASK_HEIGHT];
-static uint8_t s_readings[GYRO_READINGS * GYRO_READING_BYTES];
+static uint8_t s_readings[GYRO_READINGS * IMU_READING_BYTES];
 static float s_points[MVO_MAX_FEATURES][3];
 static int s_session_ready, s_streaming, s_started, s_map_continuous;
 static int64_t s_next_frame;
@@ -369,18 +379,41 @@ static void mount(const char *line)
     printf("mounted\n");
 }
 
-/* A step's gyro readings, integrated by the core into the rotation the next frame's step may use. */
-static void gyro(const char *line)
+static void accel_bias(const char *line)
 {
+    uint32_t bits[3];
+    float bias[3];
+    if (!s_streaming) {
+        printf("error start required\n");
+        return;
+    }
+    if (sscanf(line, "accel_bias %" SCNu32 " %" SCNu32 " %" SCNu32, &bits[0], &bits[1], &bits[2]) != 3) {
+        printf("error bad accel_bias line\n");
+        return;
+    }
+    memcpy(bias, bits, sizeof bias);
+    if (!mvo_imu_set_accel_bias(s_state, bias)) {
+        printf("error accel_bias not finite\n");
+        return;
+    }
+    printf("accel_bias set\n");
+}
+
+/* A step's gyro readings (`gyro`, with_force 0) or IMU readings (`imu`, with_force 1), integrated by the core into
+ * the rotation, and the forces into the up, that the next frame's step may use. */
+static void readings(const char *line, int with_force)
+{
+    const char *name = with_force ? "imu" : "gyro";
+    const int size = with_force ? IMU_READING_BYTES : GYRO_READING_BYTES;
     uint32_t expected;
-    int count, i;
+    int count, i, dropped = 0;
     int64_t begin;
-    if (sscanf(line, "gyro %d %" SCNu32, &count, &expected) != 2 || count < 0) {
-        printf("error bad gyro line\n");
+    if (sscanf(line + strlen(name), " %d %" SCNu32, &count, &expected) != 2 || count < 0) {
+        printf("error bad %s line\n", name);
         return;
     }
     if (count > GYRO_READINGS) { /* consume what was sent, a buffer at a time, to keep the command framing */
-        int left = (count < 65536 ? count : 65536) * GYRO_READING_BYTES;
+        int left = (count < 65536 ? count : 65536) * size;
         while (left > 0) {
             const int part = left < (int)sizeof s_readings ? left : (int)sizeof s_readings;
             if (!read_exact(s_readings, part)) {
@@ -388,29 +421,37 @@ static void gyro(const char *line)
             }
             left -= part;
         }
-        printf("error gyro readings over %d\n", GYRO_READINGS);
+        printf("error %s readings over %d\n", name, GYRO_READINGS);
         return;
     }
     /* As with a frame: consume the payload even when it cannot be used, to keep the command framing. */
-    if (!read_exact(s_readings, count * GYRO_READING_BYTES)) {
-        printf("error gyro readings arrived incomplete\n");
+    if (!read_exact(s_readings, count * size)) {
+        printf("error %s readings arrived incomplete\n", name);
         return;
     }
     if (!s_streaming || !s_started) {
-        printf("error gyro readings need a started run\n");
+        printf("error %s readings need a started run\n", name);
         return;
     }
-    if (fnv(2166136261u, s_readings, (size_t)count * GYRO_READING_BYTES) != expected) {
-        printf("error gyro hash mismatch\n");
+    if (fnv(2166136261u, s_readings, (size_t)count * size) != expected) {
+        printf("error %s hash mismatch\n", name);
         return;
     }
     begin = esp_timer_get_time();
     for (i = 0; i < count; ++i) {
-        float reading[4]; /* dt, then the rate */
-        memcpy(reading, s_readings + i * GYRO_READING_BYTES, sizeof reading);
-        mvo_gyro_rate(s_state, reading + 1, reading[0]);
+        float reading[7]; /* dt, the rate, then the force */
+        memcpy(reading, s_readings + i * size, (size_t)size);
+        if (with_force) {
+            dropped += !mvo_imu_reading(s_state, reading + 1, reading + 4, reading[0]);
+        } else {
+            mvo_gyro_rate(s_state, reading + 1, reading[0]);
+        }
     }
-    printf("gyro readings=%d us=%" PRId64 "\n", count, esp_timer_get_time() - begin);
+    if (with_force) {
+        printf("imu readings=%d dropped=%d us=%" PRId64 "\n", count, dropped, esp_timer_get_time() - begin);
+    } else {
+        printf("gyro readings=%d us=%" PRId64 "\n", count, esp_timer_get_time() - begin);
+    }
 }
 
 static void frame(const char *line)
@@ -536,6 +577,14 @@ static void end(void)
         printf("gyro bias_x_bits=%" PRIu32 " bias_y_bits=%" PRIu32 " bias_z_bits=%" PRIu32 " bias_steps=%" PRId32 "\n",
                bias_bits[0], bias_bits[1], bias_bits[2], s_state->gyro.bias_steps);
     }
+    {
+        float up[3];
+        uint32_t up_bits[3];
+        mvo_imu_up(s_state, up);
+        memcpy(up_bits, up, sizeof up_bits);
+        printf("imu up_x_bits=%" PRIu32 " up_y_bits=%" PRIu32 " up_z_bits=%" PRIu32 " up_steps=%" PRId32 "\n",
+               up_bits[0], up_bits[1], up_bits[2], s_state->gyro.up_steps);
+    }
     printf("end heap_internal_free=%u largest_block=%u stack_free_words=%u map_continuous=%d"
            " cloud_count=%" PRIu32 " cloud_dropped=%" PRIu32 " cloud_continuous=%" PRId32 " cloud_hash=%" PRIu32 "\n",
            (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
@@ -625,7 +674,11 @@ void app_main(void)
         } else if (strncmp(line, "frame ", 6) == 0) {
             frame(line);
         } else if (strncmp(line, "gyro ", 5) == 0) {
-            gyro(line);
+            readings(line, 0);
+        } else if (strncmp(line, "imu ", 4) == 0) {
+            readings(line, 1);
+        } else if (strncmp(line, "accel_bias ", 11) == 0) {
+            accel_bias(line);
         } else if (strncmp(line, "mount ", 6) == 0) {
             mount(line);
         } else if (strcmp(line, "end") == 0) {

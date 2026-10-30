@@ -42,5 +42,20 @@
     "pixels_inside_source": 1.0,
     "hfov_deg": 85.8029236848114,
     "vfov_deg": 66.8378249417148
+  },
+  "accel_force_median": 9.601890517026423,
+  "accel_up_error_deg": {
+    "median": 4.063908671531354,
+    "p90": 5.023085303988675
+  },
+  "accel_bias_fit": [
+    0.2646342423628948,
+    -0.03467122281108814,
+    0.6011838938941605
+  ],
+  "accel_scale_fit": 9.702931549804465,
+  "accel_up_error_without_fitted_bias_deg": {
+    "median": 1.2257024487471044,
+    "p90": 2.1607630240487583
   }
 }
