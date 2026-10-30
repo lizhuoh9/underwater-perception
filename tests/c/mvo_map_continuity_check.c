@@ -55,6 +55,7 @@ unsigned uxTaskGetStackHighWaterMark(void *task) { (void)task; return 0; }
 void vTaskDelay(int ticks) { (void)ticks; }
 
 #include "../../firmware/mono_vo_stream/main/main.c"
+#include "../../firmware/mono_vo_stream/main/sensors.c"
 
 static mvo_camera_t last_camera;
 void mvo_init(mvo_t *s, const mvo_camera_t *camera, uint32_t seed, uint8_t *a, uint8_t *b)
@@ -95,6 +96,15 @@ int mvo_imu_reading(mvo_t *s, const float rate[3], const float accel[3], float d
 { (void)s; (void)rate; (void)accel; (void)dt; return 1; }
 int mvo_imu_set_accel_bias(mvo_t *s, const float bias[3]) { (void)s; (void)bias; return 1; }
 void mvo_imu_up(const mvo_t *s, float up[3]) { (void)s; up[0] = up[1] = up[2] = 0.0f; }
+int mvo_depth_reading(mvo_t *s, float depth) { (void)s; (void)depth; return 1; }
+int mvo_range_setup(mvo_t *s, const float axis[3], float cosine) { (void)s; (void)axis; (void)cosine; return 1; }
+int mvo_range_reading(mvo_t *s, float range) { (void)s; (void)range; return 1; }
+int mvo_metric(const mvo_t *s, float centre[3], float *scale, float *variance)
+{
+    (void)s;
+    centre[0] = centre[1] = centre[2] = *scale = *variance = 0.0f;
+    return 0;
+}
 void mm_init(mm_map_t *map) { memset(map, 0, sizeof *map); }
 int mm_observe(const mvo_t *vo, const uint8_t *mask, int w, int h, float (*out)[3], int capacity)
 { (void)vo; (void)mask; (void)w; (void)h; (void)out; (void)capacity; ++observations; return 1; }

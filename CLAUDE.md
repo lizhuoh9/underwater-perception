@@ -1,22 +1,26 @@
 # uwslam
 
 Monocular-camera SLAM for a small underwater robot, with an optional IMU (gyro, and an accelerometer that levels the
-world poses). A C core (`core/`) runs bit-identically on a PC and an ESP32-P4; Python tools (`src/uwslam/`) bind it
-with ctypes and score it against a reconstruction of a lake clip, and the IMU path on AQUALOC's harbour sequences
-(camera and IMU on one clock). The board's live build takes a camera's JPEG frames and prepares them itself.
+world poses) and an optional metric scale from a depth sensor and a forward ranger. A C core (`core/`) runs
+bit-identically on a PC and an ESP32-P4; Python tools (`src/uwslam/`) bind it with ctypes and score it against a
+reconstruction of a lake clip (rangers simulated from it), and the IMU and depth paths on AQUALOC's harbour sequences
+(camera, IMU and depth sensor on one clock). The board's live build takes a camera's JPEG frames and prepares them
+itself.
 
 ## Layout
 
-- `core/`: C99, no heap, no libm. Odometry `mono_vo*.c` (five units, listed in `mono_vo_internal.h`), `voxel_map.c`,
+- `core/`: C99, no heap, no libm. Odometry `mono_vo*.c` (six units, listed in `mono_vo_internal.h`; the metric scale
+  is `mono_vo_scale.c`, open-loop: it never changes a step), `voxel_map.c`,
   `obstacle_dir.c`, `path_plan.c`, `mono_map.c`, `mono_cloud.c`, `frame_prep.c` (a camera's image averaged onto the
   320×240 frame); prefixes `mvo_`, `vm_`, `od_`, `pp_`, `mm_`, `mc_`, `fp_`.
 - `src/uwslam/`: bindings and lake-clip tools (`mvo`, `voxel_map`, `obstacle_dir`, `path_plan`, `mono_map`,
-  `mono_cloud`), AQUALOC's sequences with their IMU (`aqualoc`: prepare, board files; `aqualoc_score`), the board host
-  `mvo_stream`, the live build's camera `live_feed`, and `experiments/` (OpenCV prototype `mono_vo`, reference poses
-  and masks `mask_motion`, `segmenter`).
+  `mono_cloud`), AQUALOC's sequences with their IMU and depth (`aqualoc`: prepare, board files; `aqualoc_score`), the
+  lake's simulated rangers (`ranger`), the board host `mvo_stream`, the live build's camera `live_feed`, and
+  `experiments/` (OpenCV prototype `mono_vo`, reference poses and masks `mask_motion`, `segmenter`).
 - `tests/`: unittest suite; `tests/c/` holds the C contract checks and the firmware host harnesses.
 - `firmware/mono_vo_stream/`: the ESP32-P4 firmware; frames and masks arrive over the console UART, or over the chip's
-  own USB-Serial-JTAG port when built with `sdkconfig.usb_serial_jtag`. With `sdkconfig.live` on top, the live build
+  own USB-Serial-JTAG port when built with `sdkconfig.usb_serial_jtag`; the other sensors' commands (IMU, depth,
+  ranger) are `sensors.c`. With `sdkconfig.live` on top, the live build
   (`live.c`): PSRAM on at 200 MHz, a camera's JPEG frames (`jpeg`) checked (`jpeg_check.c`), decoded by the JPEG engine
   and averaged on the board while a worker task steps the newest frame.
 - `results/lake_clip/`: the committed results, including the board's expected-hash files and its records, and the
@@ -37,6 +41,7 @@ python -m uwslam.voxel_map <video> --reconstruction <folder> --output <fresh fol
 python -m uwslam.aqualoc prepare <raw_data> --trajectory <txt> --camera-calib <yaml> --imu-calib <yaml> --output <fresh>
 python -m uwslam.aqualoc_score <prepared seq01> <prepared seq07> --output <fresh folder> --jobs 8
 python -m uwslam.aqualoc board <prepared> --output <fresh folder> --calibration <other prepared>    # for mvo_stream
+python -m uwslam.ranger <video> --reconstruction <folder> --output <fresh folder> [--beam 7.5] [--board-frames <file>]
 python -m uwslam.live_feed prepare <video> --reconstruction <folder> --output <fresh folder>    # the live build's camera
 python -m uwslam.live_feed stream <prepared> --port <port> --label <name> [--check]    # ESP-IDF's Python (pyserial)
 python -m uwslam.live_feed check <prepared> --label <check run> --reconstruction <folder> --output <fresh folder>
@@ -57,8 +62,13 @@ reads two to a side); the board names it `p4` and the host refuses expectations 
   runs paired with the camera alone, IMU runs with the gyro alone; the accelerometer calibrated with the other
   sequence's fitted bias); without readings a step must stay bit-identical (the lake's step hashes), and gyro-only
   readings must give the gyro's steps bit for bit.
+- The metric scale: its `depth` mode in `uwslam.aqualoc_score` (the IMU's runs, whose other scores must stay equal in
+  every pair) and `uwslam.ranger` on the lake (the path in metres against a similarity alignment, 16 seeds); depths
+  and ranges must leave every step bit-identical.
 - Board: the `board-check` skill. Every step, map, voxel, direction and plan hash must equal the PC's; for the IMU,
-  stream a sequence from `uwslam.aqualoc board` with `--imu`, and with `--gyro`. For the live build (`frame_prep`,
+  stream a sequence from `uwslam.aqualoc board` with `--imu`, and with `--gyro`; for the metric scale, its
+  `board_expected_depth.json` with `--imu` and `--sense`, and the ranger's expectation with `--sense`. For the live
+  build (`frame_prep`,
   the firmware's live path): a `live_feed stream --check` run whose steps `live_feed check` finds all equal to the PC's
   on the board's own frames, those frames within one grey level of the PC's decoding, and a real-time run's drops.
 - A change to `core/` or its headers changes the source SHA-256 the firmware checks (`uwslam.mvo.CORE_FILES` and
@@ -78,11 +88,11 @@ reads two to a side); the board names it `p4` and the host refuses expectations 
 
 - The board is an ESP32-P4 dev board (two RISC-V cores at 360 MHz; PSRAM, at 200 MHz, only in the live build). Its
   firmware tracks with `mvo_vector.S` (the 19×19 window kernels; the block copy stays C).
-- At real 5 Hz input a step must stay under 200 ms on the board; a lake step takes about 127 ms (at most 154), with
-  the gyro or the IMU on AQUALOC at most 183 ms; about 97 KB of internal RAM stay free.
-- The live build decodes a 960×544 JPEG in 6.1 ms and averages it in about 22 ms; a frame's whole work takes 164 ms
-  in the median when frames wait for the step, 198 ms at real 5 Hz, where receiving the next frame over USB slows the
-  step (two frames of 170 dropped); 66,452 B of internal RAM stay free. Frames are checked as they arrive
+- At real 5 Hz input a step must stay under 200 ms on the board; a lake step takes about 127 ms (at most 155), with
+  the gyro, the IMU or the depth sensor on AQUALOC at most 184 ms; about 96 KB of internal RAM stay free.
+- The live build decodes a 960×544 JPEG in 6.1 ms and averages it in about 22 ms; a frame's whole work takes 165 ms
+  in the median when frames wait for the step, 199 ms at real 5 Hz, where receiving the next frame over USB slows the
+  step (two frames of 170 dropped); 65,856 B of internal RAM stay free. Frames are checked as they arrive
   (`jpeg_check.c`): the driver's own parser has no bounds.
 
 Paths on this machine are in `CLAUDE.local.md`. Repeated procedures are skills in `.claude/skills/`.

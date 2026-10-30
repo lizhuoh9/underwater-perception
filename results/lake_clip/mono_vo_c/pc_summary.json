@@ -1,9 +1,9 @@
 {
   "task": "C monocular visual odometry (pairwise method) on the lake clip's 320x240 robot frames, scored against the reference poses and set beside the OpenCV prototype",
-  "core_sha256": "c90e4c217ae3c52bdf94b13e99503c095fa4f3228fc0fd9bc6ba4cad1792422a",
+  "core_sha256": "d9502c779ff92381784b1bb001686209a9d601151c1d6dbbe0bbf61cd3f7b0b8",
   "config": "p4",
   "max_features": 300,
-  "state_bytes": 9968,
+  "state_bytes": 10560,
   "pyramid_bytes_each": 102464,
   "time_scale": 3.0,
   "hfov_deg": 110.0,
@@ -41,7 +41,7 @@
         "heading_max_deg": 56.61517671430042,
         "scale_drift_window_ratio_min": 0.15546587531874048,
         "scale_drift_window_ratio_max": 1.4331693424544025,
-        "ms_per_frame": 18.59128816567238
+        "ms_per_frame": 14.959034319533401
       },
       "c_over_seeds": {
         "seeds": [
@@ -138,7 +138,7 @@
         "heading_max_deg": 22.925654422983154,
         "scale_drift_window_ratio_min": 0.7833842462829159,
         "scale_drift_window_ratio_max": 1.30230479217233,
-        "ms_per_frame": 21.918514792893678
+        "ms_per_frame": 18.18274733729794
       },
       "c_over_seeds": {
         "seeds": [
@@ -235,7 +235,7 @@
         "heading_max_deg": 53.83953521191807,
         "scale_drift_window_ratio_min": 0.31511083451816424,
         "scale_drift_window_ratio_max": 1.4484433013742537,
-        "ms_per_frame": 25.222956435646836
+        "ms_per_frame": 19.692565346529157
       },
       "c_over_seeds": {
         "seeds": [
@@ -312,7 +312,7 @@
     "frames": 339,
     "steps": 338,
     "seed": 12345,
-    "core_sha256": "c90e4c217ae3c52bdf94b13e99503c095fa4f3228fc0fd9bc6ba4cad1792422a",
-    "header_sha256": "eff98693b23bc6bb696fdc764aee03a015a3d8e0b5c74ce6e1259eaaa472ad61"
+    "core_sha256": "d9502c779ff92381784b1bb001686209a9d601151c1d6dbbe0bbf61cd3f7b0b8",
+    "header_sha256": "1f7204809c710c37c91217dbcec09d62ec7c4d9f00ea8867cc1a4b3d83402136"
   }
 }

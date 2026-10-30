@@ -48,14 +48,11 @@ uint8_t *mvo_frame(mvo_t *s) { return s->pyramid[s->current ^ 1]; }
 
 static int64_t mvo_now(const mvo_t *s) { return s->timing.clock ? s->timing.clock() : 0; }
 
-/* Whether v is a number and not an infinity, without libm. */
-static int is_finite(float v) { return v - v == 0.0f; }
-
 int mvo_gyro_mount(mvo_t *s, const float mount[9])
 {
     int i;
     for (i = 0; i < 9; ++i) {
-        if (!is_finite(mount[i])) {
+        if (!mvo_finite(mount[i])) {
             return 0;
         }
     }
@@ -149,7 +146,7 @@ int mvo_imu_set_accel_bias(mvo_t *s, const float bias[3])
 {
     int i;
     for (i = 0; i < 3; ++i) {
-        if (!is_finite(bias[i])) {
+        if (!mvo_finite(bias[i])) {
             return 0;
         }
     }
@@ -299,6 +296,7 @@ void mvo_start(mvo_t *s)
 {
     float unused[9], time;
     take_readings(s, unused, &time); /* readings before the first frame belong to no step */
+    mvo_scale_start(s);
     s->current ^= 1;
     mvo_build_pyramid(s, s->pyramid[s->current]);
     s->count = 0;
@@ -383,6 +381,7 @@ static void finish(mvo_t *s, mvo_step_t *out, const float rotation_ab[9], const 
     }
     mat3_mul(s->world_rotation, rotation_ab, s->world_rotation);
     level(s);
+    mvo_scale_step(s, moved);
     memcpy(out->world_rotation, s->world_rotation, sizeof out->world_rotation);
     memcpy(out->world_centre, s->world_centre, sizeof out->world_centre);
     ++s->steps;
@@ -583,6 +582,7 @@ void mvo_step(mvo_t *s, mvo_step_t *out)
     uint32_t rng_before_essential;
     int n, k, homography_count, rotation_count, count;
     const int with_gyro = take_readings(s, gyro, &gyro_time);
+    s->scale.step_time = gyro_time > 0.0f ? gyro_time : MVO_SCALE_STEP_TIME;
     s->timing.detect_us = s->timing.track_us = s->timing.motion_us = 0;
     s->gyro.used = MVO_GYRO_NONE;
     s->current ^= 1;

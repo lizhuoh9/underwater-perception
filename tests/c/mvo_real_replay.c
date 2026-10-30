@@ -43,6 +43,7 @@ unsigned uxTaskGetStackHighWaterMark(void *task) { (void)task; return 0; }
 void vTaskDelay(int ticks) { (void)ticks; }
 
 #include "../../firmware/mono_vo_stream/main/main.c"
+#include "../../firmware/mono_vo_stream/main/sensors.c"
 
 void mvo_vector_lk_template(mvo_window_t *w, const uint8_t *s, int stride, const int16_t q[4], int64_t g[3])
 { mvo_lk_template_c(w, s, stride, q, g); }
@@ -71,10 +72,7 @@ int main(void)
         if (strncmp(line, "selftest ", 9) == 0) selftest(line);
         else if (strncmp(line, "start ", 6) == 0) start(line);
         else if (strncmp(line, "frame ", 6) == 0) frame(line);
-        else if (strncmp(line, "gyro ", 5) == 0) readings(line, 0);
-        else if (strncmp(line, "imu ", 4) == 0) readings(line, 1);
-        else if (strncmp(line, "accel_bias ", 11) == 0) accel_bias(line);
-        else if (strncmp(line, "mount ", 6) == 0) mount(line);
+        else if (sensor_command(line)) {}
         else if (strcmp(line, "end") == 0) end();
         else if (strcmp(line, "cloud") == 0) cloud();
         else printf("error unknown command\n");

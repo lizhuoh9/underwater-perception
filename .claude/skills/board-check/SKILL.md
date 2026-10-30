@@ -35,8 +35,13 @@ the ESP32-P4.
    `python -m uwslam.aqualoc board <prepared> --output <out>/aqualoc_<seq> --calibration <the other prepared>`, then
    stream it with `--frames <out>/aqualoc_<seq>/frames.bin --imu <out>/aqualoc_<seq>/imu.bin --expected <out>/aqualoc_<seq>/board_expected_imu.json`,
    with `--gyro <out>/aqualoc_<seq>/gyro.bin --expected <out>/aqualoc_<seq>/board_expected_gyro.json`, and once with
-   `board_expected_camera.json` alone, for the camera alone's time. Sequence 07 takes about 2 min over
-   USB-Serial-JTAG, sequence 01 about 4.
+   `board_expected_camera.json` alone, for the camera alone's time. For the metric scale (any change to it or to the
+   odometry), also with `--imu <out>/aqualoc_<seq>/imu.bin --sense <out>/aqualoc_<seq>/sense.bin --expected
+   <out>/aqualoc_<seq>/board_expected_depth.json` (from a sequence prepared with its depths). Sequence 07 takes about
+   2 min over USB-Serial-JTAG, sequence 01 about 4. The lake's simulated ranger: with the project Python,
+   `python -m uwslam.ranger <video> --reconstruction <folder> --output <out>/ranger --board-frames <out>/frames_5hz.bin`
+   (about 3 min), then stream `--frames <out>/frames_5hz.bin --sense <out>/ranger/sense_5hz.bin --expected
+   <out>/ranger/board_expected_ranger_5hz.json`.
 6. The live build, for any change to `core/frame_prep.*`, the firmware's live path or the odometry. Build and flash it
    in a build folder of its own, after the chip check:
    `idf.py -C firmware/mono_vo_stream -B firmware/mono_vo_stream/build_live -D SDKCONFIG=build_live/sdkconfig -D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.usb_serial_jtag;sdkconfig.live" -p <port> flash`
@@ -50,7 +55,8 @@ the ESP32-P4.
 ## Done when
 
 - `mvo_stream` reports every step, map, voxel, direction and plan equal to the PC's (a partial run whose steps differ
-  fails), with the gyro every step's use of it and the final bias estimate too, and with the IMU also the world's up.
+  fails), with the gyro every step's use of it and the final bias estimate too, with the IMU also the world's up, and
+  with `--sense` every step's metric centre and scale.
 - At 5 Hz the slowest step is under 200 ms, with the gyro and the IMU as well; internal RAM free at the end is in the
   record.
 - The live build: `steps_equal` equals `steps` in the check's summary.json, `decode_difference.max_abs` is at most 1,

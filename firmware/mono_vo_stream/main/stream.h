@@ -25,6 +25,9 @@ const uint8_t *stream_last_frame(void); /* the newest frame the odometry stepped
 int stream_open(void);                  /* a run started and not yet ended */
 int stream_started(void);               /* its first frame taken */
 
+/* sensors.c: a command for the IMU, the depth sensor or the ranger, answered; 0 for a line that is none of them */
+int sensor_command(const char *line);
+
 /* live.c: the live build's commands (CONFIG_SPIRAM) */
 int live_init(void); /* the JPEG engine, the buffers and the worker; raises the calling loop's priority */
 void live_start(void);

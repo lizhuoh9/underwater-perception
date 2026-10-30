@@ -1,12 +1,13 @@
 # uwslam
 
-Monocular-camera SLAM for a small underwater robot: one camera, an optional IMU (a gyro and an accelerometer), no
-rangers. A C core that gives the same results bit for bit on a PC and on an ESP32-P4 turns the robot camera's grey
-frames into the camera's motion and a continuing 3D map, turns the segmentation model's water mask into the
-directions of the view that are blocked, and from both plans where to head next. Everything is checked on a lake clip
-against a 3D reconstruction of it, the IMU on two sequences of the AQUALOC dataset, whose camera and IMU share one
-clock, and both on an ESP32-P4 by streaming them to the board over USB. The board can also take a camera's JPEG
-frames and prepare them itself, in real time.
+Monocular-camera SLAM for a small underwater robot: one camera, an optional IMU (a gyro and an accelerometer) and an
+optional metric scale from a depth sensor and a forward ranger. A C core that gives the same results bit for bit on a
+PC and on an ESP32-P4 turns the robot camera's grey frames into the camera's motion and a continuing 3D map, turns the
+segmentation model's water mask into the directions of the view that are blocked, and from both plans where to head
+next. Everything is checked on a lake clip against a 3D reconstruction of it (rangers simulated from it), the IMU and
+the depth sensor on two sequences of the AQUALOC dataset, whose camera, IMU and depth sensor share one clock, and all
+of it on an ESP32-P4 by streaming it to the board over USB. The board can also take a camera's JPEG frames and prepare
+them itself, in real time.
 
 [中文说明](README.zh-CN.md)
 
@@ -24,7 +25,8 @@ Two older maps stay beside them: [core/mono_map](core/mono_map.h), a top-view ob
 
 ## Findings
 
-All numbers but the IMU's (items 6 and 7) come from the lake clip: the first 33.8 s of an underwater video filmed along a
+All numbers but the IMU's and the depth sensor's (items 6, 7 and 9) come from the lake clip: the first 33.8 s of an
+underwater video filmed along a
 wall in a lake, at 30 FPS. The reference is a WaterSplat reconstruction of it: 88 camera poses (their stamps times 3,
 one video frame later, see [mask_motion](results/lake_clip/mask_motion/RESULTS.md)) and its point cloud, taken as
 metres. The water masks are the
@@ -59,9 +61,9 @@ heading and about a point in the plan's shares.
    water directions.
 5. **The ESP32-P4 gives the PC's results, at 5 Hz.** With the clip streamed at 5 and 10 Hz, the board gives every
    odometry step, the voxel map, the directions, the plan and the obstacle map exactly as the PC does. At 360 MHz on
-   two cores a 5 Hz step takes 127 ms (median 131, at most 154); the voxel map adds 0.48 ms, the directions 0.18 ms and
-   the plan 1.78 ms, within the 200 ms between frames. At 10 Hz a step takes 102 ms (median 99, at most 163), and 158
-   of the 338 steps take longer than the 100 ms between frames. 96,712 B of internal RAM stay free.
+   two cores a 5 Hz step takes 127 ms (median 132, at most 155); the voxel map adds 0.48 ms, the directions 0.17 ms and
+   the plan 1.76 ms, within the 200 ms between frames. At 10 Hz a step takes 102 ms (median 99, at most 163), and 159
+   of the 338 steps take longer than the 100 ms between frames. 96,116 B of internal RAM stay free.
 6. **A gyro fills in what the camera alone cannot tell apart.** On AQUALOC's harbour sequences, whose camera looks
    down at the seabed and takes much of the travel over it for turns, the gyro brings the 10 s windows' path error from
    0.233 to 0.060 m in the median (lower in 93% of 1040 paired runs) and the whole sequences' from 3.25 to 2.03 m, with
@@ -77,15 +79,22 @@ heading and about a point in the plan's shares.
 8. **The ESP32-P4 prepares a camera's frames itself, in real time.** Sent the clip as a camera would send it, a JPEG
    of the 960×544 colour frame every 200 ms, the board decodes each in its JPEG engine (6.1 ms), averages the
    luminance onto the 320×240 frame on both cores (about 22 ms) and steps on it: 167 of the 169 frames after the
-   first, two dropped, a frame's whole work taking 198 ms in the median. The PC core on the board's frames gives
+   first, two dropped, a frame's whole work taking 199 ms in the median. The PC core on the board's frames gives
    every step bit for bit, and they score like the PC tools' own frames ([Live input](#live-input)).
+9. **A depth sensor or a forward ranger puts the path in metres.** The camera alone has no metric scale, and its scale
+   drifts. On AQUALOC the depth sensor's changes give the scale as the vehicle climbs and dives: over the whole
+   sequences the path in metres, no scale fitted, comes out 0.75 m off in the median, where the same runs are 2.05 m off
+   even with their one scale fitted to the reference. On the lake clip a forward ranger, simulated from the
+   reconstruction, gives the path in metres 0.194 m off, about as close as a scale taken from the reference itself gets
+   it (0.189 m). The odometry's own steps stay bit for bit, and the ESP32-P4 gives every step's metric position as the
+   PC does ([Metric scale](#metric-scale-optional)).
 
 ## Repository layout
 
 ```text
 .
 ├── core/                       C99, no heap, no libm
-│   ├── mono_vo*.c, mono_vo.h   monocular visual odometry (five units, see mono_vo_internal.h)
+│   ├── mono_vo*.c, mono_vo.h   monocular visual odometry (six units, see mono_vo_internal.h; mono_vo_scale.c the metric scale)
 │   ├── voxel_map.c/.h          the continuing 3D voxel map
 │   ├── obstacle_dir.c/.h       blocked directions from the water mask
 │   ├── path_plan.c/.h          where to head next: local avoidance and 3D path choice
@@ -101,8 +110,9 @@ heading and about a point in the plan's shares.
 │   ├── path_plan.py            the plan on the lake clip, scored against the reconstruction's free corridors
 │   ├── mono_map.py, mono_cloud.py   the older maps
 │   ├── aqualoc.py              AQUALOC's harbour sequences as the core's input: frames, IMU readings, reference
-│   ├── aqualoc_score.py        the odometry on them with and without the gyro and the accelerometer
-│   ├── mvo_stream.py           streams frames, masks and IMU readings to the board and checks every step against the PC
+│   ├── aqualoc_score.py        the odometry on them with and without the gyro, the accelerometer and the depth sensor
+│   ├── ranger.py               rangers simulated from the lake's reconstruction; the path in metres from the forward one
+│   ├── mvo_stream.py           streams frames, masks, IMU readings, depths and ranges to the board and checks every step
 │   ├── live_feed.py            plays a camera to the live build: JPEG frames in real time; checks the board's frames
 │   └── experiments/            the OpenCV prototype (mono_vo), the reference poses and masks (mask_motion), the
 │                               segmentation model runner (segmenter)
@@ -131,6 +141,7 @@ python -m uwslam.voxel_map <video> --reconstruction <folder> --output results/la
 python -m uwslam.obstacle_dir <video> --reconstruction <folder> --output results/lake_clip/obstacle_dir_2
 python -m uwslam.path_plan <video> --reconstruction <folder> --output results/lake_clip/path_plan_2
 python -m uwslam.mono_map <video> --reconstruction <folder> --output results/lake_clip/mono_map_2 --board-masks <masks file>
+python -m uwslam.ranger <video> --reconstruction <folder> --output results/lake_clip/ranger_2 --board-frames <frames file>
 ```
 
 AQUALOC's harbour sequences (https://www.lirmm.fr/aqualoc/: a sequence's raw-data archive and the meta files
@@ -302,11 +313,11 @@ costs the windows' position a little (0.055 m when the bias is not learnt) and b
 did not help (whole sequences 2.13 m).
 
 On the ESP32-P4 every step, how it used the gyro and the final bias estimate equal the PC's (records in
-[results/aqualoc](results/aqualoc)); the board integrates a step's 40–42 readings in 45 µs:
+[results/aqualoc](results/aqualoc)); the board integrates a step's 40–42 readings in 47 µs:
 
 | Odometry per step, mean / median / max | Camera alone | With the gyro |
 |---|---:|---:|
-| Sequence 07 (564 steps) | 95 / 93 / 169 ms | 105 / 102 / 183 ms |
+| Sequence 07 (564 steps) | 95 / 93 / 169 ms | 105 / 102 / 184 ms |
 | Sequence 01 (1145 steps) | 75 / 76 / 127 ms | 87 / 87 / 139 ms |
 
 What this does not show is the lake clip's failure: the fast swings of a forward-looking camera. The lake clip has no
@@ -355,12 +366,80 @@ height's part is 0.32 m of 2.06 m), where gravity tells nothing. Uncalibrated, t
 the robot turns: 5.3° over the sequences, though the height came out no worse here (0.29 m).
 
 On the ESP32-P4 every step, how it used the gyro, the final bias estimate and the world's up equal the PC's (records
-in [results/aqualoc](results/aqualoc)). A step takes as long as with the gyro alone (sequence 07: 105 / 102 / 183 ms,
-01: 87 / 87 / 139 ms, mean / median / max), the board integrates a step's IMU readings in 92–93 µs, and
-96,712 B of internal RAM stay free.
+in [results/aqualoc](results/aqualoc)). A step takes as long as with the gyro alone (sequence 07: 105 / 102 / 184 ms,
+01: 87 / 87 / 139 ms, mean / median / max), the board integrates a step's IMU readings in 93 µs, and
+96,116 B of internal RAM stay free.
 
 The motion's own accelerations read as tilt. On AQUALOC they did not keep the levelling from helping (above); a robot
 driven by thrust pulses, a jet-propelled one for instance, is untested, and so is a forward-looking camera.
+
+## Metric scale (optional)
+
+The camera alone measures the path in a unit of its own, which drifts. A depth sensor and a forward ranger measure
+metres, and the core turns them into a metric scale ([core/mono_vo_scale.c](core/mono_vo_scale.c)): `mvo_depth_reading`
+takes a frame's depth below the surface (m) before its step, `mvo_range_setup` a forward ranger's beam (its axis in the
+camera's axes and the cosine of its half angle) and `mvo_range_reading` a frame's range along it (m). A Kalman filter
+on the scale, metres per unit, lets it drift as a random walk (its variance grows by 3% of the scale's square a second)
+and weighs two kinds of observation:
+
+- the depth's change over the last 2 s against the odometry's change along the world's down over the same steps, once
+  the accelerometer's up has settled and when the depth changed by at least 0.1 m, both the same way (the sensor's
+  noise, 2 cm, on both ends);
+- a range against the tracked points inside the beam, at least five: the distance within which a tenth of them lie,
+  as the echo comes from the nearest surface (20% relative error).
+
+The first observation scales the path so far, so it must be good to 30% of itself, and a depth's counts the odometry's
+own vertical error too, 7% of the distance it moved meanwhile: a small climb or dive over a long swim gives no first
+scale. After it each step adds its move times the scale, and with the first frame's depth the metric centre's vertical
+is the depth's change since then. Later observations are not gated: single depth observations scatter widely while the
+scale drifts, and their variances weigh them. `mvo_metric` gives the world centre in metres, the scale and its
+variance. It is open-loop: the odometry's steps, world poses and points, the maps and the plan stay as they were, bit
+for bit, and without readings nothing changes.
+
+On AQUALOC's harbour sequences with their depth sensor (5 Hz, 16 seeds, the IMU calibrated as above), the path in
+metres needs no scale fitted; beside it, the same runs after alignments that fit their one scale to the reference
+([results/aqualoc/RESULTS.md](results/aqualoc/RESULTS.md)):
+
+| | seq01 | seq07 | Both |
+|---|---:|---:|---:|
+| Whole sequences: the path in metres, turned only about the vertical (no scale) | 1.06 m | 0.44 m | 0.75 m |
+| Whole sequences: the same runs, one scale fitted, turned only about the vertical | 2.10 m | 2.03 m | 2.06 m |
+| Whole sequences: the same runs after a full similarity alignment | 2.10 m | 2.03 m | 2.05 m |
+| 10 s windows, each a run of its own: runs in which the depth gave a scale | 239 of 704 | 240 of 336 | 479 of 1040 |
+| 10 s windows: the path in metres (no scale), where it was given | 0.22 m | 0.13 m | 0.15 m |
+| 10 s windows: the same runs after a full similarity alignment | 0.055 m | 0.060 m | 0.058 m |
+
+Over a whole sequence one scale cannot follow the odometry's drift, while the depth corrects it as the vehicle climbs
+and dives, so the path in metres comes out closer to the reference than any single scale gets it. The reference's own
+metres agree with the depth sensor's to within 1.5% (seq01) and 3.7% (seq07) along the vertical
+([checks](results/aqualoc/seq01/checks.json)). A run started cold needs the depth to change by 0.1 m within 2 s,
+steeply enough for its first observation, before it knows the scale: in 10 s windows that happened in 46% of the runs.
+
+The lake clip has no depth sensor and no ranger; [uwslam.ranger](src/uwslam/ranger.py) simulates three rangers from
+the reconstruction along the reference poses: the nearest surface in the beam within 8 m, each run with its own noise
+of 1 cm plus 0.5% of the range and 5% of its readings lost. The camera looks forward along a wall: with a 15° beam the
+forward ranger hears an echo in 92% of the 5 Hz frames, the right one in 98% and the left one in 3% (the
+reconstruction holds only what the camera filmed; with a 25° beam 96%, 98% and 8%). With the forward ranger's readings, over 16 seeds, median
+[smallest–largest] ([results/lake_clip/ranger](results/lake_clip/ranger/RESULTS.md),
+[ranger_25deg](results/lake_clip/ranger_25deg/RESULTS.md)):
+
+| | 15° beam | 25° beam |
+|---|---:|---:|
+| Whole clip: the path in metres, rotation and shift only | 0.194 m [0.162–0.291] | 0.194 m [0.153–0.264] |
+| Whole clip: the same runs after a similarity alignment | 0.189 m [0.156–0.257] | 0.189 m [0.156–0.257] |
+| 10 s windows cut from the whole runs: the path in metres | 0.092 m | 0.116 m |
+| 10 s windows: the same runs, each window its own fitted scale | 0.069 m | 0.069 m |
+| The scale a similarity alignment would give the metric path (1: metres) | 1.03 [0.92–1.08] | 1.00 [0.97–1.03] |
+
+The forward ranger gives the path in metres about as well as a scale taken from the reference itself. A ranger gives
+the scale only where its beam falls on what the camera tracks, so side rangers, which look where the camera does not,
+are left for obstacles.
+
+On the ESP32-P4 every step's metric centre, scale and variance equal the PC's (`--sense`, see [ESP32-P4](#esp32-p4)):
+with the IMU and the depth sensor on both AQUALOC sequences, where the scale is known in 523 of the 564 steps (seq07)
+and 1119 of the 1145 (seq01) and a step takes as long as with the IMU alone (105 / 102 / 184 ms and 87 / 87 / 139 ms,
+mean / median / max), and with the forward ranger on the lake clip, all 169 steps (127 / 132 / 155 ms). The scale's part
+of the state takes the odometry's on the board from 9,944 to 10,536 B; 96,116 B of internal RAM stay free.
 
 ## Continuing voxel map
 
@@ -513,6 +592,18 @@ python -m uwslam.mvo_stream --port <PORT> --frames <board files>/frames.bin --im
     --expected results/aqualoc/seq07/board_expected_imu.json --label <name>
 ```
 
+For the metric scale, `--sense` with a sense file (each frame's depth and range) sends a ranger's beam once (`beam`)
+and each frame's readings before it (`depth`, `range`), and checks every step's metric centre, scale and variance as
+well: `uwslam.aqualoc board` writes `sense.bin` with `board_expected_depth.json` (the IMU and the depth sensor),
+`uwslam.ranger` writes `sense_5hz.bin` with `board_expected_ranger_5hz.json` (the forward ranger on the lake clip):
+
+```bash
+python -m uwslam.mvo_stream --port <PORT> --frames <board files>/frames.bin --imu <board files>/imu.bin \
+    --sense <board files>/sense.bin --expected results/aqualoc/seq07/board_expected_depth.json --label <name>
+python -m uwslam.mvo_stream --port <PORT> --frames <frames file> --sense results/lake_clip/ranger/sense_5hz.bin \
+    --expected results/lake_clip/ranger/board_expected_ranger_5hz.json --label <name>
+```
+
 [mvo_vector.S](firmware/mono_vo_stream/main/mvo_vector.S) holds the tracker's window kernels in the P4's vector
 instructions: a row of the 19×19 window takes three vectors of eight 16-bit lanes, and the kernels give exactly the
 integers of the C ones. A call costs 19.6 µs (a window) and 6.5 µs (its sums), against 118 and 36 µs for the C kernels
@@ -524,14 +615,14 @@ Measured with the lake clip's lens over the USB-Serial-JTAG port (records `p4_36
 | | 5 Hz (169 steps) | 10 Hz (338 steps) |
 |---|---:|---:|
 | Steps, voxel map, directions, plans and obstacle map equal to the PC's | all | all |
-| Odometry per step, mean / median / max | 127 / 131 / 154 ms | 102 / 99 / 163 ms |
+| Odometry per step, mean / median / max | 127 / 132 / 155 ms | 102 / 99 / 163 ms |
 | Tracking / motion / detection, mean | 86 / 25 / 16 ms | 66 / 28 / 8 ms |
-| Voxel map update, mean / max | 0.48 / 2.6 ms | 0.55 / 4.1 ms |
-| Obstacle directions, mean | 0.18 ms | 0.18 ms |
-| Plan, mean / max | 1.78 / 3.0 ms | 1.83 / 2.9 ms |
-| Internal RAM free at the end | 96,712 B | 96,712 B |
+| Voxel map update, mean / max | 0.48 / 2.6 ms | 0.54 / 4.1 ms |
+| Obstacle directions, mean | 0.17 ms | 0.17 ms |
+| Plan, mean / max | 1.76 / 3.0 ms | 1.81 / 2.9 ms |
+| Internal RAM free at the end | 96,116 B | 96,116 B |
 
-A 5 Hz step stays within the 200 ms between frames; at 10 Hz 158 of the 338 steps take longer than the 100 ms between
+A 5 Hz step stays within the 200 ms between frames; at 10 Hz 159 of the 338 steps take longer than the 100 ms between
 frames. Everything lives in internal RAM: the two image pyramids (about 100 KB each), the odometry's state and the
 voxel map (56 KB). These are the board's compute times: the replay is paced by the link (over the USB-Serial-JTAG port
 the 5 Hz clip's 170 frames took 38 s), and the segmentation model is not in them.
@@ -566,11 +657,11 @@ On the lake clip ([results/lake_clip/live](results/lake_clip/live/RESULTS.md)):
 |---|---:|---:|
 | Frames stepped / dropped (after the first) | 169 / 0 | 167 / 2 |
 | JPEG decode, median | 6.1 ms | 6.1 ms |
-| Averaging onto 320×240, median / max | 21.6 / 22.7 ms | 21.7 / 36.2 ms |
-| Odometry step, median / max | 134 / 164 ms | 162 / 194 ms |
-| A frame's work, mean / median / max | 158 / 164 / 193 ms | 192 / 198 / 226 ms |
-| From a frame sent to its answer, mean | | 251 ms |
-| Internal RAM free at the end | 66,452 B | 66,452 B |
+| Averaging onto 320×240, median / max | 21.6 / 22.2 ms | 21.8 / 35.6 ms |
+| Odometry step, median / max | 134 / 164 ms | 164 / 195 ms |
+| A frame's work, mean / median / max | 159 / 165 / 193 ms | 192 / 199 / 226 ms |
+| From a frame sent to its answer, mean | | 253 ms |
+| Internal RAM free at the end | 65,856 B | 65,856 B |
 
 The PC core on the board's own frames gives all 169 steps bit for bit. Those frames differ from libjpeg's decoding,
 averaged by the same code, by at most one grey level, in 2.9% of the pixels, and over the 16 seeds they score like the
@@ -588,8 +679,13 @@ instead (not measured here).
   the C odometry narrower views won heading at 5 and 10 Hz on most measures but lost position at 5 Hz), and its lens
   was never calibrated: the C tools' lake runs take only the decentring term the clip itself shows (p1 = −0.02).
   Settings such as the 60 baselines of the step length's points were chosen on this clip alone.
-- A single camera: no metric scale, and the odometry drifts, in scale above all. The map closes no loops and does not
-  relocalise after a loss.
+- A single camera: without a depth sensor or a forward ranger no metric scale, and the odometry drifts, in scale above
+  all. The map closes no loops and does not relocalise after a loss.
+- The metric scale is the path's alone: the odometry, the maps and the plan keep the camera's own unit. The ranger was
+  only simulated, from the lake's reconstruction; a real one's echoes (its beam angle, the bottom or the surface in
+  its beam, multipath near walls) are untested. Its beam must fall on what the camera tracks: side rangers do not
+  give the scale. The depth gives it only once the vehicle has climbed or dived by 0.1 m within 2 s, after the
+  accelerometer's up has settled.
 - The IMU is checked only on AQUALOC's downward-looking camera over a nearly flat seabed and on slow motion. The lake
   clip's own failure, fast swings of a forward-looking camera, needs the robot's camera and IMU logged on one clock;
   the bias the core learns from its own rotations stays a few tenths of a degree per second off on each axis.
@@ -600,5 +696,5 @@ instead (not measured here).
 - The planner is local and scored open-loop on a clip the robot did not steer: it has not driven a robot yet.
 - The board check streams recorded frames and masks over a serial link; it does not include capture, the segmentation
   model or the robot's other tasks.
-- The live build gets its JPEG frames from the PC over USB, whose receiving slows each 5 Hz step by about 28 ms in
+- The live build gets its JPEG frames from the PC over USB, whose receiving slows each 5 Hz step by about 30 ms in
   the median (two frames of 170 dropped). The robot's camera and the segmentation model are not on the board yet.

@@ -6,13 +6,16 @@ Modes: `off` (the camera alone); `gyro` (the gyro's readings, the bias learnt on
 `warm` (windows only: the bias starts from the estimate the whole-sequence gyro run of the same seed held after the step
 before the window, what a robot running all along would have); `imu` (the gyro and the accelerometer, its bias
 calibrated: the mean of the biases fitted to the other sequences given, standing in for a calibration on another
-day; not run with one sequence); `imu_raw` (the accelerometer uncalibrated). gyro and warm pair with off, the imu
-modes with gyro. Each run is scored as uwslam.experiments.mono_vo scores the lake clip (ATE after a similarity
+day; not run with one sequence); `imu_raw` (the accelerometer uncalibrated); `depth` (imu and the depth sensor at
+each frame: the metric scale, mvo_depth_reading). gyro and warm pair with off, the imu modes with gyro, depth with
+imu. Each run is scored as uwslam.experiments.mono_vo scores the lake clip (ATE after a similarity
 alignment, its heading, lost steps), plus scores from the run's first frame, where estimate and reference coincide:
 the yaw about the reference's vertical, the tilt (the angle between the estimated and the reference's up in the
 camera), the whole orientation error (the angle of R_est^T R_ref), and the ATE after an alignment that turns only about
 the reference's vertical (scale, that turn and an offset: a path that leans is not turned back), with its vertical
-part, the height error.
+part, the height error. With depth, the metric ATE: the world centre in metres (mvo_metric; before the scale is
+known, the path the first scale gives) after an alignment that turns only about the reference's vertical and
+shifts, no scale (the reference is metric through the same depth sensor); none when the scale is never known.
 
   python -m uwslam.aqualoc_score <prepared folder> [<prepared folder> ...] --output <fresh folder> [--jobs <processes>]
 """
@@ -33,6 +36,7 @@ WINDOW_FRAMES, WINDOW_EVERY = 50, 25  # 10 s windows every 5 s at 5 Hz
 METRICS = (
     "ate_rmse",
     "levelled_ate_rmse",
+    "metric_ate_rmse",
     "height_rmse",
     "yaw_rmse_deg",
     "tilt_rmse_deg",
@@ -43,6 +47,7 @@ METRICS = (
 LABELS = (
     "ATE (m)",
     "levelled ATE (m)",
+    "metric ATE (m)",
     "height (m)",
     "yaw RMSE (°)",
     "tilt RMSE (°)",
@@ -50,8 +55,14 @@ LABELS = (
     "heading RMSE (°)",
     "lost steps",
 )
-DIGITS = (3, 3, 3, 2, 2, 2, 2, 0)
-BASES = {"gyro": "off", "warm": "off", "imu": "gyro", "imu_raw": "gyro"}  # what each mode is paired with
+DIGITS = (3, 3, 3, 3, 2, 2, 2, 2, 0)
+BASES = {
+    "gyro": "off",
+    "warm": "off",
+    "imu": "gyro",
+    "imu_raw": "gyro",
+    "depth": "imu",
+}  # what each mode is paired with
 USES = ("camera", "gyro_translation", "gyro_rotation", "gyro_lost")  # MVO_GYRO_*, the first as the camera's own step
 
 
@@ -70,6 +81,7 @@ class Prepared:
     mount: np.ndarray
     vertical: np.ndarray
     accel_bias_fit: np.ndarray
+    depths: np.ndarray | None = None  # the depth sensor at each frame (m), when prepared with it
 
     def imu_readings(self, first: int = 0, end: int | None = None) -> list[np.ndarray]:
         """The steps' IMU readings, float32 rows of (dt, rate x, y, z, force x, y, z) (uwslam.mvo.GyroReadings)."""
@@ -102,6 +114,7 @@ def load_prepared(folder: Path) -> Prepared:
         data["mount"],
         data["vertical"],
         data["accel_bias_fit"],
+        data.get("depths"),
     )
 
 
@@ -118,18 +131,28 @@ def yaw_about(rotations: np.ndarray, axis: np.ndarray) -> np.ndarray:
     return np.unwrap(np.arctan2(np.cross(x[0], x) @ axis, x @ x[0]))
 
 
-def levelled(centres: np.ndarray, reference: np.ndarray, up: np.ndarray) -> np.ndarray:
-    """The centres after the similarity alignment onto the reference that turns only about `up` (unit): the vertical
-    parts take no part in the turn, which maximises the horizontal parts' agreement."""
-    x, y = centres - centres.mean(axis=0), reference - reference.mean(axis=0)
+def turn_about(x: np.ndarray, y: np.ndarray, up: np.ndarray) -> np.ndarray:
+    """The turn about `up` (unit) that best brings the centred rows x onto y: the vertical parts take no part in it,
+    which maximises the horizontal parts' agreement."""
     xh, yh = x - np.outer(x @ up, up), y - np.outer(y @ up, up)
     angle = np.arctan2(np.sum(np.cross(xh, yh) @ up), np.sum(xh * yh))
     k = np.array([[0.0, -up[2], up[1]], [up[2], 0.0, -up[0]], [-up[1], up[0], 0.0]])
-    turn = np.eye(3) + np.sin(angle) * k + (1.0 - np.cos(angle)) * k @ k
-    xr = x @ turn.T
+    return np.eye(3) + np.sin(angle) * k + (1.0 - np.cos(angle)) * k @ k
+
+
+def levelled(centres: np.ndarray, reference: np.ndarray, up: np.ndarray) -> np.ndarray:
+    """The centres after the similarity alignment onto the reference that turns only about `up` (unit)."""
+    x, y = centres - centres.mean(axis=0), reference - reference.mean(axis=0)
+    xr = x @ turn_about(x, y, up).T
     size = np.sum(xr * xr)
     scale = np.sum(xr * y) / size if size > 0 else 0.0
     return scale * xr + reference.mean(axis=0)
+
+
+def metric_ate(path: np.ndarray, reference: np.ndarray, up: np.ndarray) -> float:
+    """RMSE after the best turn about `up` (unit) and shift, no scale."""
+    x, y = path - path.mean(axis=0), reference - reference.mean(axis=0)
+    return float(np.sqrt(np.mean(np.sum((x @ turn_about(x, y, up).T - y) ** 2, axis=1))))
 
 
 def score_run(sequence: Prepared, first: int, run: "mvo.Run") -> dict:
@@ -153,11 +176,14 @@ def score_run(sequence: Prepared, first: int, run: "mvo.Run") -> dict:
     est_up, ref_up = rotations.transpose(0, 2, 1) @ vertical, window_r.transpose(0, 2, 1) @ vertical
     tilt = np.degrees(np.arccos(np.clip(np.sum(est_up * ref_up, axis=1), -1.0, 1.0)))
     error = levelled(centres, window_c, vertical) - window_c
+    metric = mvo.metric_path(run)
     used = run.gyro_used or [0] * len(run.steps)
     return {
         "first": first,
         **{key: result[key] for key in ("ate_rmse", "heading_rmse_deg", "lost", "kinds")},
         "levelled_ate_rmse": float(np.sqrt(np.mean(np.sum(error**2, axis=1)))),
+        "metric_ate_rmse": None if metric is None else metric_ate(metric, window_c, -vertical),
+        "scale_known": None if run.metric is None else run.metric[-1] is not None,
         "height_rmse": float(np.sqrt(np.mean((error @ vertical) ** 2))),
         "yaw_rmse_deg": float(np.sqrt(np.mean(yaw**2))),
         "tilt_rmse_deg": float(np.sqrt(np.mean(tilt**2))),
@@ -173,8 +199,17 @@ def readings_for(sequence: Prepared, mode: str, accel_bias, first: int = 0, end:
     if mode in ("gyro", "warm"):
         return mvo.GyroReadings(sequence.mount, sequence.readings[first:end], bias)
     return mvo.GyroReadings(
-        sequence.mount, sequence.imu_readings(first, end), None, accel_bias if mode == "imu" else None
+        sequence.mount, sequence.imu_readings(first, end), None, accel_bias if mode in ("imu", "depth") else None
     )
+
+
+def run_mode(
+    vo, sequence: Prepared, frames: list, seed: int, mode: str, accel_bias, first: int = 0, end=None, bias=None
+):
+    """One run of the mode over the frames first..end (end exclusive, None: to the last)."""
+    readings = readings_for(sequence, mode, accel_bias, first, None if end is None else end - 1, bias)
+    depths = sequence.depths[first:end] if mode == "depth" else None
+    return mvo.run_odometry(vo, frames, sequence.camera, seed, readings, depths)
 
 
 def score_seed(vo, sequence: Prepared, seed: int, accel_bias: np.ndarray | None = None) -> dict:
@@ -183,11 +218,13 @@ def score_seed(vo, sequence: Prepared, seed: int, accel_bias: np.ndarray | None 
     n = len(sequence.frames)
     spans = [(s, s + WINDOW_FRAMES) for s in range(0, n - WINDOW_FRAMES + 1, WINDOW_EVERY)]
     imu_modes = ("imu", "imu_raw") if accel_bias is not None else ("imu_raw",)
+    if accel_bias is not None and sequence.depths is not None:
+        imu_modes = (*imu_modes, "depth")
     full_modes, window_modes = ("off", "gyro", *imu_modes), ("off", "gyro", "warm", *imu_modes)
     out = {"full": {m: [] for m in full_modes}, "windows": {m: [] for m in window_modes}}
     frames = list(sequence.frames)
     for mode in full_modes:
-        run = mvo.run_odometry(vo, frames, sequence.camera, seed, readings_for(sequence, mode, accel_bias))
+        run = run_mode(vo, sequence, frames, seed, mode, accel_bias)
         out["full"][mode].append({"seed": seed, **score_run(sequence, 0, run)})
         if mode != "off":
             out["full"][mode][-1]["final_bias_dps"] = np.degrees(run.gyro_bias[-1]).tolist()
@@ -197,9 +234,7 @@ def score_seed(vo, sequence: Prepared, seed: int, accel_bias: np.ndarray | None 
         window = list(sequence.frames[first:end])
         for mode in window_modes:
             bias = np.array(carried[first - 1], dtype=np.float32) if mode == "warm" and first > 0 else None
-            run = mvo.run_odometry(
-                vo, window, sequence.camera, seed, readings_for(sequence, mode, accel_bias, first, end - 1, bias)
-            )
+            run = run_mode(vo, sequence, window, seed, mode, accel_bias, first, end, bias)
             out["windows"][mode].append({"seed": seed, **score_run(sequence, first, run)})
     return out
 
@@ -268,39 +303,56 @@ def score_all(folders: list[Path], jobs: int) -> dict:
         return {f.name: merge([done[(f.name, seed)] for seed in mvo.SEEDS]) for f in folders}
 
 
-def paired(runs: list[dict], base: list[dict] | None, metric: str) -> dict:
-    values = np.array([r[metric] for r in runs], dtype=float)
-    out = {"median": float(np.median(values))}
+def paired(runs: list[dict], base: list[dict] | None, metric: str) -> dict | None:
+    """The metric's median over the runs that have it (None when none has: the metric ATE without depth; a NaN
+    shows as one) and, with a base that has it too, the shares of the pairs in which the run is lower and in which
+    it is equal."""
+    has = np.array([r.get(metric) is not None for r in runs], dtype=bool)
+    if not has.any():
+        return None
+    values = np.array([r[metric] if h else np.nan for r, h in zip(runs, has)], dtype=float)
+    out = {"median": float(np.median(values[has])), "runs": int(has.sum())}
     if base is not None:
         if [(r["seed"], r["first"]) for r in runs] != [(r["seed"], r["first"]) for r in base]:
             raise ValueError("Paired runs must be the same windows and seeds")
-        out["lower_share"] = float(np.mean(values < np.array([r[metric] for r in base], dtype=float)))
+        both = has & np.array([r.get(metric) is not None for r in base], dtype=bool)
+        others = np.array([r[metric] if b else np.nan for r, b in zip(base, both)], dtype=float)
+        if both.any():
+            out["lower_share"] = float(np.mean(values[both] < others[both]))
+            out["equal_share"] = float(np.mean(values[both] == others[both]))
     return out
+
+
+def mode_row(mode: str, runs: list[dict], base: list[dict] | None) -> dict:
+    """A mode's row: its runs, its base's name and each metric paired with the base's runs."""
+    return {
+        "runs": len(runs),
+        **({"base": BASES[mode]} if mode in BASES else {}),
+        **{m: paired(runs, base, m) for m in METRICS},
+    }
 
 
 def tables(scores: dict) -> dict:
     """Per sequence (and all together), command and mode: each metric's median and the share of the pairs in which the
-    mode is lower than its base (BASES)."""
-    out = {}
-    groups = {name: runs for name, runs in scores.items()}
+    mode is lower than its base (BASES). All together pools a mode's runs over the sequences that have it (the depth
+    mode only those prepared with their depths), and its base's over the same sequences."""
+    groups = list(scores.items())
     if len(scores) > 1:
-        groups["all"] = {
-            command: {mode: [r for runs in scores.values() for r in runs[command].get(mode, [])] for mode in modes}
-            for command, modes in next(iter(scores.values())).items()
-        }
-    for name, runs in groups.items():
-        out[name] = {
-            command: {
-                mode: {
-                    "runs": len(mode_runs),
-                    **({"base": BASES[mode]} if mode in BASES else {}),
-                    **{m: paired(mode_runs, by_mode[BASES[mode]] if mode in BASES else None, m) for m in METRICS},
-                }
-                for mode, mode_runs in by_mode.items()
-            }
-            for command, by_mode in runs.items()
-            if by_mode["off"]  # a sequence shorter than a window has no windows
-        }
+        groups.append(("all", None))
+    out = {}
+    for name, runs in groups:
+        out[name] = {}
+        for command in next(iter(scores.values())):
+            having = list(scores.values()) if runs is None else [runs]
+            modes = dict.fromkeys(mode for one in having for mode in one[command])  # in order, each once
+            rows = {}
+            for mode in modes:
+                with_mode = [one[command] for one in having if one[command].get(mode)]
+                pooled = [r for by_mode in with_mode for r in by_mode[mode]]
+                base = [r for by_mode in with_mode for r in by_mode[BASES[mode]]] if mode in BASES else None
+                rows[mode] = mode_row(mode, pooled, base)
+            if rows.get("off", {}).get("runs"):  # a sequence shorter than a window has no windows
+                out[name][command] = rows
     return out
 
 
@@ -313,8 +365,11 @@ def write_report(output: Path, summary: dict) -> None:
         "which it is lower: `gyro` and `warm` against `off`, `imu` and `imu_raw` against `gyro`. `gyro` learns the "
         "bias from zero at the run's start; `warm` starts each window from the whole-sequence run's estimate at that "
         "point; `imu` adds the accelerometer, its bias calibrated with the other sequences' fitted one; `imu_raw` "
-        "adds it uncalibrated. The camera looks down at the seabed: yaw is about the vertical, tilt the angle between "
-        "the estimated and the reference's up, orientation the whole rotation error, heading the turn about the first "
+        "adds it uncalibrated; `depth` adds the depth sensor to `imu`, and its metric ATE scores the path in metres (no "
+        "scale fitted; [n runs] where the scale was known in fewer than all; its other scores are the odometry's, "
+        "(same) as `imu`'s in every pair). The camera looks down at the seabed: yaw is about the vertical, tilt the "
+        "angle between the estimated and the reference's up, orientation the whole rotation error, heading the turn "
+        "about the first "
         "camera's y axis (a tilt here); the levelled ATE turns the path only about the vertical, and height is its "
         "vertical part.",
         "",
@@ -326,9 +381,16 @@ def write_report(output: Path, summary: dict) -> None:
             for mode, row in by_command.get(command, {}).items():
                 cells = []
                 for metric, digits in zip(METRICS, DIGITS):
+                    if row[metric] is None:
+                        cells.append("–")
+                        continue
                     cell = f"{row[metric]['median']:.{digits}f}"
-                    if "lower_share" in row[metric]:
+                    if row[metric].get("equal_share") == 1.0:
+                        cell += " (same)"
+                    elif "lower_share" in row[metric]:
                         cell += f" ({row[metric]['lower_share'] * 100:.0f}%)"
+                    if row[metric]["runs"] < row["runs"]:
+                        cell += f" [{row[metric]['runs']} runs]"
                     cells.append(cell)
                 lines.append(f"| {name} | {mode} | {row['runs']} | " + " | ".join(cells) + " |")
         lines.append("")

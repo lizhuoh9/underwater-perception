@@ -415,6 +415,93 @@ class MonoCloudBoardHostTests(unittest.TestCase):
         self.assertTrue(record["imu"]["up_match"])
         self.assertEqual(record["imu"]["forces_dropped"], len(steps))
 
+    def test_depths_and_ranges_through_the_firmware_match_the_pc(self):
+        """A depth sensor and a forward ranger read through the firmware's beam, depth and range commands, with an IMU
+        whose up settles: every step and, after each, the metric centre and the scale equal the PC's; the odometry's
+        own steps stay as the IMU alone gives them."""
+        from tests.test_mvo import WALL_Z
+        from tests.test_mvo_gyro import readings
+
+        metres = 1.5  # metres per unit of the rendered scene
+        poses = [
+            (euler_rotation(np.radians(1.5 * k), 0.0, 0.0), np.array([0.30 * k, 0.04 * k, 0.15 * k])) for k in range(14)
+        ]
+        mount = euler_rotation(0.4, -0.9, 1.2)
+        up = np.array([0.0, -9.81, 0.0])
+        steps = []
+        for k in range(len(poses) - 1):
+            gyro = readings(poses[k][0].T @ poses[k + 1][0], (0.0, 0.0, 0.0), mount)
+            force = mount.T @ (poses[k + 1][0].T @ up)
+            steps.append(np.column_stack([gyro, np.tile(force, (len(gyro), 1))]).astype(np.float32))
+        imu = mvo.GyroReadings(mount, steps)
+        frames = [render(r, c, self.camera, texture(1), texture(2)) for r, c in poses]
+        depths = np.array([2.0 + metres * c[1] for _, c in poses])
+        ranges = np.array([metres * (WALL_Z - c[2]) / r[2, 2] for r, c in poses])
+        ranges[5] = np.nan  # a frame without an echo
+        beam = mvo.Beam((0.0, 0.0, 1.0), 20.0)
+        run = mvo.run_odometry(self.vo, frames, self.camera, mvo.SEED, imu, depths, ranges, beam)
+        ranged = mvo.run_odometry(self.vo, frames, self.camera, mvo.SEED, imu, None, ranges, beam)
+        alone = mvo.run_odometry(self.vo, frames, self.camera, mvo.SEED, imu)
+        self.assertEqual(run.hashes, alone.hashes)  # the readings leave the odometry's steps as they were
+        self.assertIsNotNone(run.metric[-1])
+        self.assertNotEqual(run.metric, ranged.metric)  # the depth set the vertical once the up settled
+
+        def bits(value: float) -> int:
+            return struct.unpack("<I", struct.pack("<f", value))[0]
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp:
+            folder = Path(temp)
+            frames_path, imu_path, sense_path = folder / "frames.bin", folder / "imu.bin", folder / "sense.bin"
+            expected_path = folder / "vo.json"
+            frames_path.write_bytes(b"".join(np.ascontiguousarray(frame).tobytes() for frame in frames))
+            imu_path.write_bytes(
+                b"".join(struct.pack("<I", len(rows)) + rows.astype("<f4").tobytes() for rows in steps)
+            )
+            sense = mvo.sense_bytes(depths, ranges, len(frames))
+            sense_path.write_bytes(sense)
+            expected = {
+                "frames": len(frames),
+                "every": 1,
+                "rate_hz": None,
+                "step_hashes": run.hashes,
+                "camera_bits": [bits(getattr(self.camera, name)) for name in ("fx", "fy", "cx", "cy")],
+                "seed": mvo.SEED,
+                **{key: self.fingerprints[key] for key in ("core_sha256", "header_sha256")},
+                **mvo.build_config(),
+                "imu": {
+                    "mount_bits": [bits(v) for v in mount.astype(np.float32).reshape(9)],
+                    "readings_sha256": hashlib.sha256(imu_path.read_bytes()).hexdigest(),
+                    "used": run.gyro_used,
+                    "final_bias_bits": [bits(v) for v in run.gyro_bias[-1]],
+                    "accel_bias_bits": [0, 0, 0],
+                    "final_up_bits": [bits(v) for v in run.imu_up],
+                    "forces_dropped": run.forces_dropped,
+                },
+                "metric": mvo.metric_expectation(run, sense, beam),
+            }
+            expected_path.write_text(json.dumps(expected), encoding="utf-8")
+            with (
+                patch.object(mvo_stream, "Board", side_effect=lambda port, baud: ProcessBoard(self.program)),
+                patch("builtins.print"),
+            ):
+                record, lines = mvo_stream.stream(
+                    "host-only", frames_path, expected_path, cores=1, imu_path=imu_path, sense_path=sense_path
+                )
+                with self.assertRaisesRegex(ValueError, "go together"):
+                    mvo_stream.stream("host-only", frames_path, expected_path, cores=1, imu_path=imu_path)
+                sense_path.write_bytes(mvo.sense_bytes(depths + 0.01, ranges, len(frames)))
+                with self.assertRaisesRegex(ValueError, "SHA-256 differs"):
+                    mvo_stream.stream(
+                        "host-only", frames_path, expected_path, cores=1, imu_path=imu_path, sense_path=sense_path
+                    )
+        self.assertTrue(record["all_match"])
+        self.assertTrue(record["imu"]["match"])
+        self.assertTrue(record["metric"]["match"])
+        self.assertEqual(record["metric"]["known_steps"], sum(m is not None for m in run.metric))
+        self.assertEqual((record["metric"]["depths"], record["metric"]["ranges"]), (len(frames), len(frames) - 1))
+        self.assertEqual(sum(line == "beam set" for line in lines), 1)
+        self.assertEqual(sum(line == "range set" for line in lines), len(frames) - 1)
+
     def test_normal_video_real_vo_and_firmware_produce_identical_cloud(self):
         result, record, lines = self.replay(self.frames)
         self.assertTrue(all(item["kind"] == "essential" for item in result["trajectory"][1:]))

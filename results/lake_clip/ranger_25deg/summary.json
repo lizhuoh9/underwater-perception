@@ -1,0 +1,77 @@
+{
+  "video": "lake.mp4",
+  "frames": 170,
+  "beam_half_angle_deg": 12.5,
+  "simulation": {
+    "max_range_m": 8.0,
+    "echo_points": 20,
+    "echo_share": 0.02,
+    "noise_m": 0.01,
+    "noise_share": 0.005,
+    "dropout": 0.05,
+    "seed": 11
+  },
+  "echoes": {
+    "forward": 0.9588235294117647,
+    "left": 0.08235294117647059,
+    "right": 0.9823529411764705
+  },
+  "seeds": [
+    12345,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+  ],
+  "runs_with_scale": 16,
+  "metric": {
+    "median": 0.19431539463362868,
+    "min": 0.15276843434591741,
+    "max": 0.26369698008938247
+  },
+  "metric_windows": {
+    "median": 0.11558253644566088,
+    "min": 0.08163106375946393,
+    "max": 0.1995398780853409
+  },
+  "similarity": {
+    "median": 0.18915452877146982,
+    "min": 0.1562922136891421,
+    "max": 0.25658393785724515
+  },
+  "similarity_windows": {
+    "median": 0.06864645150631486,
+    "min": 0.04367540450009255,
+    "max": 0.16493990026523758
+  },
+  "scale_ratio": {
+    "median": 1.0031778027142457,
+    "min": 0.9696364940209753,
+    "max": 1.0288847308859999
+  },
+  "first_scale_step": {
+    "median": 1.0,
+    "min": 1.0,
+    "max": 1.0
+  },
+  "known_share": {
+    "median": 1.0,
+    "min": 1.0,
+    "max": 1.0
+  },
+  "core_sha256": "d9502c779ff92381784b1bb001686209a9d601151c1d6dbbe0bbf61cd3f7b0b8",
+  "header_sha256": "1f7204809c710c37c91217dbcec09d62ec7c4d9f00ea8867cc1a4b3d83402136",
+  "config": "p4",
+  "max_features": 300
+}
